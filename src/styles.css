@@ -155,6 +155,9 @@ details[open].adv > summary::before{transform:rotate(45deg)}
 details.adv > summary:hover,details[open].adv > summary{color:var(--text)}
 details[open].adv > summary{margin-bottom:12px}
 details.adv .sub{margin-bottom:12px}
+.rules{display:grid;gap:10px;margin-bottom:10px}
+.rule .toggle{color:var(--text)}
+details.adv .rule .sub{margin:3px 0 0 35px;font-size:12px}
 .status{color:var(--text-2);font-size:12.5px;min-height:1em;margin:6px 0 0}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .chip{padding:2px 9px;border-radius:999px;background:var(--accent-soft);font-size:12.5px;font-weight:500}

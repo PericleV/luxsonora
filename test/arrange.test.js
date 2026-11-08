@@ -44,7 +44,8 @@ describe("extra layers", () => {
       const xs = sc.notes.filter(n => ids.has(n.layer));
       expect(xs.length).toBeGreaterThan(0);
       for (const n of xs) {
-        if (!n.chromatic) expect(scale.has(((n.midi % 12) + 12) % 12) || inChord(n)).toBe(true);
+        const M = sc.modulation, sh = M && n.t >= M.t0 - 1e-9 && n.t < M.t1 - 1e-9 ? M.shift : 0;
+        if (!n.chromatic) expect(scale.has((((n.midi - sh) % 12) + 12) % 12) || inChord(n)).toBe(true);
         expect(n.midi).toBeGreaterThanOrEqual(base - 30); expect(n.midi).toBeLessThanOrEqual(base + 28);
         expect(n.tim).toBeTruthy();
         expect((n.t + n.dur) * 60 / sc.bpm).toBeLessThanOrEqual(sc.seconds + 6);

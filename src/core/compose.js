@@ -5,6 +5,7 @@ import { imageStats, pointTimbre, modulation, zoneFeatures, modulate, LAYER_DEPT
 import { planTime } from "./duration.js";
 import { surroundZone } from "./focus.js";
 import { pathProfile, passage } from "./passages.js";
+import { ruleOn, planModulation, applyPivots, transposeWindow, phraseCadences, contrastOf, leapRecovery, noParallels, melodyPeak, picardy } from "./rules.js";
 import { dramaticArc, dynamics } from "./arc.js";
 import { rhythmPart, areaDrive, DRUM_NAME } from "./rhythm.js";
 import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
@@ -57,7 +58,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const withWave = (tim, wave) => { if (wave) for (const l of ["lead", "harm", "bass"]) if (tim[l].type === "wave") tim[l] = { ...tim[l], wave }; return tim; };
   const waves = [];
   const notes = [], out = [], visits = new Map();
-  let t = 0, prevDeg = null, prevChord = null, lastLead = null, prevVel = null, prevTim = null, prevPan = 0;
+  let t = 0, prevDeg = null, prevChord = null, lastLead = null, prevVel = null, prevTim = null, prevPan = 0, prevReg = null;
   // Smooth transitions (0 = off): limit of the melodic leap into a new point, maximum
   // velocity change, and the glide time of timbre and pan at the start of a point.
   const leapLimit = smooth > 0 ? Math.round(12 - 7 * smooth) : Infinity;
@@ -137,8 +138,12 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
       // possible) take the chord sharing the most pitch classes with the previous one
       const prevPcs = new Set(prevChord.map(m => ((m % 12) + 12) % 12)), pool = fits.length ? fits : cands;
       const common = rt => tones.reduce((c, o) => c + (prevPcs.has(((degMidi(rt + o, modeIv, 0) % 12) + 12) % 12) ? 1 : 0), 0);
-      root = pool.reduce((best, rt) => (common(rt) > common(best) ? rt : best), pool[0]);
+      // contrast rule: a place very unlike the previous one takes the candidate sharing the fewest
+      // notes with the previous chord (a further move), a similar place the most (a smooth one)
+      const far = ruleOn(P, "contrast") && prevReg && contrastOf(r, prevReg) > 0.45;
+      root = pool.reduce((best, rt) => (far ? common(rt) < common(best) : common(rt) > common(best)) ? rt : best, pool[0]);
     } else root = fits.length ? fits[0] : cands[ci % 3];
+    prevReg = r;
     const center = prevChord ? prevChord.reduce((a, b) => a + b, 0) / prevChord.length : 60;
     let chord = tones.map(o => { let m = degMidi(root + o, modeIv, 48 + pcOff); while (m < center - 7) m += 12; while (m > center + 7) m -= 12; return m; });
     chord = [...new Set(chord)].sort((a, b) => a - b); prevChord = chord;
@@ -162,6 +167,10 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     if (last && last.F === best && !R.loop) last.t1 = s1; else slots.push({ t0: s0, t1: s1, F: best });
     s0 = s1;
   }
+  // composition rules on the chord grid: question-and-answer phrases, then the modulation's pivots
+  if (ruleOn(P, "cadences") && !R.loop && (R.unit ?? 4) <= 4) phraseCadences(slots, modeIv, plan.body);
+  const mod = ruleOn(P, "modulate") && arcOn && !R.quality ? planModulation(out, arc, g, slots, R) : null;
+  if (mod) applyPivots(slots, mod, modeIv, melIv);
   // classical: the chord before the final cadence is the dominant, so the piece ends V-I
   if (R.cadentialV && slots.length > 1) { const S = slots[slots.length - 1]; S.F = { ...S.F, root: 4, tones: S.F.tones }; }
   // pop: the four-chord loop, one chord per bar, whatever the points (they still shape everything else)
@@ -187,6 +196,10 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const scalePcs = new Set(melIv.map(iv => (((iv + pcOff) % 12) + 12) % 12));
   const pcOf = m => ((m % 12) + 12) % 12;
   const rubs = (p, S) => S.pcs.has(pcOf(p + 1)) || S.pcs.has(pcOf(p - 1));
+  // inside a modulation (once the notes are moved there) the melody's scale moves with the key
+  let keyMoved = false;
+  const shiftAt = tt => (keyMoved && mod && tt >= mod.t0 - 1e-9 && tt < mod.t1 - 1e-9 ? mod.shift : 0);
+  const inScale = (m, tt) => scalePcs.has(pcOf(m - shiftAt(tt)));
   // a non-chord note that moves by step into a chord tone right after it is an appoggiatura or a
   // passing note: it resolves, so it stays
   const resolves = nn => {
@@ -207,8 +220,10 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
       if (!strong && !avoid) continue;
       if (!strong && resolves(nn)) continue;
       let to = null;
-      for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (scalePcs.has(pcOf(m)) && S.pcs.has(pcOf(m))) { to = m; break; } }
-      if (to === null && !strong) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (scalePcs.has(pcOf(m)) && !rubs(pcOf(m), S)) { to = m; break; } }
+      for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (inScale(m, nn.t) && S.pcs.has(pcOf(m))) { to = m; break; } }
+      // no chord tone in the scale nearby (a pentatonic tune over a chord with a note it lacks):
+      // a note that rubs becomes a tension instead, even on the beat
+      if (to === null && (!strong || avoid)) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (inScale(m, nn.t) && !rubs(pcOf(m), S)) { to = m; break; } }
       if (to !== null) { nn.midi = to; nn.snapped = true; }
     }
   };
@@ -371,20 +386,43 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     padDegs.forEach(o => notes.push({ layer: "pad", t: tc, dur: holdFor(ptim), midi: degMidi(o, modeIv, 48 + pcOff), vel: padVel, tim: ptim, pan: 0, point: -1 }));
   }
 
+  // the modulation: everything under the climax moves into the new key
+  if (mod) {
+    transposeWindow(notes, slots, mod, scalePcs); keyMoved = true;
+    const keyPc = (((pc + (mod.dir > 0 ? 7 : 5)) % 12) + 12) % 12;
+    for (const F of out) if (F.t0 >= mod.t0 - 1e-9 && F.t0 < mod.t1 - 1e-9) F.modulation = { dir: mod.dir, keyPc };
+    mod.keyPc = keyPc;
+  }
+  // melody rules: leaps turn back, no parallel fifths or octaves with the bass, the peak at the climax
+  const ruleCtx = { slotAt, inScale, climax: arc.climax };
+  if (ruleOn(P, "leap")) leapRecovery(notes, ruleCtx);
+  if (ruleOn(P, "parallels")) noParallels(notes, ruleCtx);
+  if (ruleOn(P, "peak") && arcOn && arc.climax >= 0) melodyPeak(notes, ruleCtx);
+  // Picardy third: a minor piece whose last place is bright ends on the major tonic
+  const lastF = out[out.length - 1], picardyOn = ruleOn(P, "picardy") && modeIv[2] === 3 && lastF && (lastF.reg.L ?? 0) > 0.55;
+  if (picardyOn) { picardy(notes, pc, tc); for (let i = 0; i < cadChord.length; i++) if ((((cadChord[i] - pc) % 12) + 12) % 12 === 3) cadChord[i] += 1; }
   const extraIds = new Set(extra.map(L => L.id));
   applyContours({ notes, points: out, body: plan.body, smooth, extraIds });
   // ties and legato lengthen notes: a passing note held longer now may rub against the chord
   snapLead(notes.filter(nn => !(nn.passage && !nn.snapped && nn === lastOfPassage(nn))));
+  if (ruleOn(P, "parallels")) noParallels(notes, ruleCtx);
   // a long melody note held into a chord it rubs against (a semitone from one of its tones) is
   // held until the change, then moves by step to the nearest tone of the new chord: a suspension
   // that resolves
   if (slots.length) for (const nn of notes.filter(m => m.layer === "lead" && !m.dbl && m.dur > 0.5)) {
     for (const S of slots) {
-      if (S.t0 <= nn.t + 0.25 || S.t0 >= nn.t + nn.dur - 0.25) continue;
+      if (S.t0 <= nn.t + 1e-6 || S.t0 >= nn.t + nn.dur - 0.05) continue;
       const p = pcOf(nn.midi);
+      // a note just before the change is an anticipation: it takes a tone of the coming chord
+      if (S.t0 <= nn.t + 0.25) {
+        if (!S.pcs.has(p) && rubs(p, S)) for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pcOf(nn.midi + d)) && inScale(nn.midi + d, S.t0)) { nn.midi += d; break; }
+        break;
+      }
       if (S.pcs.has(p) || !rubs(p, S)) continue;
+      // only a sliver held over: the note just ends at the change
+      if (nn.t + nn.dur - S.t0 < 0.3) { nn.dur = S.t0 - nn.t; break; }
       let to = null;
-      for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pcOf(nn.midi + d)) && scalePcs.has(pcOf(nn.midi + d))) { to = nn.midi + d; break; }
+      for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pcOf(nn.midi + d)) && inScale(nn.midi + d, S.t0)) { to = nn.midi + d; break; }
       const rest = nn.t + nn.dur - S.t0;
       // another melody note starts right there: the held one just ends at the change
       if (to === null || notes.some(m => m.layer === "lead" && !m.dbl && m !== nn && m.t >= S.t0 - 1e-6 && m.t < S.t0 + 0.25)) { nn.dur = S.t0 - nn.t; break; }
@@ -423,7 +461,8 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     cadence: { t: tc, chord: cadChord, lead: cadLead, bass: cadBass },
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
     extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name })), orch: P.orch === "custom" ? "custom" : (P.orch || "small"),
-    slots: slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind }))
+    slots: slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null })),
+    modulation: mod ? { t0: mod.t0, t1: mod.t1, shift: mod.shift, dir: mod.dir, keyPc: mod.keyPc } : null, picardy: !!picardyOn, rules: P.rules || null
   };
 }
 
@@ -541,8 +580,9 @@ export function fitMelody(score) {
   const pc = m => ((m % 12) + 12) % 12;
   const slots = (score.slots || []).map(S => ({ ...S, pcs: new Set(S.chord.map(pc)) }));
   if (!slots.length) return;
-  const scalePcs = new Set(score.melIv.map(iv => pc(iv + score.pcOff)));
+  const scalePcs = new Set(score.melIv.map(iv => pc(iv + score.pcOff))), M = score.modulation;
   const slotAt = t => slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || slots[slots.length - 1];
+  const inScale = (m, t) => scalePcs.has(pc(m - (M && t >= M.t0 - 1e-9 && t < M.t1 - 1e-9 ? M.shift : 0)));
   const rubs = (p, S) => S.pcs.has(pc(p + 1)) || S.pcs.has(pc(p - 1));
   const lead = score.notes.filter(n => n.layer === "lead" && !n.dbl && n.point >= 0).sort((a, b) => a.t - b.t);
   lead.forEach((nn, i) => {
@@ -552,12 +592,12 @@ export function fitMelody(score) {
     const strong = Math.abs(nn.t - Math.round(nn.t)) < 1e-6 || nn.dur >= 0.9, avoid = nn.dur >= 0.5 - 1e-9 && rubs(p, S);
     if (!strong && !avoid) return;
     const nx = lead[i + 1];
-    const r = pc(score.modeIv[((S.root % score.modeIv.length) + score.modeIv.length) % score.modeIv.length] + score.pcOff);
+    const r = pc(score.modeIv[((S.root % score.modeIv.length) + score.modeIv.length) % score.modeIv.length] + score.pcOff + (S.shift || 0));
     const rootRub = pc(p - r) === 1 || pc(r - p) === 1;
     if (!strong && nx && nx.t <= nn.t + nn.dur + 0.25 && Math.abs(nx.midi - nn.midi) <= 2 && slotAt(nx.t).pcs.has(pc(nx.midi)) && nn.dur <= 1 && (nn.dur <= 0.5 || !rootRub)) return;
     let to = null;
-    for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (scalePcs.has(pc(m)) && S.pcs.has(pc(m))) { to = m; break; } }
-    if (to === null && !strong) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (scalePcs.has(pc(m)) && !rubs(pc(m), S)) { to = m; break; } }
+    for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (inScale(m, nn.t) && S.pcs.has(pc(m))) { to = m; break; } }
+    if (to === null && (!strong || avoid)) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (inScale(m, nn.t) && !rubs(pc(m), S)) { to = m; break; } }
     if (to !== null) { nn.midi = to; nn.snapped = true; }
   });
   for (const nn of lead) {
@@ -567,7 +607,7 @@ export function fitMelody(score) {
       const p = pc(nn.midi);
       if (S.pcs.has(p) || !rubs(p, S)) continue;
       let to = null;
-      for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pc(nn.midi + d)) && scalePcs.has(pc(nn.midi + d))) { to = nn.midi + d; break; }
+      for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pc(nn.midi + d)) && inScale(nn.midi + d, S.t0)) { to = nn.midi + d; break; }
       const rest = nn.t + nn.dur - S.t0;
       if (to === null || lead.some(m => m !== nn && m.t >= S.t0 - 1e-6 && m.t < S.t0 + 0.25)) { nn.dur = S.t0 - nn.t; break; }
       nn.dur = S.t0 - nn.t;
@@ -575,6 +615,16 @@ export function fitMelody(score) {
       break;
     }
   }
+}
+// The melody rules for a melody written after the composition.
+export function melodyRules(score) {
+  const pc = m => ((m % 12) + 12) % 12, P = { rules: score.rules };
+  const slots = (score.slots || []).map(S => ({ ...S, pcs: new Set(S.chord.map(pc)) })); if (!slots.length) return;
+  const scalePcs = new Set(score.melIv.map(iv => pc(iv + score.pcOff))), M = score.modulation;
+  const ctx = { slotAt: t => slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || slots[slots.length - 1], inScale: (m, t) => scalePcs.has(pc(m - (M && t >= M.t0 - 1e-9 && t < M.t1 - 1e-9 ? M.shift : 0))), climax: score.arc ? score.arc.climax : -1 };
+  if (ruleOn(P, "leap")) leapRecovery(score.notes, ctx);
+  if (ruleOn(P, "parallels")) noParallels(score.notes, ctx);
+  if (ruleOn(P, "peak") && ctx.climax >= 0 && score.arc && score.arc.amount > 0.25) melodyPeak(score.notes, ctx);
 }
 // Voices after any melody change: the melody on top, no restrikes, no notes held into a chord
 // they rub against.

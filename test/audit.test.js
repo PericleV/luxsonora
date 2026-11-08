@@ -60,6 +60,7 @@ function checkScore(sc, P, label) {
   if (sc.slots.length && Math.abs(s0 - sc.body) > 1e-9) fail("slots don't cover the body");
   const ids = new Set([...LAYER_IDS, ...(sc.extra || []).map(L => L.id)]);
   const scale = new Set([...sc.modeIv, ...(sc.melIv || [])].map(v => (((v + sc.pc) % 12) + 12) % 12));
+  const M = sc.modulation, shiftAt = t => (M && t >= M.t0 - 1e-9 && t < M.t1 - 1e-9 ? M.shift : 0);
   const chordPcsAt = t => { const S = sc.slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9); return S ? new Set(S.chord.map(m => ((m % 12) + 12) % 12)) : new Set(); };
   const seen = new Set();
   for (const n of sc.notes) {
@@ -73,7 +74,7 @@ function checkScore(sc, P, label) {
     if (!(n.point >= -2 && n.point < Math.max(1, sc.points.length))) fail(`point ${n.point}`);
     if (n.layer !== "perc") {
       if (n.midi < 21 || n.midi > 108) fail(`${n.layer} pitch ${n.midi} outside the piano`);
-      if (!n.chromatic && !scale.has(((n.midi % 12) + 12) % 12) && !chordPcsAt(n.t).has(((n.midi % 12) + 12) % 12)) fail(`${n.layer} pitch ${n.midi} outside the scale`);
+      if (!n.chromatic && !scale.has((((n.midi - shiftAt(n.t)) % 12) + 12) % 12) && !chordPcsAt(n.t).has(((n.midi % 12) + 12) % 12)) fail(`${n.layer} pitch ${n.midi} outside the scale`);
       const T = n.tim;
       if (!T) fail(`${n.layer} note without timbre`);
       for (const k of ["a", "d", "r", "cut", "q", "s", "col"]) if (T[k] !== undefined && !fin(T[k])) fail(`timbre ${k} not finite`);

@@ -47,6 +47,7 @@
 22. **Downloaded models are allowed** (revises the first fixed constraint, 2026-11-06). A music model (Magenta MusicVAE) may be downloaded when the page opens. The deterministic engine stays as the fallback when the model can't load (offline, `file://`, sandboxed artifacts). The model must decode deterministically and every generated note must still be traceable to its focus point.
 23. **Sampled instruments are downloaded too** (2026-11-06): smplr instruments load when first used, from the smplr and gleitz sample hosts; every sampled preset has a synthesized fallback with the same envelope and filter values, so the app still sounds complete offline.
 24. **Genre rules come first.** Each style keeps its genre's conventions (`RULES` in theory.js, docs §9.1); the image chooses inside them, never against them.
+25. **Composition rules sit on top, and the user decides** (2026-11-08). Classical habits (modulation, phrase cadences, the Picardy third, leap recovery, no parallels, the peak at the climax, contrast-driven chord moves) apply after the genre rules, read the image where they can, and each one can be turned off. A rule never overrides the genre's form: no modulation in the 12-bar blues, no phrase cadences over a chord loop.
 
 ## Phases
 
@@ -143,6 +144,8 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Harmony audit and voice-leading rules (avoid notes, suspensions, melody on top, restrikes); video cover; draggable text and more line, place and colour options
 - [x] Pop, Rock, Metal, Blues and Funk with their genre rules (four-chord loop, power chords, palm-muted riffs, double bass drum, the 12-bar form with dominant sevenths and a boogie bass, a funk vamp with scratch guitar and ghost notes)
 - [x] Audio export as WAV 16/24-bit, MP3 and M4A (AAC); Play waits for the neural models instead of starting by itself
+- [x] Composition rules, each one switchable in Advanced: modulation at the climax on the circle of fifths (from the climax's colour), contrast-driven chord moves, question-and-answer phrase cadences, the Picardy third, leap recovery, no parallel fifths or octaves, the melody's peak at the climax
+- [ ] Expert mode: user rules on the places (an instrument or a chord at a given place)
 - [ ] Optional perfect loop (reverb tail added over the start)
 - [ ] Import of real eye-tracker focus points (x, y, duration)
 - [ ] Python port on the same contract

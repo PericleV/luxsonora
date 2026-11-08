@@ -24,7 +24,9 @@ import { gazePath, readPoints, coverage, backgroundZone, DEFAULT_RADIUS } from "
 import { compose } from "../src/core/compose.js";
 import { STYLES } from "../src/core/theory.js";
 
-const EXAMPLES = process.argv.includes("--examples");
+// --rules-off composes with every composition rule off (src/core/rules.js), to compare
+const RULES_OFF = process.argv.includes("--rules-off") ? { modulate: false, contrast: false, cadences: false, picardy: false, leap: false, parallels: false, peak: false } : null;
+const EXAMPLES = process.argv.includes("--examples") || !!(typeof process !== "undefined" && process.env.AUDIT_EXAMPLES);
 const ONLY = (process.argv.find(a => a.startsWith("--style=")) || "").slice(8);
 const IMAGES = [[200, 133, 1], [133, 200, 7], [200, 133, 3], [180, 180, 11], [240, 120, 5]].map(([w, h, s]) => ({ name: `img${s}`, img: synthImage(w, h, s) }));
 const BASE = { count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7 };
@@ -55,7 +57,9 @@ const PITCHED_SKIP = new Set(["perc"]);
 export function auditScore(sc) {
   // the chord of each slot as pitch classes, and its root (a scale degree) as a pitch class
   const L7 = sc.modeIv.length;
-  for (const S of sc.slots) { S.pcs = new Set(S.chord.map(pc)); S.rootPc = pc(sc.modeIv[((S.root % L7) + L7) % L7] + sc.pcOff); }
+  for (const S of sc.slots) { S.pcs = new Set(S.chord.map(pc)); S.rootPc = pc(sc.modeIv[((S.root % L7) + L7) % L7] + sc.pcOff + (S.shift || 0)); }
+  // the key at a moment: a modulation moves it for a while
+  const M = sc.modulation, shiftAt = t => (M && t >= M.t0 - 1e-9 && t < M.t1 - 1e-9 ? M.shift : 0);
   const spb = 60 / sc.bpm, minutes = (sc.total * spb) / 60;
   const tonic = sc.cadence && sc.cadence.chord ? new Set(sc.cadence.chord.map(pc)) : null;
   const chordAt = t => {
@@ -92,7 +96,10 @@ export function auditScore(sc) {
   // the mode, the melody's own scale (pentatonic, or the blues scale) and the sounding chord
   // (blues: dominant sevenths outside the mode on purpose) are all in the key
   const modePcs = new Set([...sc.modeIv, ...(sc.melIv || [])].map(v => pc(v + sc.pcOff)));
-  for (const n of pitched) if (!n.chromatic && !modePcs.has(pc(n.midi)) && !chordAt(n.t).pcs.has(pc(n.midi))) hit("outOfMode", where(n));
+  for (const n of pitched) if (!n.chromatic && !modePcs.has(pc(n.midi - shiftAt(n.t))) && !chordAt(n.t).pcs.has(pc(n.midi))) hit("outOfMode", where(n));
+  // parallel fifths or octaves between the melody and the bass
+  { const B = pitched.filter(n => n.layer === "bass").sort((a, b) => a.t - b.t), Ld = pitched.filter(n => n.layer === "lead" && !n.dbl);
+    for (let i = 0; i + 1 < B.length; i++) { const b1 = B[i], b2 = B[i + 1]; if (b1.midi === b2.midi) continue; const l1 = Ld.find(n => n.t <= b1.t + 1e-6 && n.t + n.dur > b1.t + 1e-6), l2 = Ld.find(n => Math.abs(n.t - b2.t) < 1e-6); if (!l1 || !l2 || l1 === l2 || l1.midi === l2.midi) continue; const i1 = pc(l1.midi - b1.midi), i2 = pc(l2.midi - b2.midi); if (i1 === i2 && (i1 === 7 || i1 === 0) && Math.sign(l2.midi - l1.midi) === Math.sign(b2.midi - b1.midi)) hit("parallel", `${where(l2)} over ${where(b2)}`); } }
   // stale: an accompaniment note still sounding a quarter beat after a chord change into a chord
   // it does not belong to
   for (const n of pitched) {
@@ -106,7 +113,7 @@ export function auditScore(sc) {
     const ch = chordAt(n.t).pcs, out = !ch.has(pc(n.midi));
     if (!out) continue;
     // pedal points: the tonic (or its fifth) held in the bass or a drone is idiomatic
-    const tonicPc = pc(sc.pc);
+    const tonicPc = pc(sc.pc + shiftAt(n.t));
     if ((n.layer === "bass" || /^x/.test(n.layer)) && (pc(n.midi) === tonicPc || pc(n.midi) === pc(tonicPc + 7)) && n.dur >= 2) continue;
     // an approach note: the bass (or a run) moving by step into the next note within a beat
     const nxt = pitched.find(m => m.layer === n.layer && m.t > n.t + 1e-6 && m.t <= n.t + 1.01);
@@ -159,7 +166,7 @@ export function auditScore(sc) {
 }
 
 // ---- run
-const KEYS = ["clash", "stale", "outOfMode", "accNCT", "padNCT", "melNCT", "unresolved", "bassRoot", "crossing", "restrike", "leap", "offgrid", "pileup", "range", "ending"];
+const KEYS = ["clash", "stale", "outOfMode", "parallel", "accNCT", "padNCT", "melNCT", "unresolved", "bassRoot", "crossing", "restrike", "leap", "offgrid", "pileup", "range", "ending"];
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
 if (isMain) {
   const rows = [], worst = [];
@@ -167,7 +174,7 @@ if (isMain) {
     if (ONLY && style !== ONLY) continue;
     const tot = Object.fromEntries(KEYS.map(k => [k, 0])); let mins = 0;
     for (const I of IMAGES) for (const C of CONFIGS) {
-      const P = { ...BASE, ...C, style }, sc = run(I, P), r = auditScore(sc);
+      const P = { ...BASE, ...C, style, ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
       mins += r.minutes; for (const k of KEYS) tot[k] += r.cnt[k] || 0;
       worst.push({ label: `${style} ${I.name} ${C.duration}s ${C.orch} ${C.connect}`, r });
     }

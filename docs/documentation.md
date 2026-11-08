@@ -394,6 +394,22 @@ Every piece goes through the same voice-leading rules after it is composed (and 
 
 Accompaniment notes outside the chord, restrikes and notes outside the scale are at or near zero in every style; the melody under the harmony dropped two to four times (it remains in arpeggiated accompaniments, where a single voice plays at a time).
 
+### 7.7c Composition rules
+
+On top of the genre rules, seven habits from classical composition (`src/core/rules.js`). Each one reads the picture where it can, and each one can be turned off in Piece › Advanced: composition rules (`P.rules`, all on by default; recipes keep the choice, older recipes play with all of them on).
+
+| Rule | What it does | Where it reads the image |
+|---|---|---|
+| Modulate at the climax | the climax moves one step on the circle of fifths, up to the dominant or down to the subdominant, and comes home before the end. In: the chord both keys share (home V = new I going up, home I = new V going down), then the new tonic. Out: the new key's chord that is the home tonic (new IV going up, new V going down). The chords and the accompaniment move with the key; each accompaniment layer moves by a fourth or the fifth the other way, whichever joins its line best and keeps it in range. The melody stays where the image put it and only its notes outside the new scale move by a semitone (the raised fourth going up, the lowered seventh going down). A pivot that the melody's scale cannot follow (a pentatonic tune over a chord with a note it lacks) is skipped. Not in the 12-bar blues | the hue is already the key on the circle of fifths (§7.1): the climax's hue one or more steps from the image's hue sets the direction. Without colour, a brighter climax goes up and a darker one down |
+| Contrast moves the chords | among the chord candidates for a point, a place very unlike the previous one (Lab distance over 0.45 of 50) takes the chord sharing the fewest notes with the previous chord, a similar place the most | the colour contrast between the two places |
+| Question and answer | every four bars a phrase ends: its last bar gets its own chord, the dominant (a half cadence, or the subtonic VII where V has no perfect fifth) and the tonic in turn. Not in styles with a chord loop or a grid longer than a bar | |
+| A bright minor ending | a minor piece whose last place is bright (L over 0.55) ends on the major tonic chord, the Picardy third | the lightness of the last place |
+| Leaps turn back | after a melody leap wider than a fourth, the next note turns back by step (a chord tone on a beat) | |
+| No parallel fifths | where the melody and the bass move the same way into the same fifth or octave, the melody takes another chord tone nearby, contrary motion first. Runs again after the ties and the legato | |
+| The peak at the climax | the highest melody note falls on the climax: its top note rises to the chord tone just above the rest of the melody, at most a sixth, with its neighbours within a sixth of it | the climax of the arc (§7.10) |
+
+The score records the modulation (`modulation: { t0, t1, shift, dir, keyPc }`), each chord slot's key shift and cadence, the Picardy third and the rules used; the point line under the stage says when a point is in the new key. The Story and Improvise melodies get the same melody rules after they are fitted to the chords. The audit (§7.7b) reads the key at each moment and counts parallel fifths and octaves between the melody and the bass; `--rules-off` composes with every rule off, to compare. Measured in November 2026 (per minute, 25 pieces per style): parallel fifths and octaves fell from 0.2-1.6 to 0-0.3 in every style, and exposed clashes stayed between 0 and 1.4, lower than without the rules in most styles.
+
 ### 7.8 Cadence
 
 The last bar plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
@@ -615,6 +631,7 @@ The interface shows only the essentials by default; the rest is in collapsed "Ad
 | | Dramatic arc | 0-100% | 70% | §7.10 |
 | | Smooth transitions | 0-100% | 60% | §7.7 |
 | Advanced: music | Key, Scale | Auto, 12 keys; Auto, 6 modes, 2 pentatonics | Auto | manual key and scale |
+| Advanced: composition rules | Modulate at the climax, Contrast moves the chords, Question and answer, A bright minor ending, Leaps turn back, No parallel fifths, The peak at the climax | on / off | all on | §7.7c |
 | | Fidelity | 0-100% | 60% | literal (high) or smoothed (low) melody |
 | | Melody octave | −2…+2 | 0 | shifts the melody by octaves |
 | | Melodic range | 1-3 octaves | 2 | span of the image height in the melody |

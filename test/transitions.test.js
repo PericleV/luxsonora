@@ -75,11 +75,15 @@ describe("key control", () => {
     const sc = run(1, { ...P0, keyMode: "manual", keyPc: 9, scale: "dorian" });
     expect(sc.pc).toBe(9); expect(sc.modeKey).toBe("dorian");
     const scalePcs = new Set(MODES.dorian.iv.map(i => (i + 9) % 12));
-    for (const n of sc.notes) if (n.layer !== "perc") expect(scalePcs.has(((n.midi % 12) + 12) % 12)).toBe(true);
+    // the chosen key and scale hold everywhere, moved by a modulation where there is one (the
+    // Picardy third is a chromatic note on purpose)
+    const M = sc.modulation, sh = t => (M && t >= M.t0 - 1e-9 && t < M.t1 - 1e-9 ? M.shift : 0);
+    for (const n of sc.notes) if (n.layer !== "perc" && !n.chromatic) expect(scalePcs.has((((n.midi - sh(n.t)) % 12) + 12) % 12)).toBe(true);
   });
   it("pentatonic scales restrict the melody to five pitch classes", () => {
     const sc = run(4, { ...P0, keyMode: "manual", keyPc: 2, scale: "minpent" });
-    const mel = new Set(sc.notes.filter(n => n.layer === "lead").map(n => ((n.midi % 12) + 12) % 12));
+    const M = sc.modulation, sh = t => (M && t >= M.t0 - 1e-9 && t < M.t1 - 1e-9 ? M.shift : 0);
+    const mel = new Set(sc.notes.filter(n => n.layer === "lead" && !n.chromatic).map(n => ((((n.midi - sh(n.t)) % 12) + 12) % 12)));
     const allowed = new Set([0, 3, 5, 7, 10].map(i => (i + 2) % 12));
     for (const p of mel) expect(allowed.has(p)).toBe(true);
   });

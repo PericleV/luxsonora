@@ -8,6 +8,7 @@ import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE } from "../core/timbre.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
+import { RULES_INFO, defaultRules } from "../core/rules.js";
 import { SEM_PROMPT, validateSem } from "../core/semantic.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
@@ -50,6 +51,7 @@ const P = {
   style: "ambient", duration: 30, count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
   smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  rules: defaultRules(),
   mix: defaultMix(),
   instruments: {},
   fx: defaultFx(),
@@ -227,6 +229,9 @@ function renderWhy() {
   if (m.bri > 0.3) parts.push("complex texture → brighter sound"); else if (m.bri < -0.3) parts.push("plain texture → darker sound");
   if (m.res > 0.3) parts.push("vivid colour → resonant tone");
   if (m.col > 0.3) parts.push("warm colours → richer harmonics"); else if (m.col < -0.3) parts.push("cool colours → purer tone");
+  // the composition rules that touched this point
+  if (F.modulation) parts.unshift(`not the colour of the rest of the picture → the key moves ${F.modulation.dir > 0 ? "up" : "down"} a fifth, to ${pcName(F.modulation.keyPc)}`);
+  if (SCORE.picardy && F.idx === SCORE.points.length - 1) parts.unshift("a bright last place → the minor piece ends on a major chord");
   if (F.passage) parts.splice(1, 0, `the path to point ${F.idx + 2} crosses ${F.passage.crossings} edge${F.passage.crossings === 1 ? "" : "s"} → a ${F.passage.notes}-note run`);
   el.innerHTML = `<b>Point ${F.idx + 1}</b> · ${esc(SECTION_NAME[F.section] || "Development")} · chord ${esc(romanOf(F.root, SCORE.modeIv))} · ${esc(parts.slice(0, 3).join("; "))}.`;
   el.hidden = false;
@@ -394,7 +399,7 @@ function openNewSong() {
       <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.${P.returns > 0 ? ` The eye may also look back at up to ${P.returns} of them.` : ""}</p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
     <div class="ns-actions">
-      <button type="button" class="btn btn-primary" id="nsAuto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z"/><path d="M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9z"/></svg>Generate song</button>
+      <button type="button" class="btn btn-primary" id="nsAuto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>Generate song</button>
       <button type="button" class="btn" id="nsManual">Place the points myself</button>
     </div>
     <p class="snote"><b>Generate song</b> picks the spots for you, and you can still move them afterwards. With <b>Place the points myself</b> you tap them in, in the order you want to hear them.</p></div>`, "dlg-newsong");
@@ -1277,6 +1282,8 @@ function applySettings(j) {
   for (const k of Object.keys(P)) if (k in j.settings && !(k in { src: 1, mix: 1, fx: 1, instruments: 1, video: 1, out: 1 })) P[k] = j.settings[k];
   if (j.settings.video) { mergeInto(P.video, j.settings.video); if (j.settings.video.labelText) P.video.labelText = { ...j.settings.video.labelText }; ensureFont(P.video.font); }
   if (j.settings.out) Object.assign(P.out, j.settings.out);
+  // recipes from before the composition rules play with them all on
+  P.rules = { ...defaultRules(), ...(j.settings.rules || {}) };
   if (EXPORT) EXPORT.sync();
   if (j.settings.src) { const cropRef = P.src.crop, crop = { ...cropRef, ...(j.settings.src.crop || {}) }; Object.assign(P.src, j.settings.src); P.src.crop = Object.assign(cropRef, crop); }
   if (j.settings.mix) for (const l of Object.keys(j.settings.mix)) P.mix[l] = Object.assign(P.mix[l] || { vol: 1, mute: false, solo: false }, j.settings.mix[l]);
@@ -1336,6 +1343,15 @@ function initKeyControls() {
   $("#keySel").addEventListener("change", e => { const v = e.target.value; P.keyMode = v === "auto" ? "auto" : "manual"; if (v !== "auto") P.keyPc = Number(v); invalidate(LV.MUSIC); });
   $("#scaleSel").addEventListener("change", e => { P.scale = e.target.value; invalidate(LV.MUSIC); });
 }
+// Composition rules (core/rules.js): one switch each, all on by default
+function initRulesControls() {
+  const host = $("#sRules");
+  host.innerHTML = Object.entries(RULES_INFO).map(([k, r]) => `<div class="rule"><label class="toggle"><input type="checkbox" data-rule="${k}"><span>${esc(r.name)}</span></label><p class="sub">${esc(r.desc)}</p></div>`).join("");
+  host.addEventListener("change", e => { const k = e.target.dataset.rule; if (!k) return; P.rules = { ...defaultRules(), ...P.rules, [k]: e.target.checked }; invalidate(LV.MUSIC); });
+  $("#rulesAll").addEventListener("click", () => { P.rules = defaultRules(); syncRules(); invalidate(LV.MUSIC); });
+  syncRules();
+}
+function syncRules() { document.querySelectorAll("#sRules [data-rule]").forEach(el => { el.checked = !P.rules || P.rules[el.dataset.rule] !== false; }); }
 function syncAllControls() {
   $("#keySel").value = P.keyMode === "manual" ? String(P.keyPc) : "auto"; $("#scaleSel").value = P.scale;
   for (const k of Object.keys(SL)) SL[k].set(P[k], false);
@@ -1343,7 +1359,7 @@ function syncAllControls() {
   SRC_CTL.ch.set(P.src.channels); SRC_CTL.range.set(P.src.range); $("#srcInvert").checked = P.src.invert; $("#srcMix").hidden = P.src.channels !== "mix";
   STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); $("#placeSel").value = P.placement;
   document.querySelectorAll(".lane").forEach(el => { const l = el.dataset.layer, r = el.querySelector("input[type=range]"); r.value = P.mix[l].vol; r.style.setProperty("--p", ((P.mix[l].vol / 1.5) * 100).toFixed(1) + "%"); });
-  syncSourceControls(); renderLanes(); if (SOUND) SOUND.sync();
+  syncSourceControls(); syncRules(); renderLanes(); if (SOUND) SOUND.sync();
 }
 function closeMenus() { document.querySelectorAll(".popover").forEach(p => (p.hidden = true)); document.querySelectorAll("[aria-haspopup]").forEach(b => b.setAttribute("aria-expanded", "false")); }
 
@@ -1774,6 +1790,7 @@ export function init() {
     for (const d of SLIDERS[host]) { const s = makeSlider(d, P, onParam); SL[d.key] = s; if (d.adv) s.el.classList.add("adv-only"); el.appendChild(s.el); }
   }
   initKeyControls();
+  initRulesControls();
   // style: a grouped dropdown with what each style is, in a line
   const styleSel = $("#styleSel");
   styleSel.innerHTML = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}">${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");

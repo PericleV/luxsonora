@@ -3,7 +3,7 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, BOTTOMS, EASES, GIF_RANGES, videoSupported } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, EASES, GIF_RANGES, BOTTOM_FILLS, videoSupported } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook } from "../export/look.js";
 import { LABEL_MODES } from "../export/labels.js";
@@ -23,6 +23,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const opts = obj => Object.entries(obj).map(([k, v]) => `<option value="${k}">${esc(typeof v === "string" ? v : v.name)}</option>`).join("");
   const tog = (id, label) => `<label class="toggle"><input type="checkbox" id="${id}"><span>${label}</span></label>`;
   const box = id => `<div id="${id}" class="sliders"></div>`;
+  const col = (id, label) => `<label id="l_${id}"><input type="color" id="${id}"><span>${label}</span></label>`;
   const group = (id, title, body, open = false) => `<details class="adv xgroup" data-x="${id}"${open ? " open" : ""}><summary>${title}</summary>${body}</details>`;
   host.innerHTML = `
     <section class="card" aria-labelledby="hAudioOut"><h3 id="hAudioOut">Audio</h3>
@@ -77,22 +78,28 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       ${seg("xPoints", "Places")}
       <div id="xPlaceOps" class="sliders sliders-2"></div>
       <div class="vtoggles">${tog("xNumbers", "Numbers")}${tog("xPassages", "Connection notes")}</div>
-      ${seg("xEye", "The eye")}`)}
+      ${seg("xEye", "The eye")}
+      <div class="vcolors">${col("xEyeCol", "Eye colour")}</div>`)}
     ${group("labels", "Labels on places", `
       ${seg("xLabels", "Labels")}
       <div id="xLabelAuto"><button type="button" class="btn" id="xDetect">Detect objects</button><p class="snote" id="xLabelNote">Each spot gets the name of the object under it. Spots that aren't on an object get a short description of their colour.</p></div>
       <div id="xLabelCustom"><p class="snote">Write a label for each spot, or leave it empty. <button type="button" class="linkbtn" id="xLabelFill">Fill in the detected names</button></p><ol class="xlabels" id="xLabelList"></ol></div>
+      <div class="vcolors">${col("xLabelCol", "Text")}${col("xLabelBg", "Background")}</div>
       <div class="vtoggles">${tog("xLabelKeep", "Keep labels after the eye leaves")}</div>`)}
     ${group("fx", "Effects and sound", `
       <div class="field"><div class="flabel">When the eye arrives</div><div class="vtoggles" id="xFx">${Object.entries(EFFECTS).map(([k, n]) => tog("xFx_" + k, n)).join("")}</div></div>
       ${box("xStrength")}${box("xReact")}
-      ${seg("xBottom", "Bottom")}`)}
+      ${seg("xBottom", "Bottom")}
+      <div id="xBottomCols">${seg("xBottomFill", "Bottom colour")}<div class="vcolors">${col("xBotA", "Colour")}${col("xBotB", "Second colour")}</div></div>`)}
     ${group("text", "Text and timing", `
       ${seg("xCaption", "Text")}
       <div id="xTextBox">
         <div class="field"><label class="flabel" for="xTitle">Title</label><input type="text" id="xTitle" class="text-input" maxlength="80" placeholder="The image name"></div>
         ${sel("xFont", "Font", opts(FONTS))}
-        ${seg("xTitlePos", "Position")}${seg("xTitleWhen", "Show the title")}${box("xTextSize")}
+        <div class="vcolors">${col("xTitleCol", "Title colour")}${col("xSubCol", "Line under it")}</div>
+        ${seg("xSubtitle", "Line under the title")}
+        <div class="field" id="xSubTextBox"><label class="flabel" for="xSubText">Your line</label><input type="text" id="xSubText" class="text-input" maxlength="90" placeholder="A walk through the sunset"></div>
+        ${seg("xTitlePos", "Position")}${seg("xTitleWhen", "Show the title")}${box("xTitleSecs")}${box("xTextSize")}
       </div>
       <div class="vtoggles">${tog("xEndCard", "End card (the last 3 s)")}</div>
       <div class="field" id="xCreditBox"><label class="flabel" for="xCredit">End card credit</label><input type="text" id="xCredit" class="text-input" maxlength="60"></div>
@@ -135,10 +142,12 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xPoints", "points", Object.entries(POINT_MODES), false, () => vis()],
     ["xEye", "eye", Object.entries(EYES)],
     ["xLabels", "labels", Object.entries(LABEL_MODES), false, () => vis()],
-    ["xBottom", "bottom", Object.entries(BOTTOMS)],
+    ["xBottom", "bottom", Object.entries(BOTTOMS), false, () => vis()],
+    ["xBottomFill", "bottomFill", Object.entries(BOTTOM_FILLS), false, () => vis()],
     ["xCaption", "caption", Object.entries(CAPTIONS), false, () => vis()],
     ["xTitlePos", "titlePos", Object.entries(TITLE_POS)],
-    ["xTitleWhen", "titleWhen", Object.entries(TITLE_WHEN)]
+    ["xTitleWhen", "titleWhen", Object.entries(TITLE_WHEN), false, () => vis()],
+    ["xSubtitle", "subtitle", Object.entries(SUBTITLES), false, () => vis()]
   ];
   const segs = {};
   for (const [id, key, items, num, after] of SEGS) segs[id] = makeSeg($("#" + id), items, String(V[key]), v => { V[key] = num === "size" ? (v === "original" ? v : Number(v)) : num ? Number(v) : v; if (after) after(); look(); });
@@ -163,6 +172,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xVignette", pct("vignette", "Vignette", 0.25)],
     ["#xGrain", pct("grain", "Film grain", 0)],
     ["#xDim", { key: "dim", label: "Darken the image", min: 0, max: 0.6, step: 0.02, def: 0.1, scale: 100, unit: "%" }],
+    ["#xTitleSecs", { key: "titleSecs", label: "For how long", min: 1, max: 15, step: 0.5, def: 4.5, unit: "s", dec: 1, help: "Then it fades out in a second." }],
     ["#xTextSize", { key: "textSize", label: "Text size", min: 0.6, max: 1.8, step: 0.05, def: 1, scale: 100, unit: "%" }],
     ["#xFades", { key: "fadeIn", label: "Fade in", min: 0, max: 3, step: 0.1, def: 0.6, unit: "s", dec: 1 }],
     ["#xFades", { key: "fadeOut", label: "Fade out", min: 0, max: 4, step: 0.1, def: 1.5, unit: "s", dec: 1 }]
@@ -178,13 +188,18 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const showTheme = () => themeBtns.forEach(b => b.setAttribute("aria-checked", String(b.dataset.v === V.theme)));
   $("#xTheme").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    const t = VIDEO_THEMES[b.dataset.v]; V.theme = b.dataset.v; V.pathColor = t.path; V.pointColor = t.point;
-    $("#xPathCol").value = t.path; $("#xPointCol").value = t.point; showTheme(); look();
+    const t = VIDEO_THEMES[b.dataset.v]; V.theme = b.dataset.v; V.pathColor = t.path; V.pointColor = t.point; V.bottomColor = t.point; V.bottomColor2 = t.path;
+    syncColors(); showTheme(); look();
   });
-  for (const [id, key] of [["#xPathCol", "pathColor"], ["#xPointCol", "pointColor"]]) $(id).addEventListener("input", e => { V[key] = e.target.value; V.theme = "custom"; showTheme(); look(); });
+  // every colour picker on P.video: [input, key, part of the theme]
+  const COLS = [["#xPathCol", "pathColor", true], ["#xPointCol", "pointColor", true], ["#xTitleCol", "titleColor"], ["#xSubCol", "subColor"], ["#xEyeCol", "eyeColor"],
+    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"]];
+  const syncColors = () => { for (const [id, key] of COLS) $(id).value = V[key] || "#ffffff"; };
+  for (const [id, key, theme] of COLS) $(id).addEventListener("input", e => { V[key] = e.target.value; if (theme) { V.theme = "custom"; showTheme(); } look(); });
   // ---- text
   $("#xTitle").addEventListener("input", e => { V.title = e.target.value; look(); });
   $("#xCredit").addEventListener("input", e => { V.credit = e.target.value; look(); });
+  $("#xSubText").addEventListener("input", e => { V.subText = e.target.value; look(); });
   // ---- labels
   let AUTO = [];
   $("#xDetect").addEventListener("click", () => onDetect());
@@ -214,6 +229,8 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     const l = structuredClone(src); delete l.name;
     if (l.fx) { V.fx = { ...V.fx, ...l.fx }; delete l.fx; }
     Object.assign(V, l);
+    if (!("bottomColor" in l) && l.pointColor) V.bottomColor = l.pointColor;
+    if (!("bottomColor2" in l) && l.pathColor) V.bottomColor2 = l.pathColor;
     if (v.startsWith("m:")) $("#xLookName").value = v.slice(2);
     onFont(V.font); sync(); look();
     $("#xLookNote").textContent = `Look “${v.startsWith("b:") ? LOOKS[v.slice(2)].name : v.slice(2)}” applied; change anything you like.`;
@@ -247,6 +264,14 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     sl.gradeAmt.el.hidden = V.grade === "none";
     $("#xLabelAuto").hidden = V.labels !== "auto"; $("#xLabelCustom").hidden = V.labels !== "custom";
     $("#xTextBox").hidden = V.caption === "none"; $("#xCreditBox").hidden = !V.endCard;
+    $("#xSubTextBox").hidden = V.subtitle !== "custom"; sl.titleSecs.el.hidden = V.titleWhen !== "intro";
+    $("#l_xSubCol").hidden = V.subtitle === "none" && V.caption !== "points";
+    // the bottom's colours: one, or two named after what they do
+    $("#xBottomCols").hidden = V.bottom === "none";
+    const fill = V.bottomFill || "solid";
+    $("#l_xBotB").hidden = fill === "solid";
+    $("#l_xBotA span").textContent = fill === "gradient" ? "Left" : fill === "reactive" ? "Quiet" : "Colour";
+    $("#l_xBotB span").textContent = fill === "gradient" ? "Right" : "Loud";
   }
   // every control from P (after a recipe or a look)
   function sync() {
@@ -255,8 +280,8 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     for (const [id, key] of SELS) $("#" + id).value = V[key];
     for (const [, d] of SLD) sl[d.key].set(V[d.key] ?? d.def, false);
     for (const [id, obj, key] of checks) $(id).checked = !!obj()[key];
-    $("#xPathCol").value = V.pathColor; $("#xPointCol").value = V.pointColor; showTheme();
-    $("#xTitle").value = V.title || ""; $("#xCredit").value = V.credit || "";
+    syncColors(); showTheme();
+    $("#xTitle").value = V.title || ""; $("#xCredit").value = V.credit || ""; $("#xSubText").value = V.subText || "";
     renderLabels(AUTO); vis();
   }
   sync();

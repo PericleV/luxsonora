@@ -46,6 +46,13 @@
     </div>
     <div class="actions">
       <span id="exportStatus" class="status-chip" role="status"></span>
+      <button type="button" class="tb-link" id="welcomeBtn" title="What Lux Sonora is"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/></svg><span>Welcome</span></button>
+      <button type="button" class="tb-link" id="helpBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="helpMenu" title="Help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.1-2.4 3.6"/><path d="M12 17.2v.1"/></svg><span>Help</span></button>
+      <div class="popover popover-menu" id="helpMenu" role="menu" aria-label="Help" hidden>
+        <button type="button" role="menuitem" id="guideBtn">Getting started</button>
+        <button type="button" role="menuitem" id="shortcutsBtn">Keyboard shortcuts</button>
+        <button type="button" role="menuitem" id="aboutBtn">About and licence</button>
+      </div>
       <button type="button" class="icon-btn" id="projectBtn" aria-label="Recipe" aria-haspopup="menu" aria-expanded="false" aria-controls="projectMenu" title="Recipe: save or open">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l2 2h6.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
       </button>
@@ -53,9 +60,6 @@
         <button type="button" role="menuitem" id="saveProject">Save recipe</button>
         <button type="button" role="menuitem" id="openProject">Open recipe</button>
         <p class="sub">A recipe saves the picture and all your settings, so you or anyone else can open the exact same song later.</p>
-        <button type="button" role="menuitem" id="shortcutsBtn">Keyboard shortcuts</button>
-        <button type="button" role="menuitem" id="welcomeBtn">Welcome</button>
-        <button type="button" role="menuitem" id="aboutBtn">About and licence</button>
       </div>
       <input id="projectFile" class="visually-hidden" type="file" accept=".json,application/json">
       <button type="button" class="icon-btn" id="settingsBtn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings">

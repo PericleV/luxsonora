@@ -420,7 +420,8 @@ function openNewSong() {
 function showPlaceHint() {
   const old = document.querySelector(".guide"); if (old) old.remove();
   const g = document.createElement("section"); g.className = "guide"; g.setAttribute("aria-label", "Placing points");
-  g.innerHTML = `<h2>Place your points</h2>
+  g.innerHTML = `<button type="button" class="icon-btn guide-x" data-a="close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2>Place your points</h2>
     <ol><li><b>Tap the picture</b> where you want the eye to stop, in the order you want to hear them.</li>
     <li><b>Tap a circle</b> to open it in the Focus point tab. There you can make it calm, a build-up, the climax or the release.</li>
     <li><b>Press play</b> whenever you're ready. The music keeps up with your changes.</li></ol>
@@ -464,7 +465,7 @@ function showWelcome() {
         <p class="welcome-by">Developed by <b>Pericle</b></p>
         <p>If you like it, please follow me on Instagram.</p>
         <a class="btn welcome-ig" href="${INSTAGRAM_URL}" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/></svg>@pericle_v</a>
-        <p class="sub">You can come back to this page from the menu (the folder icon).</p>
+        <p class="sub">You can come back to this page anytime with Welcome, at the top.</p>
       </div>
     </footer>
   </section>`;
@@ -486,7 +487,8 @@ function showGuide(force = false) {
   if (!force && store.get("guideDone")) return;
   const old = document.querySelector(".guide"); if (old) old.remove();
   const g = document.createElement("section"); g.className = "guide"; g.setAttribute("aria-label", "Getting started");
-  g.innerHTML = `<h2>Getting started</h2>
+  g.innerHTML = `<button type="button" class="icon-btn guide-x" data-a="close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <h2>Getting started</h2>
     <ol><li><b>Upload a photo</b> or drag it onto the picture. You can also keep the demo.</li>
     <li>Press <b>New song</b>, choose a genre, a length and how many spots, then hit <b>Generate song</b>. Or place the spots yourself.</li>
     <li>Drag the circles around, add or remove some, or make one of them the climax. The music changes as you go.</li></ol>
@@ -1405,7 +1407,7 @@ function initAppearance() {
     const b = e.target.closest("button"); if (!b) return;
     sw.querySelectorAll("button").forEach(x => x.setAttribute("aria-checked", String(x === b))); applyAccent(b.dataset.v);
   });
-  for (const [bid, pid] of [["#settingsBtn", "#settings"], ["#projectBtn", "#projectMenu"]]) {
+  for (const [bid, pid] of [["#settingsBtn", "#settings"], ["#projectBtn", "#projectMenu"], ["#helpBtn", "#helpMenu"]]) {
     const btn = $(bid), pop = $(pid);
     btn.addEventListener("click", e => { e.stopPropagation(); const open = pop.hidden; closeMenus(); pop.hidden = !open; btn.setAttribute("aria-expanded", String(open)); });
     document.addEventListener("click", e => { if (!pop.hidden && !pop.contains(e.target)) { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); } });
@@ -1659,7 +1661,10 @@ function drawVideoPreview(cv) {
   if (!VSCENE || VSCENE.sc !== SCORE || VSCENE.src !== src) VSCENE = sceneFor(SCORE, src);
   VSCENE.o = o;
   const g = cv.getContext("2d"), k = (w * dpr) / W; g.setTransform(k, 0, 0, k, 0, 0);
-  drawVideoFrame(g, W, H, (Math.min(currentBeat(), SCORE.total) * 60) / SCORE.bpm, VSCENE, { preview: true });
+  // stopped at the very start, show the frame at 1 s: the first frame is black (fade in) and the title fades in
+  let sec = (Math.min(currentBeat(), SCORE.total) * 60) / SCORE.bpm;
+  if (!Player.playing && sec < 0.05) sec = Math.min(1, VSCENE.total);
+  drawVideoFrame(g, W, H, sec, VSCENE, { preview: true });
 }
 // scene and audio for an export: the master, its analysis, the fades on the sound
 async function videoJob(say, longSide) {
@@ -1809,6 +1814,7 @@ export function init() {
   $("#welcomeBtn").addEventListener("click", () => { closeMenus(); showWelcome(); });
   $("#newSong").addEventListener("click", () => openNewSong());
   $("#shortcutsBtn").addEventListener("click", () => { closeMenus(); showShortcuts(); });
+  $("#guideBtn").addEventListener("click", () => { closeMenus(); showGuide(true); });
   $("#brandLogo").innerHTML = LOGO;
   if (store.get("welcomeDone")) showGuide(); else showWelcome();
   $("#semBtn").addEventListener("click", runSemantic);

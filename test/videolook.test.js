@@ -4,7 +4,7 @@ import { pathGeometry, LINE_STYLES } from "../src/export/paths.js";
 import { colourLabel, objectAt, labelFor, autoLabels, hueName } from "../src/export/labels.js";
 import { gradePixel, GRADES, fadeAt, fadeAudio, LOOKS, LOOK_KEYS, pickLook, PLATFORMS, safeArea } from "../src/export/look.js";
 import { analyzeAudio, analyzeNotes, valueAt, BANDS } from "../src/export/reactive.js";
-import { defaultVideo, frameSize, gifRange, EYES, BOTTOMS } from "../src/export/video.js";
+import { defaultVideo, frameSize, gifRange, EYES, BOTTOMS, mixHex } from "../src/export/video.js";
 
 const tl = [{ x: 0.1, y: 0.2 }, { x: 0.5, y: 0.8 }, { x: 0.9, y: 0.3 }, { x: 0.4, y: 0.1 }];
 
@@ -76,6 +76,17 @@ describe("look", () => {
     expect(frameSize("image", "original", 100, 50)).toEqual({ W: 480, H: 240 });
     expect(frameSize("square", "original", 3000, 2000)).toEqual({ W: 2000, H: 2000 });
     const s = safeArea("vertical"); expect(s.top + s.bottom).toBeLessThan(0.5);
+  });
+});
+
+describe("colours", () => {
+  it("mix two colours for the gradient and the colour that follows the sound", () => {
+    expect(mixHex("#000000", "#ffffff", 0)).toBe("#000000");
+    expect(mixHex("#000000", "#ffffff", 1)).toBe("#ffffff");
+    expect(mixHex("#ff0000", "#0000ff", 0.5)).toBe("#800080");
+    expect(mixHex("#123", "#123", 0.7)).toBe("#112233");
+    expect(mixHex("#ff0000", "#0000ff", 2)).toBe("#0000ff");
+    const d = defaultVideo(); for (const k of ["titleColor", "subColor", "eyeColor", "labelColor", "labelBg", "bottomColor", "bottomColor2"]) expect(d[k]).toMatch(/^#[0-9a-fA-F]{6}$/);
   });
 });
 

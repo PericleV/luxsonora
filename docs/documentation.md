@@ -706,13 +706,14 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 |---|---|
 | When the eye arrives | *Pulse* (a ring that expands and fades in 1.1 s), *Ripple* (three thinner rings), *Spotlight* (the rest of the frame darkens around the eye), *Glow* (light on the current place, strongest on arrival), *Flash on accents* (a short white flash on accented points and the climax); 1.6 × stronger at the climax; *Effect strength* scales them all |
 | React to the sound | the beats of the rendered sound (`reactive.js`: the positive change of the 40-160 Hz band, normalized by a running peak, held with a 0.18 s decay) widen the line (up to +35%), throb a ring on the current place, brighten the glow and grow the eye. The preview starts from the notes (kick and accent hits) and switches to the rendered sound once the piece has been rendered in the background (the render is kept and reused by the next export) |
+| Bottom colour | *One colour*; a *Gradient* from left to right between two colours; or *Follows the sound*: each bar (or the whole line) moves from the *Quiet* colour to the *Loud* one with its own level and the loudness and beat at that moment (`0.55·level + 0.45·max(loudness, beat)`); played overview bars take the colour of their height |
 | Bottom | *Sound bars* (an overview of the loudness, the played part in the place colour), *Spectrum* (40 log-spaced bands from 40 Hz to 16 kHz, FFT 2048, falling with a 0.25 s release), *Waveform* (the signal over 40 ms around the playhead), a *Progress line*, or none |
 
 **Look** (`look.js`)
 
 | | Rule |
 |---|---|
-| Colours | six themes (Gold, Neon, Ember, Mint, Rose, White) or any two colours: the path, and the places and effects |
+| Colours | six themes (Gold, Neon, Ember, Mint, Rose, White) or any two colours: the path, and the places and effects. A theme also sets the bottom's colours. Every other element has its own colour: the title, the line under it (and the chord line), the eye, the labels (text and background) and the bottom |
 | Colour grade | Warm, Cool, Contrast (an S-curve), Vivid (saturation), Matte (lifted blacks, softer colour), Black and white, Teal and orange (shadows toward teal, highlights toward orange), with an amount; applied once to the image, pixel by pixel |
 | Vignette, grain, darken | a radial darkening to the corners; seeded film grain (four tiles cycled frame by frame, so the export is the same every time); a dark layer over the image |
 | Looks | six built in (Minimal, Neon night, Documentary, Cinematic, Sketchbook, Audiogram) and your own, saved in the browser under a name; a look holds every choice of these groups but not the size, the title or the labels |
@@ -721,7 +722,7 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 
 | | Rule |
 |---|---|
-| Title | the image name or your own, with the style, key and tempo under it; top left, top centre, bottom left or centre; always, or only the first seconds (in over 0.6 s, out at 4.5-5.5 s); optionally each point's section and chord |
+| Title | the image name or your own; under it the style, key and tempo, a line of your own, or nothing; top left, top centre, bottom left or centre; always, or only the first seconds (in over 0.6 s, shown for 1-15 s, then out over 1 s); *Title and chords* adds each point's section and chord at the bottom. Stopped at the very start, the preview shows the frame at 1 s, since the first frame is black when the video fades in |
 | Font | Geist, Space Grotesk, Instrument Serif, Playfair Display, Bebas Neue (in capitals) or Geist Mono (Google Fonts, loaded when chosen), with a size of 60-180% |
 | End card | the last 3.2 s: the picture darkens, the title is shown large in the centre with the style line and a credit ("Made with Lux Sonora", editable) |
 | Fades | from black over the first 0-3 s and to black over the last 0-4 s; the sound fades with the picture (optional) |
@@ -779,10 +780,10 @@ When the HTML file is opened locally or on GitHub Pages, the panel stays hidden 
 - **Why it sounds like this**: a line over the stage explains the selected focus point: its section, its chord and the two or three strongest links from its area to the sound (height → register, smoothness → legato, sharp edges → attack, texture → brightness, colour → resonance and harmonics). Hidden on phones, where the Focus point tab has the same information.
 - **One status line** next to Export says what is downloading (instruments, the melody, groove or saliency models), with a pulsing dot.
 - **Phones**: a compact top bar (icon-only upload, no app name) that stays at the top while scrolling.
-- **Welcome page** (first visit; again from the menu › Welcome): what the app does in a paragraph, the three steps (choose an image, generate a song, shape and share), what it offers (11 styles, sampled instruments and optional neural networks, the analysis in the browser, reproducible recipes, open source), *Upload an image* or *Try a demo*, and the credits: developed by Pericle, with a link and a QR code to the Instagram account @pericle_v. The About dialog has the same credit.
+- **Welcome page** (first visit; again with *Welcome* in the top bar): what the app does in a paragraph, the three steps (choose an image, generate a song, shape and share), what it offers (11 styles, sampled instruments and optional neural networks, the analysis in the browser, reproducible recipes, open source), *Upload an image* or *Try a demo*, and the credits: developed by Pericle, with a link and a QR code to the Instagram account @pericle_v. The About dialog has the same credit.
 - **First run**: after the welcome page, a short guide on the stage (upload, new song, shape it) with *Upload a photo*, *New song* and *Keyboard shortcuts*; it can be shown again from *About and licence*.
 - **New song** (top bar; opens by itself after an upload): genre, duration, the number of focus points (with a suggestion from the image, `4 + 10·(0.5·entropy + 0.5·edges)`) and where the eye looks. *Generate song* places the points with that method (press play when you like); the points can then be moved, added, removed and given a role. *Place the points myself* starts an empty manual path with the Add tool on and a short hint: click the image in the order the places should be heard, then set each point's role in the Focus point tab.
-- **Recipe menu**: Save recipe, Open recipe, Keyboard shortcuts (also `?`), About and licence (version, MIT licence, credits).
+- **Top bar**: *Welcome* opens the welcome page; *Help* has Getting started (the quick start guide, which has a close button), Keyboard shortcuts (also `?`) and About and licence (version, MIT licence, credits); the folder icon holds Save recipe and Open recipe.
 - **Pickers**: instruments and drum kits are chosen in a dialog with search, a family filter and a *Listen* button (an arpeggio in the layer's register, or a bar of drums); the list holds the style default, recommended sampled instruments, the synthesizers, all 128 General MIDI soundfonts by family, Mellotron, VCSL mallets and electric pianos, and 225 kits (built in, classic drum machines and 220 DrumAbuse machines).
 - **Inspector**, four tabs:
   - **Piece**: placement, style, duration, melody, groove, focus points, tempo (with the resulting BPM and bars), then the collapsed groups Advanced: gaze, what draws the eye, music, and "How the image was read". Group state is kept locally in the browser.

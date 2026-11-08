@@ -1,0 +1,46 @@
+{
+  "name": "luxsonora",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Lux Sonora: image sonification. Turns an image into music, harmoniously and in a chosen style, by following where the eye looks",
+  "homepage": "https://periclev.github.io/luxsonora/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/periclev/luxsonora.git"
+  },
+  "author": "Pericle (https://www.instagram.com/pericle_v/)",
+  "license": "MIT",
+  "keywords": [
+    "lux sonora",
+    "sonification",
+    "image sonification",
+    "music",
+    "image",
+    "saliency",
+    "web-audio",
+    "magenta",
+    "midi"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vite": "^8.3.6",
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@magenta/music": "^1.23.1",
+    "fft.js": "^4.0.4",
+    "geotiff": "^3.0.5",
+    "gifenc": "^1.0.3",
+    "lufs-web": "^0.1.1",
+    "mp4-muxer": "^5.2.1",
+    "smplr": "^1.1.0",
+    "webm-muxer": "^5.1.4"
+  }
+}

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lux Sonora: image sonification</title>
+<meta name="description" content="Lux Sonora: image sonification. Turn any image into music by following where the eye looks, in the style you choose. Free and open source, runs in your browser.">
+<meta name="author" content="Pericle">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Lux Sonora: image sonification">
+<meta property="og:description" content="Lux Sonora: image sonification. Turn any image into music by following where the eye looks, in the style you choose. Free and open source, runs in your browser.">
+<meta property="og:url" content="https://periclev.github.io/luxsonora/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg viewBox=%220 0 102 90%22 xmlns=%22http://www.w3.org/2000/svg%22 %3E%3Cstyle%3Eg%7Bstroke:%23000%7D%40media (prefers-color-scheme:dark)%7Bg%7Bstroke:%23fff%7D%7D%3C/style%3E%3Cg fill=%22none%22 stroke-width=%226.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpath d=%22M73.329,86.912l-59.811,0c-6.085,-0 -11.018,-4.199 -11.018,-9.379l-0,-65.654c0,-5.18 4.933,-9.379 11.018,-9.379l59.811,0%22/%3E%3Cpath d=%22M2.5,67.693l22.983,-22.987l38.684,42.206%22/%3E%3Cpath d=%22M38.671,59.095l17.687,-23.877%22/%3E%3Ccircle cx=%2237.914%22 cy=%2224.302%22 r=%227.973%22/%3E%3Cpath d=%22M56.384,30.633l0,28.146%22/%3E%3Cpath d=%22M64.82,19.25l0,50.911%22/%3E%3Cpath d=%22M73.329,30.13l0,29.151%22/%3E%3Cpath d=%22M81.838,34.298l0,20.815%22/%3E%3Cpath d=%22M90.346,26.126l0,37.161%22/%3E%3Cpath d=%22M98.855,38.6l0,12.211%22/%3E%3C/g%3E%3C/svg%3E">
+<script>
+  // Theme and accent before first paint, to avoid a flash.
+  try {
+    var t = localStorage.getItem("sonification.theme"), a = localStorage.getItem("sonification.accent");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    if (a) document.documentElement.dataset.accent = a;
+  } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app">
+  <header class="appbar">
+    <div class="brand">
+      <span class="logo" id="brandLogo" aria-hidden="true"></span>
+      <span>Lux Sonora</span>
+    </div>
+    <div class="source">
+      <label class="btn btn-primary" for="file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Upload photo</label>
+      <input id="file" class="visually-hidden" type="file" accept="image/*,.tif,.tiff,.avif,.heic">
+      <button type="button" class="btn btn-accent-soft" id="newSong" title="Choose the genre, duration and points, and generate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4z"/></svg>New song</button>
+      <label class="select"><span class="visually-hidden">Demo image</span>
+        <select id="demo"><option value="lac">Demo: Lake sunset</option><option value="oras">Demo: City at night</option><option value="" hidden>Your photo</option></select>
+      </label>
+    </div>
+    <div class="transport" aria-label="Playback">
+      <button type="button" class="play" id="play" aria-label="Play" aria-keyshortcuts="Space"></button>
+      <span id="rTime" class="mono">0:00 / 0:30</span>
+      <span class="readout"><strong id="rKey"></strong><span id="rMeta"></span></span>
+    </div>
+    <div class="actions">
+      <span id="exportStatus" class="status-chip" role="status"></span>
+      <button type="button" class="icon-btn" id="projectBtn" aria-label="Recipe" aria-haspopup="menu" aria-expanded="false" aria-controls="projectMenu" title="Recipe: save or open">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l2 2h6.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
+      </button>
+      <div class="popover popover-menu" id="projectMenu" role="menu" aria-label="Project" hidden>
+        <button type="button" role="menuitem" id="saveProject">Save recipe</button>
+        <button type="button" role="menuitem" id="openProject">Open recipe</button>
+        <p class="sub">A recipe saves the picture and all your settings, so you or anyone else can open the exact same song later.</p>
+        <button type="button" role="menuitem" id="shortcutsBtn">Keyboard shortcuts</button>
+        <button type="button" role="menuitem" id="welcomeBtn">Welcome</button>
+        <button type="button" role="menuitem" id="aboutBtn">About and licence</button>
+      </div>
+      <input id="projectFile" class="visually-hidden" type="file" accept=".json,application/json">
+      <button type="button" class="icon-btn" id="settingsBtn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button type="button" class="btn" id="export" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Export</button>
+      <div class="popover" id="settings" role="dialog" aria-label="Appearance" hidden>
+        <div class="field"><div class="flabel" id="lblTheme">Theme</div><div class="seg" id="themeSeg" role="radiogroup" aria-labelledby="lblTheme"></div></div>
+        <div class="field"><div class="flabel" id="lblAccent">Accent</div><div class="swatches" id="accentSw" role="radiogroup" aria-labelledby="lblAccent"></div></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <section class="stage" aria-label="Image and gaze path">
+      <div class="stagebar">
+        <div class="seg seg-sm" id="viewSeg" role="radiogroup" aria-label="View"></div>
+        <label class="toggle"><input type="checkbox" id="showPath" checked><span>Gaze path</span></label>
+        <span class="tb-sep adv-only" aria-hidden="true"></span>
+        <div class="seg seg-sm adv-only" id="modeSeg" role="radiogroup" aria-label="Gaze path mode"></div>
+        <button type="button" class="tool-btn" id="addBtn" aria-pressed="false" aria-keyshortcuts="A" title="Add focus points (A)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add point</button>
+        <button type="button" class="icon-btn" id="undoBtn" aria-label="Undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        <button type="button" class="icon-btn" id="redoBtn" aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+        <span class="video-label">This is your video. Press play to watch it.</span>
+        <p class="hint">Drag a circle to move it, or its white dot to resize it. Press Delete to remove it.</p>
+      </div>
+      <div class="lightbox" id="lightbox"><canvas id="stage" aria-label="The analysed image with its gaze path"></canvas>
+        <p class="why" id="pointWhy" role="status" hidden></p>
+        <div class="loading" id="loading" hidden role="status"><div class="loadcard"><p id="loadingText"></p><div class="loadbar"><span id="loadingBar"></span></div><button type="button" class="btn" id="loadingCancel">Cancel</button></div></div>
+      </div>
+    </section>
+
+    <aside class="inspector" aria-label="Inspector">
+      <div class="tabs" role="tablist" aria-label="Inspector">
+        <button type="button" role="tab" id="tab-piece" aria-selected="true" aria-controls="pan-piece">Piece</button>
+        <button type="button" role="tab" id="tab-point" aria-selected="false" aria-controls="pan-point" tabindex="-1">Focus point</button>
+        <button type="button" role="tab" id="tab-sound" aria-selected="false" aria-controls="pan-sound" tabindex="-1">Sound</button>
+        <button type="button" role="tab" id="tab-export" aria-selected="false" aria-controls="pan-export" tabindex="-1">Export</button>
+      </div>
+      <div class="panels">
+        <div role="tabpanel" id="pan-piece" aria-labelledby="tab-piece" class="panel">
+          <div class="modebar"><span class="sub">Controls</span><div class="seg seg-sm" id="uiModeSeg" role="radiogroup" aria-label="How many controls"></div></div>
+          <section class="card" aria-labelledby="hMusic"><h3 id="hMusic">Music</h3>
+          <div class="field"><label class="flabel" for="styleSel">Style</label><span class="select"><select id="styleSel"></select></span><p class="snote" id="styleNote"></p></div>
+          <div class="field"><div class="flabel" id="lblDur">Duration</div><div class="seg" id="durSeg" role="radiogroup" aria-labelledby="lblDur"></div></div>
+          <div class="field"><div class="flabel" id="lblMel">Melody</div><div class="seg" id="melSeg" role="radiogroup" aria-labelledby="lblMel"></div><p class="snote" id="melNote" role="status" hidden></p></div>
+          <div class="field"><div class="flabel" id="lblConn">Connections</div><div class="seg" id="connectSeg" role="radiogroup" aria-labelledby="lblConn"></div><p class="snote">Adds a few notes as the eye moves from one spot to the next, so the parts flow into each other.</p></div>
+          <div class="field"><div class="flabel" id="lblOrch">Orchestration</div><div class="seg" id="orchSeg" role="radiogroup" aria-labelledby="lblOrch"></div>
+            <ul class="orch" id="orchList" aria-label="Extra layers"></ul>
+            <button type="button" class="btn" id="addLayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add layer</button></div>
+          <div class="field adv-only"><div class="flabel" id="lblGroove">Groove</div><div class="seg" id="grooveSeg" role="radiogroup" aria-labelledby="lblGroove"></div><p class="snote" id="grooveNote" role="status" hidden></p></div>
+          </section>
+          <section class="card" aria-labelledby="hImage"><h3 id="hImage">Image</h3>
+            <div class="imginfo" id="imgInfo"></div>
+          <div class="field"><label class="flabel" for="placeSel">Where the eye looks</label><span class="select"><select id="placeSel"></select></span><p class="snote" id="placeNote" role="status"></p></div>
+          <details class="adv adv-only" data-adv="source" id="srcBox">
+            <summary>Analysis source</summary>
+            <p class="sub">This is the version of the picture the app analyses. The settings below help with scientific images.</p>
+            <div class="field"><div class="flabel" id="lblCh">Channels</div><div class="seg" id="srcCh" role="radiogroup" aria-labelledby="lblCh"></div></div>
+            <div id="srcMix" class="sliders" hidden></div>
+            <div id="srcDataGroup" hidden>
+              <div class="field"><div class="flabel" id="lblRange">Intensity range</div><div class="seg" id="srcRange" role="radiogroup" aria-labelledby="lblRange"></div><p class="snote" id="rangeNote"></p></div>
+              <div id="srcPct" class="sliders"></div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="srcInvert"><span>Invert</span></label>
+            <div id="srcTone" class="sliders"></div>
+            <div class="field"><div class="flabel">Crop</div><p class="sub">Trim the edges, for example the info bar under a microscope image.</p><div id="srcCrop" class="sliders sliders-2"></div></div>
+            <button type="button" class="btn" id="srcReset">Reset source</button>
+          </details>
+          </section>
+          <section class="card" aria-labelledby="hShape"><h3 id="hShape">Shape</h3>
+            <div id="sBasic" class="sliders"></div>
+          </section>
+          <div class="adv-only adv-group">
+          <details class="adv" data-adv="gaze">
+            <summary>Advanced: gaze</summary>
+            <p class="sub">How far the eye jumps between spots and how often it looks back.</p>
+            <div id="sGaze" class="sliders"></div>
+          </details>
+          <details class="adv" data-adv="sal">
+            <summary>Advanced: what draws the eye</summary>
+            <p class="sub">What catches the eye: colour contrast, busy textures and the objects Claude finds.</p>
+            <div id="sSal" class="sliders"></div>
+          </details>
+          <details class="adv" data-adv="music">
+            <summary>Advanced: music</summary>
+            <div id="sMusic" class="sliders"></div>
+          </details>
+          <details class="adv" id="semBox" data-adv="sem" hidden>
+            <summary>Atmosphere and objects</summary>
+            <p class="sub">Claude describes the mood and the objects in the picture. That nudges the key and the tempo, draws the eye to the objects and colours the sound.</p>
+            <button type="button" class="btn" id="semBtn">Analyse with Claude</button>
+            <p class="status" id="semStatus" role="status"></p>
+            <div id="semOut"></div>
+          </details>
+          <details class="adv" data-adv="explain">
+            <summary>How the image was read</summary>
+            <dl id="globalDl" class="explain"></dl>
+          </details>
+          </div>
+          <p class="sub simple-only">Simple keeps it to the main choices. <button type="button" class="linkbtn" id="toAdvanced">Show all controls</button> if you want to fine-tune the eye, the tempo and the mix.</p>
+        </div>
+        <div role="tabpanel" id="pan-point" aria-labelledby="tab-point" class="panel" hidden></div>
+        <div role="tabpanel" id="pan-sound" aria-labelledby="tab-sound" class="panel" hidden>
+          <div id="sSound" class="sliders"></div>
+        </div>
+        <div role="tabpanel" id="pan-export" aria-labelledby="tab-export" class="panel" hidden></div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="timeline" aria-label="Timeline">
+    <div class="lanes-head" id="lanesHead"><div class="ruler-head"><span>Layers</span></div></div>
+    <div class="lanes-body" id="rollWrap"><canvas id="roll" aria-label="Timeline with the generated notes"></canvas></div>
+  </section>
+</div>
+<div class="flash" id="flash" role="status" hidden></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

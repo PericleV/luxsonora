@@ -29,14 +29,14 @@ import { grooveFor, applyGroove, grooveKey } from "../ml/groove.js";
 import { prepareSamples, kitSpecs, STYLE_KIT, onSampleStatus, instrumentCatalog } from "../audio/samples.js";
 import { addToLibrary, LIBRARY } from "../core/instruments.js";
 import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument } from "../core/arrange.js";
-import { defaultEq } from "../audio/fx.js";
+import { defaultEq, styleFx } from "../audio/fx.js";
 import { storyMelody, applyStory, storyKey } from "../ml/story.js";
 import { SECTION_NAME } from "../core/arc.js";
 import { CONNECT } from "../core/passages.js";
 import { HARM_NAME, BASS_NAME } from "../core/patterns.js";
 import { AUDIO_FORMATS, encodeAudio, masterGain, wavEncode } from "../export/audio.js";
-import { defaultVideo, frameSize, videoScene, drawVideoFrame, encodeVideo, encodeGif, gifRange, posterPng } from "../export/video.js";
-import { gradeCanvas, ensureFont, fadeAudio, QUALITY } from "../export/look.js";
+import { defaultVideo, frameSize, videoScene, drawVideoFrame, encodeVideo, encodeGif, gifRange, posterPng, hasCover } from "../export/video.js";
+import { gradeCanvas, ensureFont, fadeAudio, QUALITY, safeArea } from "../export/look.js";
 import { analyzeAudio } from "../export/reactive.js";
 import { autoLabels } from "../export/labels.js";
 import qrUrl from "../assets/instagram-qr.webp";
@@ -233,7 +233,7 @@ function renderWhy() {
 }
 
 /* ============ styles: groups and one-line descriptions for the dropdown ============ */
-const STYLE_GROUPS = [["Calm", ["ambient", "minimal", "lofi", "classical"]], ["Film", ["cinematic", "movie", "epic"]], ["Groove", ["jazz", "bossa", "electronic", "synthwave"]]];
+const STYLE_GROUPS = [["Calm", ["ambient", "minimal", "lofi", "classical"]], ["Film", ["cinematic", "movie", "epic"]], ["Groove", ["jazz", "bossa", "electronic", "synthwave"]], ["Band", ["pop", "rock", "metal", "blues", "funk"]]];
 const STYLE_DESC = {
   ambient: "Slow chords over a held bass note. No real drums, just soft shakers, bells and pads.",
   minimal: "A steady pulse and patterns that repeat and slowly shift, on marimba and vibraphone. Think Steve Reich.",
@@ -245,7 +245,12 @@ const STYLE_DESC = {
   jazz: "Swing. A ride cymbal, a walking bass and piano chords that bounce off the beat.",
   bossa: "Nylon guitar on the bossa nova rhythm, a soft bass and gentle percussion.",
   electronic: "House music. A kick on every beat, a clap on 2 and 4, and that pumping feel.",
-  synthwave: "Straight out of the 80s. A pulsing bass, a bright synth lead and a big snare."
+  synthwave: "Straight out of the 80s. A pulsing bass, a bright synth lead and a big snare.",
+  pop: "Catchy and bright. Four chords that keep coming back, piano and guitar, and a beat with claps.",
+  rock: "Guitars and drums. Power chords, a driving bass, a big snare on 2 and 4 and a crash at every new part.",
+  metal: "Heavy and fast. Palm-muted guitar riffs, double bass drum at the climax and a sudden break before it.",
+  blues: "Twelve bars and a shuffle. Seventh chords, a boogie bass line, guitar, piano and harmonica.",
+  funk: "Tight and syncopated. Scratchy guitar, popping bass, ghost notes on the snare and horns."
 };
 
 /* ============ orchestration: extra layers (src/core/arrange.js) ============ */
@@ -449,7 +454,7 @@ function showWelcome() {
       <li><b>Play with it</b><span>Drag the spots around, pick the climax, then save the song or a video of it.</span></li>
     </ol>
     <ul class="welcome-points">
-      <li>11 styles, from ambient and classical to jazz, bossa nova and synthwave</li>
+      <li>16 styles, from ambient and classical to jazz, blues, funk, pop, rock and metal</li>
       <li>Real recorded instruments, plus optional AI models (Magenta) for melodies and grooves that feel more human</li>
       <li>It all runs in your browser, so your picture stays on your device</li>
       <li>Same picture, same settings, same song. Share the recipe and anyone can play it back</li>
@@ -635,7 +640,7 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   if (!SCORE) return;
   stopPlayback();
   const ctx = ensureCtx(), sc = SCORE;
-  Player.G = buildGraph(ctx, P.reverb, P.mix, P.fx, sc.bpm, sc.extra || []); Player.G.sidechain = (RULES[sc.style] || {}).sidechain || 0; Player.score = sc; Player.playing = true;
+  Player.G = buildGraph(ctx, P.reverb, P.mix, effFx(sc), sc.bpm, sc.extra || []); Player.G.sidechain = (RULES[sc.style] || {}).sidechain || 0; Player.score = sc; Player.playing = true;
   // sampled instruments: route the persistent samplers into this graph
   const SG = liveSamples(); Player.G.samplers = SG.samplers; Player.G.kit = kitName();
   for (const l of Object.keys(SG.bus)) { try { SG.bus[l].disconnect(); } catch (e) { /* not connected */ } if (Player.G.bus[l]) SG.bus[l].connect(Player.G.bus[l]); }
@@ -695,7 +700,9 @@ function audition(i) {
   SEL = i; renderPoint(); Player.pausedBeat = F.t0;
   startPlayback(F.t0, F.t1);
 }
-function applyMixLive() { if (Player.G) updateGraph(Player.G, P.fx, P.mix, P.reverb); }
+// the mixer's effects, with the style's own distortion on its guitars (rock, metal)
+const effFx = (sc = SCORE) => (sc ? styleFx(P.fx, sc.style, sc.inst, RULES) : P.fx);
+function applyMixLive() { if (Player.G) updateGraph(Player.G, effFx(Player.score), P.mix, P.reverb); }
 function updatePlayBtn() {
   const b = $("#play"), on = Player.playing && !Player.audition, wait = WAIT_PLAY && !on;
   const label = wait ? "Starts when the models are ready (press to cancel)" : on ? "Pause" : "Play";
@@ -1500,7 +1507,7 @@ function renderMaster(say = () => {}) {
     const p = (async () => {
       const sopts = { specs: sampleSpecs(sc), kit: kitName() };
       say("Rendering audio");
-      let buf = await renderOffline(sc, P.reverb, P.mix, P.fx, sopts);
+      let buf = await renderOffline(sc, P.reverb, P.mix, effFx(sc), sopts);
       let chs = [buf.getChannelData(0), buf.getChannelData(1)], loud = null, gain = null;
       if (P.fx.loudness === "lufs") {
         loud = loudnessGain(chs, buf.sampleRate, -14, -1);
@@ -1510,7 +1517,7 @@ function renderMaster(say = () => {}) {
           say("Rendering audio, second pass for loudness");
           // makeup = distance from the true peak at the limiter input to its ceiling, plus 1.5× the missing loudness
           const tpIn = loud.before.truePeakDB - 20 * Math.log10(0.9) - (P.fx.output || 0);
-          const fx2 = structuredClone(P.fx); fx2.makeup = Math.min(12, (P.fx.limiter.ceiling - tpIn) + 1.5 * (-14 - loud.lufs) + 1.5);
+          const fx2 = structuredClone(effFx(sc)); fx2.makeup = Math.min(12, (P.fx.limiter.ceiling - tpIn) + 1.5 * (-14 - loud.lufs) + 1.5);
           buf = await renderOffline(sc, P.reverb, P.mix, fx2, sopts); chs = [buf.getChannelData(0), buf.getChannelData(1)];
           loud = loudnessGain(chs, buf.sampleRate, -14, -1);
         }
@@ -1641,12 +1648,56 @@ function scheduleAnalysis() {
     finally { AN.job = false; }
   }, 900);
 }
+let COVER = { img: null, id: 0 };
 function sceneFor(sc, src) {
   const an = AN.key === masterKey() ? AN.an : null;
-  return videoScene(sc, src, P.video, videoCaption(sc), { an: an || undefined, auto: currentAutoLabels() });
+  const S = videoScene(sc, src, P.video, videoCaption(sc), { an: an || undefined, auto: currentAutoLabels() });
+  S.coverImg = COVER.img; S.coverImgId = COVER.id;
+  return S;
+}
+async function loadCover(file) {
+  try {
+    const bmp = await createImageBitmap(file), k = Math.min(1, 3840 / Math.max(bmp.width, bmp.height));
+    const c = makeCanvas(Math.round(bmp.width * k), Math.round(bmp.height * k)); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    COVER = { img: c, id: COVER.id + 1 }; P.video.cover = "image";
+    if (VSCENE) { VSCENE.coverImg = c; VSCENE.coverImgId = COVER.id; }
+    if (EXPORT) EXPORT.sync(); if (exportView()) drawStage();
+  } catch (e) { flash("That image couldn't be read for the cover."); }
 }
 // The stage while the Export tab is open: the video frame at the playhead, at the frame's shape.
-let VSCENE = null;
+let VSCENE = null, PV = null;
+// Dragging the title (or the chord line) on the preview: it snaps to the centre, the thirds and
+// the safe margins, with guides while it moves; the position is kept as a fraction of the frame.
+function initVideoDrag() {
+  const cv = $("#stage");
+  let drag = null;
+  const frameAt = e => { const p = stagePos(e); return PV ? { x: (p.x * PV.W) / PV.w, y: (p.y * PV.H) / PV.h } : null; };
+  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; for (const k of ["title", "point"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
+  cv.addEventListener("pointerdown", e => {
+    if (!exportView() || !VSCENE || e.button !== 0) return;
+    const f = frameAt(e), k = hitAt(f); if (!k) return;
+    const b = VSCENE.hit[k];
+    drag = { k, dx: b.ax - f.x, dy: b.ay - f.y, align: b.align };
+    if (k === "title" && !P.video.titleXY) P.video.titleAlign = b.align;
+    cv.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation();
+  }, true);
+  cv.addEventListener("pointermove", e => {
+    if (!exportView() || !VSCENE) return;
+    const f = frameAt(e); if (!f) return;
+    if (!drag) { cv.style.cursor = hitAt(f) ? "move" : ""; return; }
+    const W = PV.W, H = PV.H, s = safeArea(P.video.shape), pad = 44 * (Math.min(W, H) / 1080);
+    let x = (f.x + drag.dx) / W, y = (f.y + drag.dy) / H;
+    const xs = [0.5, 1 / 3, 2 / 3, Math.max(pad / W, s.left), 1 - Math.max(pad / W, s.right)], ys = [0.5, 1 / 3, 2 / 3, Math.max(pad / H, s.top) + 0.04, 1 - Math.max(pad / H, s.bottom)];
+    const guides = [];
+    for (const g of xs) if (Math.abs(x - g) < 0.015) { x = g; guides.push({ x: g }); break; }
+    for (const g of ys) if (Math.abs(y - g) < 0.015) { y = g; guides.push({ y: g }); break; }
+    x = clamp(x, 0.02, 0.98); y = clamp(y, 0.04, 0.98);
+    if (drag.k === "title") P.video.titleXY = { x, y }; else { P.video.pointXY = { x, y }; P.video.pointAlign = drag.align; }
+    VSCENE.guides = guides; drawStage();
+  }, true);
+  const end = () => { if (!drag) return; drag = null; if (VSCENE) VSCENE.guides = null; drawStage(); if (EXPORT) EXPORT.sync(); };
+  cv.addEventListener("pointerup", end, true); cv.addEventListener("pointercancel", end, true);
+}
 function drawVideoPreview(cv) {
   const wrap = $("#lightbox"), o = P.video, { W, H } = frameSize(o.shape, o.size, SRC.width, SRC.height), ar = H / W;
   const small = window.matchMedia("(max-width: 980px)").matches;
@@ -1655,7 +1706,7 @@ function drawVideoPreview(cv) {
   if (small) wrap.style.height = h + 16 + "px";
   const dpr = window.devicePixelRatio || 1;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
-  stageGeom = { w, h };
+  stageGeom = { w, h }; PV = { w, h, W, H };
   if (EXPORT) EXPORT.sizeNote(`The video will be ${W} × ${H} px${o.size === "original" ? ", the image's own size" : ""}${o.shape !== "image" ? ` (${o.shape === "wide" ? "16:9" : o.shape === "square" ? "1:1" : o.shape === "portrait" ? "4:5" : "9:16"})` : ""}.`);
   const src = videoSource(Math.min(1600, Math.max(w, h) * dpr));
   if (!VSCENE || VSCENE.sc !== SCORE || VSCENE.src !== src) VSCENE = sceneFor(SCORE, src);
@@ -1663,7 +1714,7 @@ function drawVideoPreview(cv) {
   const g = cv.getContext("2d"), k = (w * dpr) / W; g.setTransform(k, 0, 0, k, 0, 0);
   // stopped at the very start, show the frame at 1 s: the first frame is black (fade in) and the title fades in
   let sec = (Math.min(currentBeat(), SCORE.total) * 60) / SCORE.bpm;
-  if (!Player.playing && sec < 0.05) sec = Math.min(1, VSCENE.total);
+  if (!Player.playing && sec < 0.05) sec = hasCover(VSCENE) ? 0 : Math.min(1, VSCENE.total);
   drawVideoFrame(g, W, H, sec, VSCENE, { preview: true });
 }
 // scene and audio for an export: the master, its analysis, the fades on the sound
@@ -1717,7 +1768,7 @@ const typing = el => el && (el.isContentEditable || ["INPUT", "SELECT", "TEXTARE
 export function init() {
   // inspection hook for development builds only
   // development hook for the browser checks (not in the production build)
-  if (import.meta.env && import.meta.env.DEV) window.__sonification = { P, PATH, get points() { return POINTS; }, get score() { return SCORE; }, recipeJson, openProject, scoreHash: () => SCORE && scoreHash(SCORE) };
+  if (import.meta.env && import.meta.env.DEV) window.__sonification = { P, PATH, get points() { return POINTS; }, get score() { return SCORE; }, recipeJson, openProject, scoreHash: () => SCORE && scoreHash(SCORE), renderMaster, invalidateMusic: () => invalidate(LV.MUSIC) };
   for (const host of Object.keys(SLIDERS)) {
     const el = $("#" + host);
     for (const d of SLIDERS[host]) { const s = makeSlider(d, P, onParam); SL[d.key] = s; if (d.adv) s.el.classList.add("adv-only"); el.appendChild(s.el); }
@@ -1821,8 +1872,9 @@ export function init() {
   $("#export").addEventListener("click", () => { selectTab("export"); $("#tab-export").focus(); });
   EXPORT = initExport({ P, onLook: () => { if (exportView()) { drawStage(); scheduleAnalysis(); } }, onAudio: exportAudio, onMidi: exportMidi, onZip: doExport,
     onVideo: () => exportVideo("mp4"), onWebm: () => exportVideo("webm"), onGif: exportGif, onPoster: exportPoster, onDetect: detectObjects,
-    onFont: k => ensureFont(k).then(() => { if (exportView()) drawStage(); }), onCancel: () => { EXPORT_CANCEL = true; } });
+    onFont: k => ensureFont(k).then(() => { if (exportView()) drawStage(); }), onCancel: () => { EXPORT_CANCEL = true; }, onCoverFile: loadCover });
   ensureFont(P.video.font);
+  initVideoDrag();
   new ResizeObserver(() => drawAll()).observe($("#lightbox"));
   new ResizeObserver(() => drawTimeline()).observe($("#rollWrap"));
   updatePlayBtn();

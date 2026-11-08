@@ -17,11 +17,14 @@ export const KITS = {
   synth: { name: "Synthesized kit", group: "Built in" },
   "TR-808": { name: "Roland TR-808", machine: "TR-808", gain: 4, group: "Classic drum machines" },
   "LM-2": { name: "LinnDrum LM-2", machine: "LM-2", gain: 2.5, group: "Classic drum machines" },
+  // the rock and metal kits (sampled acoustic-style drums), listed from the start
+  "abuse:linn-9000": { name: "Linn 9000", abuse: "linn-9000", gain: 2.5, group: "Classic drum machines" },
+  "abuse:oberheim-dmx": { name: "Oberheim DMX", abuse: "oberheim-dmx", gain: 2.5, group: "Classic drum machines" },
   "Casio-RZ1": { name: "Casio RZ-1", machine: "Casio-RZ1", gain: 2.5, group: "Classic drum machines" },
   orchestral: { name: "Orchestral (taiko, timpani, cymbals)", orchestral: true, group: "Built in" }
 };
 // Default kit per style: the genre's sound (electronic on an 808; orchestral styles on taiko and timpani).
-export const STYLE_KIT = { ambient: "synth", cinematic: "orchestral", minimal: "synth", jazz: "synth", electronic: "TR-808", epic: "orchestral", movie: "orchestral", lofi: "LM-2", bossa: "synth", synthwave: "LM-2", classical: "synth" };
+export const STYLE_KIT = { blues: "abuse:linn-9000", funk: "LM-2", pop: "LM-2", rock: "abuse:linn-9000", metal: "abuse:oberheim-dmx", ambient: "synth", cinematic: "orchestral", minimal: "synth", jazz: "synth", electronic: "TR-808", epic: "orchestral", movie: "orchestral", lofi: "LM-2", bossa: "synth", synthwave: "LM-2", classical: "synth" };
 
 // General MIDI drum note → candidate group names in a drum machine (first match wins).
 const DM_GROUPS = {

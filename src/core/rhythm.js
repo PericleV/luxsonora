@@ -108,6 +108,50 @@ export function barPattern(style, D, a, section, b = 0) {
     // 80s: kick on 1 and 3 (four on the floor when driving), big snare on 2 and 4, eighth hats (sixteenths at the peak)
     if (!intro) { at(D > 0.7 ? [0, 4, 8, 12] : [0, 8], DRUM.kick, 0.92); at([4, 12], DRUM.snare, 0.95); }
     at(climax || D > 0.8 ? [...Array(16).keys()] : EIGHTHS, DRUM.chat, intro ? 0.34 : 0.42);
+  } else if (style === "pop") {
+    // pop: kick on 1 and 3 (and the "and" of 3 when driving), snare and clap on 2 and 4, eighth hats
+    if (intro) { at([0], DRUM.kick, 0.8); at(EIGHTHS, DRUM.chat, 0.38); }
+    else {
+      at(D > 0.55 ? [0, 8, 10] : [0, 8], DRUM.kick, 0.92);
+      at([4, 12], DRUM.snare, 0.85); if (D > 0.6) at([4, 12], DRUM.clap, 0.6);
+      at(climax ? [...Array(16).keys()] : EIGHTHS, DRUM.chat, climax ? 0.4 : 0.5);
+      if (D > 0.7 && a.sat > 0.35) at([14], DRUM.ohat, 0.45);
+    }
+  } else if (style === "rock") {
+    // rock: kick on 1 and 3 with a push from the area, snare on 2 and 4, eighth hats (ride when
+    // driving), a crash at the start of each phrase
+    if (intro) { at(EIGHTHS, DRUM.chat, 0.42); at([0], DRUM.kick, 0.85); }
+    else {
+      const push = [[0, 8], [0, 6, 8], [0, 8, 10], [0, 7, 8]][a.rot % 4];
+      at(push, DRUM.kick, 0.95); at([4, 12], DRUM.snare, 0.95);
+      at(EIGHTHS, D > 0.75 || climax ? DRUM.ride : DRUM.chat, 0.55);
+      if (b % 4 === 0 && D > 0.5) at([0], DRUM.crash, 0.8);
+    }
+  } else if (style === "metal") {
+    // metal: driving eighth kicks, double bass sixteenths at the peak, snare on 2 and 4 (on 3,
+    // half-time, in the resolution), crashes on the beats when tense
+    if (intro) { at([0, 8], DRUM.kick, 0.9); at(EIGHTHS, DRUM.ride, 0.42); }
+    else if (res) { at([0, 6, 10], DRUM.kick, 0.95); at([8], DRUM.snare, 1); at([0, 8], DRUM.crash, 0.7); }
+    else {
+      at(climax || D > 0.85 ? [...Array(16).keys()] : D > 0.55 ? EIGHTHS : [0, 6, 8, 14], DRUM.kick, climax || D > 0.85 ? 0.78 : 0.95);
+      at([4, 12], DRUM.snare, 1);
+      if (climax || D > 0.75) at([0, 4, 8, 12], DRUM.crash, 0.62); else at(EIGHTHS, DRUM.chat, 0.55);
+    }
+  } else if (style === "blues") {
+    // shuffle: swung eighths on the ride (hats when calm), snare on 2 and 4, kick on 1 and 3
+    at(EIGHTHS, D > 0.6 ? DRUM.ride : DRUM.chat, intro ? 0.38 : 0.5);
+    if (!intro) { at([0, 8], DRUM.kick, 0.85); at([4, 12], DRUM.snare, 0.82); }
+    if (D > 0.7 && !intro) at([14], DRUM.snare, 0.3);
+  } else if (style === "funk") {
+    // funk: syncopated kick from the area, a hard snare on 2 and 4 with ghost notes, sixteenth hats
+    // accented on the eighths, an open hat on the "and" of 4
+    if (!intro) {
+      at([[0, 6, 10], [0, 3, 8, 10], [0, 7, 10, 13], [0, 3, 6, 11]][a.rot % 4], DRUM.kick, 0.95);
+      at([4, 12], DRUM.snare, 1);
+      put(E(lerp(2, 5, a.tex), a.rot2 + 1).map((on, q) => on && q !== 4 && q !== 12), DRUM.snare, 0.2);
+    }
+    for (let q = 0; q < 16; q++) bar[q].push([DRUM.chat, q % 2 ? 0.28 : 0.5]);
+    if (D > 0.6 && !intro) at([14], DRUM.ohat, 0.5);
   } else if (style === "classical") {
     // no drums: the orchestra keeps time
   } else if (style === "movie") {
@@ -124,10 +168,11 @@ const FILL = {
   ambient: [DRUM.htom, DRUM.mtom, DRUM.mtom, DRUM.ltom], cinematic: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom],
   minimal: [DRUM.rim, DRUM.rim, DRUM.rim, DRUM.rim], jazz: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.snare],
   electronic: [DRUM.clap, DRUM.clap, DRUM.clap, DRUM.clap], epic: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], movie: [DRUM.ltom, DRUM.ltom, DRUM.ltom, DRUM.ltom],
-  lofi: [DRUM.snare, DRUM.kick, DRUM.snare, DRUM.snare], bossa: [DRUM.rim, DRUM.rim, DRUM.ltom, DRUM.ltom], synthwave: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], classical: null
+  lofi: [DRUM.snare, DRUM.kick, DRUM.snare, DRUM.snare], bossa: [DRUM.rim, DRUM.rim, DRUM.ltom, DRUM.ltom], synthwave: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], classical: null,
+  pop: [DRUM.snare, DRUM.snare, DRUM.clap, DRUM.snare], blues: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom], funk: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.htom], rock: [DRUM.snare, DRUM.htom, DRUM.mtom, DRUM.ltom], metal: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom]
 };
 // Kit level per style (velocity scale), set from offline renders of the demos.
-const LEVEL = { ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
+const LEVEL = { blues: 96, funk: 98, pop: 96, rock: 100, metal: 104, ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
 
 /*
  * segs: composed points (t0, t1, idx, x, tim, reg, tension, section); arc: { climax };
@@ -170,7 +215,7 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
   // accents the user put on points: a cymbal and a kick on the point's first beat (a low drum in classical)
   for (const F of segs) if (F.accent) { push(F.t0, style === "classical" ? DRUM.ltom : DRUM.crash, 100, { dur: 0.5, accent: true }); if (style !== "classical") push(F.t0, DRUM.kick, 100, { accent: true }); }
   // cadence
-  const cad = { ambient: [[DRUM.ltom, 60]], cinematic: [[DRUM.kick, 90], [DRUM.crash, 80]], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [[DRUM.kick, 110], [DRUM.ltom, 100], [DRUM.crash, 96]], movie: [[DRUM.ltom, 70]], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [] }[style] || [];
+  const cad = { ambient: [[DRUM.ltom, 60]], cinematic: [[DRUM.kick, 90], [DRUM.crash, 80]], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [[DRUM.kick, 110], [DRUM.ltom, 100], [DRUM.crash, 96]], movie: [[DRUM.ltom, 70]], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
   for (const [midi, vel] of cad) notes.push({ layer: "perc", t: body, dur: midi === DRUM.ride || midi === DRUM.crash ? 0.4 : 0.1, midi, vel, point: -2 });
   return notes;
 }

@@ -41,10 +41,11 @@ export function gradeCanvas(src, grade, amount) {
 }
 
 // ---- vignette and grain, drawn over each frame
-export function drawVignette(g, W, H, amount) {
+export function drawVignette(g, W, H, amount, color = "#000000") {
   if (amount <= 0) return;
   const r = Math.hypot(W, H) / 2, gr = g.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r * 1.02);
-  gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, `rgba(0,0,0,${0.8 * amount})`);
+  const h = String(color || "#000000").replace("#", ""), n = parseInt(h, 16) || 0, rgb = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  gr.addColorStop(0, `rgba(${rgb},0)`); gr.addColorStop(1, `rgba(${rgb},${0.8 * amount})`);
   g.fillStyle = gr; g.fillRect(0, 0, W, H);
 }
 let GRAIN = null;
@@ -119,7 +120,7 @@ export function drawSafeGuides(g, W, H, shape, u) {
 
 // ---- looks: every setting of how the video looks (not its size, text or labels)
 export const LOOK_KEYS = ["camera", "zoom", "camEase", "camMove", "camSmooth", "drift", "fit", "theme", "pathColor", "pointColor", "path", "lineShape", "line", "lineWidth", "pathDone", "pathAhead",
-  "points", "placeDone", "placeAhead", "numbers", "passages", "eye", "fx", "strength", "react", "dim", "grade", "gradeAmt", "vignette", "grain", "font", "titlePos", "titleWhen", "titleSecs", "subtitle", "textSize", "bottom", "bottomFill", "bottomColor", "bottomColor2", "titleColor", "subColor", "eyeColor", "labelColor", "labelBg", "fadeIn", "fadeOut", "endCard"];
+  "points", "placeDone", "placeAhead", "numbers", "passages", "eye", "fx", "strength", "react", "dim", "grade", "gradeAmt", "vignette", "grain", "font", "titlePos", "titleWhen", "titleSecs", "subtitle", "textSize", "bottom", "pathFill", "pathColor2", "glow", "dashLen", "dashGap", "curve", "placeStyle", "placeSize", "numberStyle", "climaxOwn", "climaxColor", "spotColor", "vigColor", "tintColor", "tintAmt", "textStyle", "boxColor", "caps", "letterSpace", "titleAnim", "bottomFill", "bottomColor", "bottomColor2", "titleColor", "subColor", "eyeColor", "labelColor", "labelBg", "fadeIn", "fadeOut", "endCard"];
 export const LOOKS = {
   minimal: { name: "Minimal", camera: "still", drift: 0.06, theme: "white", pathColor: "#FFFFFF", pointColor: "#FFFFFF", path: "draw", lineShape: "curved", line: "solid", lineWidth: 2, points: "visited", placeDone: 0.5, numbers: false, passages: false, eye: "dot",
     fx: { pulse: true, ripple: false, spotlight: false, glow: false, flash: false }, strength: 0.4, react: 0.2, dim: 0.05, grade: "matte", gradeAmt: 0.5, vignette: 0.2, grain: 0, font: "grotesk", titlePos: "bl", titleWhen: "always", bottom: "line" },

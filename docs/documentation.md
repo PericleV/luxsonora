@@ -360,6 +360,40 @@ The passage replaces the notes the point would play in that window (and the olde
 
 (A real eye sees very little during a saccade; this is an artistic reading of the path.)
 
+### 7.7b Harmony rules and the music audit
+
+Every piece goes through the same voice-leading rules after it is composed (and again after a neural melody is applied, `fitMelody` and `cleanVoices` in `src/core/compose.js`):
+
+| Rule | What it does |
+|---|---|
+| Melody on the chord | a melody note on a beat, or held almost a beat, that is not in the chord moves to the nearest chord tone of the melody's scale within a minor third |
+| Avoid notes | a melody note outside the chord a semitone from one of its tones (the harshest rub), held half a beat or more, moves to a chord tone, or to a tension a whole step from the chord (a ninth, a sixth). It stays when it resolves by step into a chord tone right after (an appoggiatura or a passing note), unless it is longer than half a beat and a semitone from the chord's root (a minor ninth). The check runs again after the ties and the legato have lengthened the notes |
+| Suspensions resolve | a long melody note held into a chord it rubs against is held until the change and then moves by step to the nearest tone of the new chord |
+| Passages | the last note of a connection approaches the next point by a scale step from the side that does not rub against the chord there; if both sides rub, from a chord tone within a third |
+| Runs | the Runs layer lands on its arrival note, a chord tone on the next point's first beat |
+| Walking bass | beat 4 of each bar leads into the next downbeat by a semitone (from below, then above), instead of a sixth that would rub against a seventh chord |
+| Melody on top | a harmony note (or a held section chord) above the melody moves down an octave while it stays at or above MIDI 48; a voice still covering the melody is left out when its chord keeps others below it |
+| No restrikes | a note that starts while the same pitch sounds in its layer ends the earlier one; in single-line layers (melody, bass, counter-melody, runs, doubling, ostinato, pulse, ornaments) at any pitch |
+| No stale notes | an accompaniment note held into a chord it rubs against ends at the change (the drone keeps its pedal) |
+
+`scripts/music-audit.mjs` measures, note by note, what can still sound wrong, on 25 pieces per style (5 images × 5 settings), per minute of music: exposed clashes (two notes a semitone or a minor ninth apart in different layers, one of them outside the chord, on a beat or held half a beat, not resolving by step), notes outside the harmony's scale, accompaniment notes outside the chord on a beat, melody notes rubbing against the chord on a beat, unresolved notes, wrong bass notes on a chord change (pedal points allowed), the melody under the harmony, restrikes, leaps over an octave, drum hits off the grid (swing excepted), pile-ups, the range and the ending. `test/harmony.test.js` keeps the main ones under limits. Measured in November 2026, before and after these rules (exposed clashes per minute):
+
+| Style | Before | After |
+|---|---|---|
+| Classical | 36.6 | 2.6 |
+| Cinematic | 29.7 | 2.7 |
+| Orchestral epic | 28.9 | 0.8 |
+| Movie score | 19.8 | 0.3 |
+| Ambient | 19.6 | 1.2 |
+| Synthwave | 17.8 | 0.5 |
+| Jazz | 15.6 | 0.2 |
+| Bossa nova | 10.5 | 0.6 |
+| Minimal | 9.3 | 3.0 |
+| Electronic | 6.3 | 0.4 |
+| Lo-fi hip hop | 4.4 | 0.5 |
+
+Accompaniment notes outside the chord, restrikes and notes outside the scale are at or near zero in every style; the melody under the harmony dropped two to four times (it remains in arpeggiated accompaniments, where a single voice plays at a time).
+
 ### 7.8 Cadence
 
 The last bar plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
@@ -479,8 +513,13 @@ If a focus point lands on an object found by Claude, its category shifts the mod
 | Bossa nova | 110-140 | Dorian, Ionian, Lydian, Mixolydian | 1 bar | 2 bars | synthesized: cross-stick on the clave, shaker, soft kick |
 | Synthwave | 84-118 | Aeolian, Dorian, Phrygian | 1 bar | 4 bars | LinnDrum LM-2: big snare, eighth hats |
 | Classical | 66-112 | Ionian, Aeolian | 1 bar | 4 bars | none |
+| Pop | 96-124 | Ionian, Mixolydian, Aeolian, Dorian | 1 bar (a four-chord loop) | 4 bars | LinnDrum LM-2: kick, snare and clap, hats |
+| Rock | 100-140 | Mixolydian, Aeolian, Dorian, Ionian | 1 bar | 4 bars | Linn 9000: kick, snare, hats or ride, crashes, toms |
+| Metal | 120-168 | Phrygian, Aeolian | 1 bar | 2 bars | Oberheim DMX: double bass drum, snare, crashes |
+| Blues | 72-104 | Mixolydian, with a blues melody scale (1 2 ♭3 3 5 6 ♭7) | 1 bar, the 12-bar form | 4 bars | Linn 9000: shuffle on the ride |
+| Funk | 92-116 | Dorian, Mixolydian | 1 bar (a vamp) | 2 bars | LinnDrum LM-2: syncopated kick, ghost notes, sixteenth hats |
 
-In the Piece tab the styles are a dropdown in three groups (Calm: Ambient, Minimal, Lo-fi hip hop, Classical; Film: Cinematic, Movie score, Orchestral epic; Groove: Jazz, Bossa nova, Electronic, Synthwave), with a one-line description of the chosen style.
+In the Piece tab the styles are a dropdown in four groups (Calm: Ambient, Minimal, Lo-fi hip hop, Classical; Film: Cinematic, Movie score, Orchestral epic; Groove: Jazz, Bossa nova, Electronic, Synthwave; Band: Pop, Rock, Metal, Blues, Funk), with a one-line description of the chosen style.
 
 ### 9.1 Genre rules
 
@@ -499,11 +538,17 @@ Each style keeps the conventions of its genre (`RULES` in `src/core/theory.js`);
 | Bossa nova | nylon-guitar comping on the 3-2 bossa clave (beats 1, 2½, 4 \| 2, 3½) | root on 1, fifth on the "and" of 2 and on 3 | I ii V / ii V vi | rim fills, pickups |
 | Synthwave | poly-synth chords, sixteenth arpeggios at the peak | octave eighths; light sidechain | VI III VII / i VI iv | riser into the climax, tom fills |
 | Classical | block chords, then an Alberti left hand | held roots, root and fifth, approach notes | I IV V / vi ii V; the chord before the cadence is always V (V-I) | pickups; no drums |
+| Pop | held chords, repeated chords on a euclidean figure, arpeggios; piano and clean guitar | held roots, picked eighths; light sidechain | the four-chord loop, one chord per bar: I V vi IV (major), i VI III VII (minor) | riser, snare and clap fills; kick on 1, 3 and the "and" of 3, snare and clap on 2 and 4 |
+| Rock | power chords (root and fifth in E2-D♯3) struck on 1 and 3, then in eighths | picked eighths on the root | I IV V / vi IV V | crash at every new phrase, tom fills; kick pattern from the area, ride when driving |
+| Metal | syncopated power-chord hits (1, the "and" of 2, 4), power chords in eighths, then a palm-muted sixteenth riff on a euclidean figure | picked eighths, then the guitar's riff in sixteenths | i VI VII / i iv VI (Phrygian, Aeolian) | stop-down before the climax; double bass drum at the peak, crashes on the beats; half-time in the resolution |
+| Blues | held chords, Charleston comping (piano) | boogie line in swung eighths (root, 3, 5, 6, ♭7, 6, 5, 3) | the 12-bar form, every chord a dominant seventh: I7 I7 I7 I7 IV7 IV7 I7 I7 V7 IV7 I7 V7 | shuffle (swung eighths), snare fills |
+| Funk | Charleston comping, then a "chicken scratch" guitar: short stabs of the top three voices on a syncopated sixteenth figure, muted ghost strums between | the root on 1, then octave, seventh and fifth on a syncopated sixteenth figure (in the scale) | a vamp: I I IV I (Mixolydian), i i IV IV (Dorian), ninth chords | swung sixteenths, ghost snares, open hat on the "and" of 4 |
 
 - **Chord grid.** Chords change only on the style's grid (1 or 2 bars; two-bar styles move every bar above tension 0.8). Each slot of the grid takes the chord of the focus point that covers most of it; neighbours with the same chord merge. Harmony, bass and pad follow the slots.
 - **Melody on the grid.** A melody note on a beat, or a long note, that is not in the sounding chord moves to the nearest chord tone of the melody scale (at most a whole tone).
 - **Drum phrases.** The groove is a one-bar pattern that stays the same for a whole phrase (2 or 4 bars); the area under the focus point at the phrase start chooses its euclidean ornaments, the tension of each bar how many kit layers play.
 - **Transitions between focus points and sections.** Pickup notes lead the classic melody into the next point (a scale step before its first note, on the last eighth), the bass approaches the next root on the last beat of a chord, fills close phrases that lead into a new section, and a swell (riser, reversed cymbal or timpani roll, by style) ends exactly where the new section begins. Orchestral epic stops everything for the half beat before the climax and comes back on it.
+- **Distortion** (Rock, Metal): the synthesized guitars get the style's drive on the harmony and the melody (and a little on the metal bass), the larger of it and the mixer's; sampled guitars are already distorted and get none. Power chords are two voices (root and fifth): separately distorted notes stacked with the octave sound harsh. The pad plays lower under distorted guitars (70% in rock, 50% in metal), so it does not drone. Rock plays on a Linn 9000 kit, metal on an Oberheim DMX, pop on a LinnDrum.
 - **Sidechain** (Electronic): harmony, bass and pad duck by 65% on every kick and recover over about a quarter beat, the pumping of house music.
 
 ### 9.2 Instruments
@@ -673,6 +718,7 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 | MP4 | H.264 (else VP9 or AV1) and AAC 192 kbps (else Opus), mp4-muxer |
 | WebM | VP9 (else VP8 or AV1) and Opus 160 kbps (resampled to 48 kHz when the browser asks for it), webm-muxer |
 | GIF | silent, looping, 360/480/640 px wide, 10/12/15 fps, 256 colours per frame (gifenc); 8 s around the climax (from 1.5 s before it), the first 10 s, or the whole piece |
+| Cover | messaging apps show a video's first frame as its preview, and the video fades in from black, so the first frame is a cover: the frame at the climax (0.45 s after the eye arrives, with the title shown even when it otherwise shows only at the start), the frame at a chosen second, or the user's own image (filling the frame; kept in memory, not in recipes). It stays 0-3 s (default 0.5 s), then blends into the video over the fade-in time, which replaces the fade from black. Stopped at the start, the preview shows the cover. MP4 and WebM |
 | Poster | a PNG of the frame at the playhead, at the video's size; at the very start, the frame 0.45 s after the eye reaches the climax |
 
 **Frame**
@@ -694,7 +740,9 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 | The eye | stays on a point until its connection to the next one starts (the first passage note, §7.7a; without one, in the last quarter of the point, at most half a beat), then moves along the path with a smoothstep and arrives on the next point's first beat. Shown as a dot, a comet (a longer trail), a ring, or not at all |
 | Path | *As it plays* (only the travelled part), *From the start* (the whole path, the part still ahead at its own opacity), *Last jump*, or off; the travelled part and the part ahead each have an opacity (0-100%); width 1-12 px (at 1080p) |
 | Shape | straight segments, or *Curved*: a cardinal spline through the points (tension 0.3), which the eye and the connection notes follow too |
+| Line options | *How much it curves* (curved paths, the spline's tension), *Glow* (Glow and Neon), dash length and gap (Dashed, Dotted, Marching, as multiples of the width); *Line colour*: one colour, *Along the path* (from a start colour to an end colour, segment by segment) or *Follows the story* (from a calm colour to a tense one with each point's tension) |
 | Line style | Solid, Glow, Neon (a coloured halo with a white core), Dashed, Dotted, Marching (dashes moving forward), Tapered (thin where it started, full at the eye), Comet (a tail that fades behind the eye), Brush (three thin strokes with a fixed wobble), Arrows (a chevron in the middle of each jump), Double (two parallel lines). The part still ahead is drawn solid for the Tapered and Comet styles |
+| Place options | circles as a ring, filled, dashed, a dot or none; their size (40-200%); numbers in a pill, plain or none; the climax in its own colour |
 | Places | *As it plays* (they appear when the eye first arrives, growing in), *From the start*, *Current only*, or off. The current place is fully opaque; a visited place fades to the *Visited* opacity in 0.5 s after the eye leaves; with From the start, a place not reached yet has the *Still ahead* opacity and rises to full in 0.35 s on arrival. Numbers optional; revisits share a marker |
 | Connection notes | dots along the path where the passage notes come from, with the opacity of their part of the path, lit while they play |
 
@@ -713,6 +761,7 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 
 | | Rule |
 |---|---|
+| More colours | the spotlight and the vignette in any colour (not only black); a tint over the whole picture (soft light), with an amount |
 | Colours | six themes (Gold, Neon, Ember, Mint, Rose, White) or any two colours: the path, and the places and effects. A theme also sets the bottom's colours. Every other element has its own colour: the title, the line under it (and the chord line), the eye, the labels (text and background) and the bottom |
 | Colour grade | Warm, Cool, Contrast (an S-curve), Vivid (saturation), Matte (lifted blacks, softer colour), Black and white, Teal and orange (shadows toward teal, highlights toward orange), with an amount; applied once to the image, pixel by pixel |
 | Vignette, grain, darken | a radial darkening to the corners; seeded film grain (four tiles cycled frame by frame, so the export is the same every time); a dark layer over the image |
@@ -722,6 +771,8 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 
 | | Rule |
 |---|---|
+| Text placement | the title (with the line under it) and the chord line can be dragged anywhere on the preview: they snap to the centre, the thirds and the safe margins, with guides while they move, and keep their place as a fraction of the frame (so it holds at any size); *Reset position* goes back to the presets. Alignment left, centre or right |
+| Text look | a soft shadow, an outline, a box behind the text (in any colour) or plain; capitals; letter spacing; the title comes in with a fade, rising, typed letter by letter, or at once |
 | Title | the image name or your own; under it the style, key and tempo, a line of your own, or nothing; top left, top centre, bottom left or centre; always, or only the first seconds (in over 0.6 s, shown for 1-15 s, then out over 1 s); *Title and chords* adds each point's section and chord at the bottom. Stopped at the very start, the preview shows the frame at 1 s, since the first frame is black when the video fades in |
 | Font | Geist, Space Grotesk, Instrument Serif, Playfair Display, Bebas Neue (in capitals) or Geist Mono (Google Fonts, loaded when chosen), with a size of 60-180% |
 | End card | the last 3.2 s: the picture darkens, the title is shown large in the centre with the style line and a credit ("Made with Lux Sonora", editable) |
@@ -780,7 +831,7 @@ When the HTML file is opened locally or on GitHub Pages, the panel stays hidden 
 - **Why it sounds like this**: a line over the stage explains the selected focus point: its section, its chord and the two or three strongest links from its area to the sound (height → register, smoothness → legato, sharp edges → attack, texture → brightness, colour → resonance and harmonics). Hidden on phones, where the Focus point tab has the same information.
 - **One status line** next to Export says what is downloading (instruments, the melody, groove or saliency models), with a pulsing dot.
 - **Phones**: a compact top bar (icon-only upload, no app name) that stays at the top while scrolling.
-- **Welcome page** (first visit; again with *Welcome* in the top bar): what the app does in a paragraph, the three steps (choose an image, generate a song, shape and share), what it offers (11 styles, sampled instruments and optional neural networks, the analysis in the browser, reproducible recipes, open source), *Upload an image* or *Try a demo*, and the credits: developed by Pericle, with a link and a QR code to the Instagram account @pericle_v. The About dialog has the same credit.
+- **Welcome page** (first visit; again with *Welcome* in the top bar): what the app does in a paragraph, the three steps (choose an image, generate a song, shape and share), what it offers (16 styles, sampled instruments and optional neural networks, the analysis in the browser, reproducible recipes, open source), *Upload an image* or *Try a demo*, and the credits: developed by Pericle, with a link and a QR code to the Instagram account @pericle_v. The About dialog has the same credit.
 - **First run**: after the welcome page, a short guide on the stage (upload, new song, shape it) with *Upload a photo*, *New song* and *Keyboard shortcuts*; it can be shown again from *About and licence*.
 - **New song** (top bar; opens by itself after an upload): genre, duration, the number of focus points (with a suggestion from the image, `4 + 10·(0.5·entropy + 0.5·edges)`) and where the eye looks. *Generate song* places the points with that method (press play when you like); the points can then be moved, added, removed and given a role. *Place the points myself* starts an empty manual path with the Add tool on and a short hint: click the image in the order the places should be heard, then set each point's role in the Focus point tab.
 - **Top bar**: *Welcome* opens the welcome page; *Help* has Getting started (the quick start guide, which has a close button), Keyboard shortcuts (also `?`) and About and licence (version, MIT licence, credits); the folder icon holds Save recipe and Open recipe.

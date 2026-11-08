@@ -14,10 +14,11 @@ export const LINE_STYLES = {
 const lerp = (a, b, t) => a + (b - a) * t;
 
 // Geometry of the path through tl's points ({ x, y } in image fractions).
-export function pathGeometry(tl, curved = false, steps = 18) {
+// tension: 0 nearly straight between points, 1 wide curves
+export function pathGeometry(tl, curved = false, steps = 18, tension = 0.5) {
   const n = tl.length, P = tl.map(p => [p.x, p.y]);
   const tan = j => {
-    const a = P[Math.max(0, j - 1)], b = P[Math.min(n - 1, j + 1)], k = 0.35; // (1 − 0.3) / 2
+    const a = P[Math.max(0, j - 1)], b = P[Math.min(n - 1, j + 1)], k = 0.1 + 0.5 * Math.max(0, Math.min(1, tension));
     return [(b[0] - a[0]) * k, (b[1] - a[1]) * k];
   };
   const T = curved && n > 2 ? P.map((_, j) => tan(j)) : null;
@@ -49,28 +50,34 @@ function stroke(g, pts) { if (pts.length < 2) return; g.beginPath(); g.moveTo(pt
  * Draws the path parts: [{ f0, f1, a, done }] (done: the travelled part, whose end is the eye).
  * X, Y map image fractions to the frame; u is the scale (1 at 1080p); sec the time (for marching).
  */
-export function drawPath(g, geo, X, Y, o, u, sec, parts, hexA) {
-  const w = o.lineWidth * u, col = o.pathColor;
+export function drawPath(g, geo, X, Y, o, u, sec, parts, hexA, colorAt = null) {
+  const w = o.lineWidth * u, glow = o.glow ?? 0.6, dl = o.dashLen ?? 3.2, dg = o.dashGap ?? 2.6;
+  // a colour along the path: each segment (point to point) in its own colour
+  if (colorAt) {
+    const split = [];
+    for (const p of parts) for (let j = Math.floor(p.f0); j < p.f1 - 1e-9; j++) { const a = Math.max(p.f0, j), b = Math.min(p.f1, j + 1); if (b - a > 1e-6) split.push({ ...p, f0: a, f1: b, col: colorAt(j + 0.5) }); }
+    parts = split;
+  }
   g.save(); g.lineCap = "round"; g.lineJoin = "round";
   for (const part of parts) {
     if (part.f1 - part.f0 < 1e-6 || part.a <= 0) continue;
     const pts = geo.range(part.f0, part.f1).map(p => [X(p.x), Y(p.y), p.f]);
-    const a = part.a, style = !part.done && (o.line === "comet" || o.line === "tapered") ? "solid" : o.line;
+    const col = part.col || o.pathColor, a = part.a, style = !part.done && (o.line === "comet" || o.line === "tapered") ? "solid" : o.line;
     g.globalAlpha = 1; g.setLineDash([]); g.shadowBlur = 0; g.lineDashOffset = 0;
     g.strokeStyle = hexA(col, 0.92 * a); g.lineWidth = w;
     switch (style) {
       case "glow":
-        g.shadowColor = hexA(col, 0.9 * a); g.shadowBlur = 14 * u; stroke(g, pts); break;
+        g.shadowColor = hexA(col, 0.9 * a); g.shadowBlur = 24 * u * glow; stroke(g, pts); break;
       case "neon":
-        g.shadowColor = hexA(col, a); g.shadowBlur = 18 * u; g.lineWidth = w * 2.6; g.strokeStyle = hexA(col, 0.38 * a); stroke(g, pts);
+        g.shadowColor = hexA(col, a); g.shadowBlur = 30 * u * glow; g.lineWidth = w * 2.6; g.strokeStyle = hexA(col, 0.38 * a); stroke(g, pts);
         g.shadowBlur = 6 * u; g.lineWidth = Math.max(1, w * 0.7); g.strokeStyle = `rgba(255,255,255,${0.95 * a})`; stroke(g, pts); break;
       case "dashed":
-        g.setLineDash([w * 3.2, w * 2.6]); stroke(g, pts); break;
+        g.setLineDash([w * dl, w * dg]); stroke(g, pts); break;
       case "dotted":
-        g.lineWidth = w * 1.3; g.setLineDash([0.01, w * 2.6]); stroke(g, pts); break;
+        g.lineWidth = w * 1.3; g.setLineDash([0.01, w * dg]); stroke(g, pts); break;
       case "marching":
         // dashes that move forward along the path
-        g.setLineDash([w * 3, w * 2.4]); g.lineDashOffset = -sec * 36 * u; stroke(g, pts); break;
+        g.setLineDash([w * dl, w * dg]); g.lineDashOffset = -sec * 36 * u; stroke(g, pts); break;
       case "double": {
         // two thin parallel lines
         for (const side of [-1, 1]) {

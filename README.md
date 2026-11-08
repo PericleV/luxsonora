@@ -17,7 +17,7 @@ Lux Sonora uses image analysis algorithms to find that story and give it a voice
 
 What you see becomes something you can hear. And because the same image always tells the same story, every note leads back to the part of the picture it came from.
 
-- **Eleven styles with their genre rules:** Ambient, Minimal, Lo-fi hip hop, Classical, Cinematic, Movie score, Orchestral epic, Jazz, Bossa nova, Electronic, Synthwave: chord grid, drum phrases, articulations, transitions.
+- **Sixteen styles with their genre rules:** Ambient, Minimal, Lo-fi hip hop, Classical, Cinematic, Movie score, Orchestral epic, Jazz, Bossa nova, Electronic, Synthwave, Pop, Rock, Metal, Blues and Funk: chord grid, drum phrases, articulations, transitions.
 - **Where the eye goes:** nine placement methods, from classic saliency (region contrast, spectral residual, frequency-tuned, Itti-Koch, details, composition, scan) to neural ones (COCO-SSD objects, MSI-Net learned saliency). Generate the points automatically, or place them yourself and give each one a role: calm, build, climax or release.
 - **A story, not a sequence:** a dramatic arc (introduction, development, climax, resolution), passages that follow the path between two places, continuous transitions between regions, an orchestration chosen from the image, and optional neural melodies (Magenta MusicVAE "Story", ImprovRNN "Improvise") and grooves (GrooVAE).
 - **Instruments:** synthesizers plus about 250 sampled instruments (General MIDI soundfonts, Steinway, electric pianos, Mellotron, mallets) and 225 drum kits, with a searchable picker that lets you listen first.
@@ -33,6 +33,7 @@ npm install
 npm run dev      # local development server
 npm test         # tests
 npm run build    # dist/index.html: one static file
+npm run audit:music   # note-by-note harmony report for every style
 ```
 
 `dist/index.html` runs on GitHub Pages, as a claude.ai artifact or straight from disk. Sampled instruments and neural models are downloaded when first used; without a network the synthesized instruments and the classic algorithms still make the whole piece.

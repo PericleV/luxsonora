@@ -66,7 +66,16 @@ export function passage(L, N, t0, t1, prof, level, style, scalePcs, chordAt) {
   // the last note leads into the arrival note
   const last = notes[notes.length - 1];
   if (style === "jazz") { last.midi = N + (N >= L ? -1 : 1); last.chromatic = true; }
-  else if (!arp && (Math.abs(last.midi - N) > 2 || last.midi === N)) last.midi = stepToward(N, N >= L ? -1 : 1, scalePcs);
+  else if (!arp && (Math.abs(last.midi - N) > 2 || last.midi === N)) {
+    // a scale step next to the arrival, from the side that does not rub against the chord
+    // sounding there (a semitone from one of its tones)
+    const pcs = chordAt(last.t), rub = m => !pcs.has(PC(m)) && (pcs.has(PC(m + 1)) || pcs.has(PC(m - 1)));
+    const dir = N >= L ? -1 : 1, a = stepToward(N, dir, scalePcs), b = stepToward(N, -dir, scalePcs);
+    // both rub: a tone of that chord within a third of the arrival, on the side the line comes from
+    let c = null;
+    for (const d of [3, 4, 2, 1].flatMap(x => [-dir * -x, dir * -x].map(v => -v))) { const m = N + d; if (m !== N && pcs.has(PC(m))) { c = m; break; } }
+    last.midi = !rub(a) ? a : !rub(b) ? b : c ?? a;
+  }
   // no note repeats its neighbour: move it by a scale step toward the arrival
   for (let j = 1; j < notes.length; j++) if (notes[j].midi === notes[j - 1].midi && !notes[j].chromatic) notes[j].midi = stepToward(notes[j].midi, N >= L ? 1 : -1, arp ? chordAt(t1) : scalePcs);
   notes.forEach((x, j) => { x.dur = ((notes[j + 1] ? notes[j + 1].t : t1) - x.t) * 0.96; });

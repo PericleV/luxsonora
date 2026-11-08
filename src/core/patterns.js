@@ -15,8 +15,8 @@ import { clamp, clampInt, lerp } from "./util.js";
 import { degMidi } from "./theory.js";
 import { euclid } from "./rhythm.js";
 
-export const HARM_NAME = { bossa: "bossa nova comping (clave)", block: "held chord", swell: "swelling held chord", pulse: "pulsing chord", arp: "arpeggio", broken: "broken chord", comp: "comping (Charleston)", stab: "off-beat stabs", ostinato: "string ostinato" };
-export const BASS_NAME = { bossa: "bossa bass: root, then the fifth", octave8: "octave eighths (80s)", hold: "held root", pedal: "pedal on the tonic", pulse: "repeated root", walk: "walking line", twofeel: "two-feel, root and fifth", rootfifth: "root and fifth", offbeat: "off-beat eighths", ostinato: "eighth-note ostinato", rest: "silent (enters after the introduction)" };
+export const HARM_NAME = { powerhit: "syncopated power-chord hits", funk16: "funk scratch guitar in sixteenths", power: "power chords, let ring", power8: "power chords in eighths", chug16: "palm-muted riff in sixteenths", bossa: "bossa nova comping (clave)", block: "held chord", swell: "swelling held chord", pulse: "pulsing chord", arp: "arpeggio", broken: "broken chord", comp: "comping (Charleston)", stab: "off-beat stabs", ostinato: "string ostinato" };
+export const BASS_NAME = { boogie: "boogie line in swung eighths", funk16: "syncopated sixteenths with octave pops", pick8: "picked eighths on the root", chug16: "palm-muted sixteenths, locked with the guitar", bossa: "bossa bass: root, then the fifth", octave8: "octave eighths (80s)", hold: "held root", pedal: "pedal on the tonic", pulse: "repeated root", walk: "walking line", twofeel: "two-feel, root and fifth", rootfifth: "root and fifth", offbeat: "off-beat eighths", ostinato: "eighth-note ostinato", rest: "silent (enters after the introduction)" };
 
 // Articulation from the style's list: calm in the introduction and resolution, busiest at the
 // climax, otherwise by 0.6·tension + 0.4·texture (< 0.5 calm, < 0.68 middle, else busy).
@@ -34,6 +34,41 @@ export function harmonyNotes(kind, chord, t0, dur, D, a, base) {
   const mk = (t, d, midi, vel, first, extra) => out.push({ layer: "harm", t, dur: Math.max(0.1, Math.min(d, end - t)), midi, vel: clampInt(Math.round(vel), 1, 127), tim: base.tim, pan: base.pan, glide: first ? base.glide : null, ...extra });
   const grid = (fn) => { for (let j = Math.round(t0 * 4); j < Math.round(end * 4); j++) fn(j / 4, ((j % 16) + 16) % 16); };
   if (kind === "block") { chord.forEach(m => mk(t0, dur * 0.98, m, base.vel, true)); return out; }
+  if (kind === "power" || kind === "power8" || kind === "chug16") {
+    // guitar power chords: root, fifth and octave in the guitar's low register (E2 to D#3); without
+    // a perfect fifth in the chord, root and octave only
+    // two voices only: stacking separately distorted notes (with the octave) sounds harsh
+    const rp = base.rootPc ?? ((sorted[0] % 12) + 12) % 12, r = 40 + ((rp - 4 + 12) % 12);
+    const pcs = new Set(chord.map(m => ((m % 12) + 12) % 12)), voice = pcs.has((rp + 7) % 12) ? [r, r + 7] : [r], v = base.vel * 0.82;
+    // power: struck on 1 and 3 and left to ring (held for a whole bar it drones)
+    if (kind === "power") { for (let b = 0; b < dur - 1e-6; b += 2) voice.forEach(m => mk(t0 + b, Math.min(2, dur - b) * 0.9, m, v * (b % 4 ? 0.85 : 0.95), b === 0)); return out; }
+    if (kind === "power8") { for (let b = 0, k = 0; b < dur - 1e-6; b += 0.5, k++) voice.forEach(m => mk(t0 + b, 0.42, m, v * (k % 2 ? 0.74 : 0.94), k === 0)); return out; }
+    // chug16: palm-muted sixteenths on root and fifth; a euclidean figure of accents from the
+    // area is the riff (the bass plays the same figure); every sixteenth when the music is tense
+    const acc = euclid(Math.round(lerp(5, 9, a.tex)), 16, a.rot);
+    let k = 0;
+    grid((t, q) => { if (!acc[q] && q % 4 !== 0 && D < 0.85) return; voice.forEach(m => mk(t, 0.2, m, v * (acc[q] ? 0.9 : 0.6), k === 0)); k++; });
+    return out;
+  }
+  if (kind === "powerhit") {
+    // metal at rest: syncopated power-chord hits (1, the "and" of 2, 4) instead of a drone
+    const rp = base.rootPc ?? ((sorted[0] % 12) + 12) % 12, r = 40 + ((rp - 4 + 12) % 12);
+    const pcs = new Set(chord.map(m => ((m % 12) + 12) % 12)), voice = pcs.has((rp + 7) % 12) ? [r, r + 7] : [r];
+    for (let b = 0; b < dur - 1e-6; b += 4) [[0, 1.2, 0.92], [1.5, 0.45, 0.78], [3, 0.9, 0.84]].forEach(([o, d, k], j) => { if (b + o < dur - 1e-6) voice.forEach(m => mk(t0 + b + o, d, m, base.vel * 0.82 * k, b === 0 && j === 0)); });
+    return out;
+  }
+  if (kind === "funk16") {
+    // funk "chicken scratch": short chord stabs (the top three voices) on a syncopated sixteenth
+    // figure from the area, muted ghost strums in between when the music is tense
+    const top = sorted.slice(-3), acc = euclid(Math.round(lerp(5, 9, a.tex)), 16, a.rot + 2);
+    let k = 0;
+    grid((t, q) => {
+      if (acc[q]) { top.forEach(m => mk(t, 0.14, m, base.vel * 0.92, k === 0)); k++; }
+      else if (D > 0.6 && q % 2 === 1) { top.slice(-2).forEach(m => mk(t, 0.06, m, base.vel * 0.32, false, { ghost: true })); }
+    });
+    if (!k) top.forEach(m => mk(t0, 0.14, m, base.vel * 0.9, true));
+    return out;
+  }
   if (kind === "swell") { chord.forEach(m => mk(t0, dur, m, base.vel * 0.9, true, { swell: true })); return out; }
   if (kind === "pulse") {
     const hits = euclid(Math.round(lerp(3, 8, a.tex)), 16, a.rot), steps = [];
@@ -120,6 +155,35 @@ export function bassNotes(kind, root, modeIv, pcOff, bm, t0, dur, a, base, opts 
     }
     return out;
   }
+  if (kind === "boogie") {
+    // blues boogie in (swung) eighths: root, third, fifth, sixth, seventh, sixth, fifth, third
+    const fig = [0, 4, 7, 9, 10, 9, 7, 4];
+    for (let b = 0, k = 0; b < dur - 1e-6; b += 0.5, k++) mk(t0 + b, 0.44, bm + fig[k % 8], k % 2 ? 72 : 86, k === 0, fig[k % 8] === 9 ? { chromatic: false } : {});
+    return out;
+  }
+  if (kind === "funk16") {
+    // funk bass: the root on 1, then root, octave and seventh on a syncopated sixteenth figure, ghost notes between
+    // degrees above the root (octave, root, seventh, octave, fifth, root), in the scale
+    const acc = euclid(Math.round(lerp(4, 7, a.tex)), 16, a.rot + 3), fig = [7, 0, 6, 7, 4, 0];
+    const up = d => { if (!d) return bm; let m = degMidi(root + d, modeIv, 36 + pcOff); while (m <= bm) m += 12; while (m > bm + 12) m -= 12; return m; };
+    for (let b = 0, q = 0, k = 0; b < dur - 1e-6; b += 0.25, q++) {
+      const s = ((Math.round((t0 + b) * 4) % 16) + 16) % 16;
+      if (s === 0) { mk(t0 + b, 0.4, bm, 96, q === 0); continue; }
+      if (acc[s]) { const d = fig[k++ % fig.length]; mk(t0 + b, 0.18, up(d), d === 7 ? 92 : 80, false); }
+    }
+    return out;
+  }
+  if (kind === "pick8") {
+    // rock bass: picked eighths on the root, accents on the beats
+    for (let b = 0, k = 0; b < dur - 1e-6; b += 0.5, k++) mk(t0 + b, 0.44, bm, k % 2 ? 74 : 90, k === 0);
+    return out;
+  }
+  if (kind === "chug16") {
+    // metal bass: the guitar's riff, sixteenths on the root on the same euclidean figure
+    const acc = euclid(Math.round(lerp(5, 9, a.tex)), 16, a.rot);
+    for (let b = 0, q = 0; b < dur - 1e-6; b += 0.25, q++) { const s = ((Math.round((t0 + b) * 4) % 16) + 16) % 16; if (!acc[s] && s % 4 !== 0) continue; mk(t0 + b, 0.22, bm, acc[s] ? 94 : 74, q === 0); }
+    return out;
+  }
   if (kind === "octave8") {
     for (let b = 0, k = 0; b < dur - 1e-6; b += 0.5, k++) mk(t0 + b, 0.42, k % 2 && bm + 12 <= 59 ? bm + 12 : bm, k % 2 ? 72 : 88, k === 0);
     return out;
@@ -129,6 +193,9 @@ export function bassNotes(kind, root, modeIv, pcOff, bm, t0, dur, a, base, opts 
     for (let j = 0; j < beats; j++) {
       // jazz: a chromatic approach note, outside the scale on purpose (marked chromatic)
       if (appr && j === beats - 1) { const m = nextBm + (nextBm > bm ? -1 : 1); mk(t0 + j, 0.85, m, 74, false, { chromatic: true }); break; }
+      // beat 4 of a bar leads into the next downbeat by a semitone (from below, then above),
+      // as a walking bass does; the sixth would rub against a seventh chord
+      if (j % 4 === 3) { const tgt = near(root + walk[0], bm - 2, bm + 10); mk(t0 + j, 0.85, tgt + ((j >> 2) % 2 ? 1 : -1), 66, false, { chromatic: true }); continue; }
       mk(t0 + j, 0.85, near(root + walk[j % 4], bm - 2, bm + 10), j % 2 ? 68 : 82, j === 0);
     }
     return out;

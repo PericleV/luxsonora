@@ -3,7 +3,7 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, EASES, GIF_RANGES, BOTTOM_FILLS, videoSupported } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook } from "../export/look.js";
 import { LABEL_MODES } from "../export/labels.js";
@@ -15,7 +15,7 @@ const LOOK_STORE = "sonification.looks";
 const readLooks = () => { try { return JSON.parse(localStorage.getItem(LOOK_STORE) || "{}") || {}; } catch (e) { return {}; } };
 const writeLooks = v => { try { localStorage.setItem(LOOK_STORE, JSON.stringify(v)); return true; } catch (e) { return false; } };
 
-export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm, onGif, onPoster, onDetect, onFont, onCancel }) {
+export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm, onGif, onPoster, onDetect, onFont, onCancel, onCoverFile = () => {} }) {
   const V = P.video, host = document.querySelector("#pan-export");
   if (V.eye === true) V.eye = "dot"; else if (V.eye === false) V.eye = "off";
   const seg = (id, label, cls = "") => `<div class="field ${cls}" id="f_${id}"><div class="flabel" id="lbl_${id}">${label}</div><div class="seg seg-sm" id="${id}" role="radiogroup" aria-labelledby="lbl_${id}"></div></div>`;
@@ -40,6 +40,11 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <p class="snote">While you're on this tab, the picture shows the video. Press play to see exactly what you'll get.</p>
       ${seg("xSize", "Size")}
       <p class="snote" id="xSizeNote"></p>
+      ${seg("xCover", "Cover")}
+      <div id="xCoverBox">${box("xCoverTime")}
+        <div id="xCoverPickBox"><button type="button" class="btn" id="xCoverPick">Choose an image</button> <span class="snote" id="xCoverName"></span><input type="file" id="xCoverFile" class="visually-hidden" accept="image/*"></div>
+        ${box("xCoverHold")}</div>
+      <p class="snote">Apps like WhatsApp show the first frame as the video's preview. The cover is that frame: without one it would be black, because the video fades in.</p>
       <div class="adv-only">${seg("xShape", "Shape")}<div class="vtoggles" id="xSafeBox">${tog("xSafe", "Show the safe area (preview only)")}</div>${seg("xQuality", "Quality")}${seg("xFps", "Frames per second")}</div>
       <div class="xrow">
         <button type="button" class="btn btn-primary" id="xVideo">${ICON_FILM}Export video (MP4)</button>
@@ -63,7 +68,9 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         <div class="vthemes" id="xTheme" role="radiogroup" aria-labelledby="lblTheme2">${Object.entries(VIDEO_THEMES).map(([k, t]) => `<button type="button" role="radio" aria-checked="false" data-v="${k}" title="${esc(t.name)}"><span style="background:${t.path}"></span><span style="background:${t.point}"></span><em>${esc(t.name)}</em></button>`).join("")}</div>
         <div class="vcolors"><label><input type="color" id="xPathCol">Path</label><label><input type="color" id="xPointCol">Places and effects</label></div></div>
       ${sel("xGrade", "Colour grade", opts(GRADES))}
-      ${box("xGradeAmt")}${box("xVignette")}${box("xGrain")}${box("xDim")}`, true)}
+      ${box("xGradeAmt")}${box("xVignette")}
+      <div class="vcolors">${col("xVigCol", "Vignette colour")}${col("xTintCol", "Tint")}</div>
+      ${box("xTint")}${box("xGrain")}${box("xDim")}`, true)}
     ${group("camera", "Camera", `
       ${seg("xCamera", "Camera")}
       <div id="xCamBox">${box("xZoom")}${seg("xEase", "Motion")}${box("xCamMove")}</div>
@@ -73,11 +80,20 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       ${seg("xPath", "Path")}
       <div id="xPathOps" class="sliders sliders-2"></div>
       ${seg("xLineShape", "Shape")}
+      ${box("xCurve")}
       ${sel("xLine", "Line style", opts(LINE_STYLES))}
       ${box("xWidth")}
+      <div id="xDashBox" class="sliders sliders-2"></div>
+      ${box("xGlow")}
+      ${seg("xPathFill", "Line colour")}
+      <div class="vcolors" id="xPathCols">${col("xPathColA", "First colour")}${col("xPathCol2", "Second colour")}</div>
       ${seg("xPoints", "Places")}
       <div id="xPlaceOps" class="sliders sliders-2"></div>
-      <div class="vtoggles">${tog("xNumbers", "Numbers")}${tog("xPassages", "Connection notes")}</div>
+      ${seg("xPlaceStyle", "Circles")}
+      ${box("xPlaceSize")}
+      ${seg("xNumberStyle", "Numbers")}
+      <div class="vtoggles">${tog("xPassages", "Connection notes")}${tog("xClimaxOwn", "Climax in its own colour")}</div>
+      <div class="vcolors" id="xClimaxCols">${col("xClimaxCol", "Climax colour")}</div>
       ${seg("xEye", "The eye")}
       <div class="vcolors">${col("xEyeCol", "Eye colour")}</div>`)}
     ${group("labels", "Labels on places", `
@@ -88,6 +104,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div class="vtoggles">${tog("xLabelKeep", "Keep labels after the eye leaves")}</div>`)}
     ${group("fx", "Effects and sound", `
       <div class="field"><div class="flabel">When the eye arrives</div><div class="vtoggles" id="xFx">${Object.entries(EFFECTS).map(([k, n]) => tog("xFx_" + k, n)).join("")}</div></div>
+      <div class="vcolors">${col("xSpotCol", "Spotlight colour")}</div>
       ${box("xStrength")}${box("xReact")}
       ${seg("xBottom", "Bottom")}
       <div id="xBottomCols">${seg("xBottomFill", "Bottom colour")}<div class="vcolors">${col("xBotA", "Colour")}${col("xBotB", "Second colour")}</div></div>`)}
@@ -99,7 +116,15 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         <div class="vcolors">${col("xTitleCol", "Title colour")}${col("xSubCol", "Line under it")}</div>
         ${seg("xSubtitle", "Line under the title")}
         <div class="field" id="xSubTextBox"><label class="flabel" for="xSubText">Your line</label><input type="text" id="xSubText" class="text-input" maxlength="90" placeholder="A walk through the sunset"></div>
-        ${seg("xTitlePos", "Position")}${seg("xTitleWhen", "Show the title")}${box("xTitleSecs")}${box("xTextSize")}
+        ${seg("xTitlePos", "Position")}
+        <p class="snote">Or drag the title (and the chord line) on the preview, anywhere you like. <button type="button" class="linkbtn" id="xPosReset" hidden>Reset position</button></p>
+        ${seg("xTitleAlign", "Alignment")}
+        ${seg("xTextStyle", "Text style")}
+        <div class="vcolors" id="xBoxCols">${col("xBoxCol", "Box or outline")}</div>
+        <div class="vtoggles">${tog("xCaps", "Capitals")}</div>
+        ${box("xSpacing")}
+        ${seg("xTitleAnim", "How it comes in")}
+        ${seg("xTitleWhen", "Show the title")}${box("xTitleSecs")}${box("xTextSize")}
       </div>
       <div class="vtoggles">${tog("xEndCard", "End card (the last 3 s)")}</div>
       <div class="field" id="xCreditBox"><label class="flabel" for="xCredit">End card credit</label><input type="text" id="xCredit" class="text-input" maxlength="60"></div>
@@ -128,6 +153,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   // ---- segmented choices on P.video: [id, key, items, number?, after]
   const SEGS = [
     ["xShape", "shape", Object.entries(SHAPES), false, () => vis()],
+    ["xCover", "cover", Object.entries(COVERS), false, () => vis()],
     ["xSize", "size", [["original", "Like the image"], ["720", "720p"], ["1080", "1080p"], ["1440", "1440p"], ["2160", "4K"]], "size"],
     ["xQuality", "quality", Object.entries(QUALITY).map(([k, q]) => [k, q.name])],
     ["xFps", "fps", [["24", "24"], ["30", "30"], ["60", "60"]], true],
@@ -138,14 +164,20 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xEase", "camEase", Object.entries(EASES).map(([k, e]) => [k, e.name])],
     ["xFit", "fit", [["fill", "Fill the frame"], ["fit", "Whole image"]]],
     ["xPath", "path", Object.entries(PATH_MODES), false, () => vis()],
-    ["xLineShape", "lineShape", Object.entries(LINE_SHAPES)],
+    ["xLineShape", "lineShape", Object.entries(LINE_SHAPES), false, () => vis()],
+    ["xPathFill", "pathFill", Object.entries(PATH_FILLS), false, () => vis()],
+    ["xPlaceStyle", "placeStyle", Object.entries(PLACE_STYLES)],
+    ["xNumberStyle", "numberStyle", Object.entries(NUMBER_STYLES), false, () => { V.numbers = V.numberStyle !== "none"; }],
+    ["xTitleAlign", "titleAlign", Object.entries(ALIGNS), false, () => { V.pointAlign = V.titleAlign === "auto" ? "left" : V.titleAlign; }],
+    ["xTextStyle", "textStyle", Object.entries(TEXT_STYLES), false, () => vis()],
+    ["xTitleAnim", "titleAnim", Object.entries(TITLE_ANIMS)],
     ["xPoints", "points", Object.entries(POINT_MODES), false, () => vis()],
     ["xEye", "eye", Object.entries(EYES)],
     ["xLabels", "labels", Object.entries(LABEL_MODES), false, () => vis()],
     ["xBottom", "bottom", Object.entries(BOTTOMS), false, () => vis()],
     ["xBottomFill", "bottomFill", Object.entries(BOTTOM_FILLS), false, () => vis()],
     ["xCaption", "caption", Object.entries(CAPTIONS), false, () => vis()],
-    ["xTitlePos", "titlePos", Object.entries(TITLE_POS)],
+    ["xTitlePos", "titlePos", Object.entries(TITLE_POS), false, () => { V.titleXY = null; V.pointXY = null; vis(); }],
     ["xTitleWhen", "titleWhen", Object.entries(TITLE_WHEN), false, () => vis()],
     ["xSubtitle", "subtitle", Object.entries(SUBTITLES), false, () => vis()]
   ];
@@ -163,6 +195,15 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xDrift", { key: "drift", label: "Slow push-in", min: 0, max: 0.3, step: 0.01, def: 0, scale: 100, unit: "%", help: "A slow zoom in over the whole song." }],
     ["#xPathOps", pct("pathDone", "Travelled", 1)],
     ["#xPathOps", pct("pathAhead", "Still ahead", 0.25)],
+    ["#xCoverTime", { key: "coverTime", label: "Which second", min: 0, max: 60, step: 0.5, def: 5, unit: "s", dec: 1, help: "The frame at this moment becomes the cover." }],
+    ["#xCoverHold", { key: "coverHold", label: "Cover stays for", min: 0, max: 3, step: 0.1, def: 0.5, unit: "s", dec: 1, help: "Then it blends into the video." }],
+    ["#xCurve", pct("curve", "How much it curves", 0.3)],
+    ["#xDashBox", { key: "dashLen", label: "Dash length", min: 0.5, max: 10, step: 0.1, def: 3.2, dec: 1, unit: "×" }],
+    ["#xDashBox", { key: "dashGap", label: "Gap", min: 1, max: 10, step: 0.1, def: 2.6, dec: 1, unit: "×" }],
+    ["#xGlow", pct("glow", "Glow", 0.6)],
+    ["#xPlaceSize", { key: "placeSize", label: "Circle size", min: 0.4, max: 2, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xTint", pct("tintAmt", "Tint amount", 0, 0.6)],
+    ["#xSpacing", { key: "letterSpace", label: "Letter spacing", min: -0.05, max: 0.4, step: 0.01, def: 0, scale: 100, unit: "%" }],
     ["#xWidth", { key: "lineWidth", label: "Line width", min: 1, max: 12, step: 0.5, def: 3, unit: "px", dec: 1 }],
     ["#xPlaceOps", pct("placeDone", "Visited", 0.7)],
     ["#xPlaceOps", pct("placeAhead", "Still ahead", 0.35)],
@@ -180,7 +221,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const sl = {};
   for (const [hostId, d] of SLD) { const x = makeSlider(d, V, look); sl[d.key] = x; $(hostId).appendChild(x.el); }
   // ---- toggles: [id, object, key]
-  const checks = [["#xNumbers", () => V, "numbers"], ["#xPassages", () => V, "passages"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"],
+  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"],
     ["#xEndCard", () => V, "endCard"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
   // ---- colours
@@ -193,13 +234,17 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   });
   // every colour picker on P.video: [input, key, part of the theme]
   const COLS = [["#xPathCol", "pathColor", true], ["#xPointCol", "pointColor", true], ["#xTitleCol", "titleColor"], ["#xSubCol", "subColor"], ["#xEyeCol", "eyeColor"],
-    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"]];
+    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"],
+    ["#xPathColA", "pathColor", true], ["#xPathCol2", "pathColor2"], ["#xClimaxCol", "climaxColor"], ["#xVigCol", "vigColor"], ["#xTintCol", "tintColor"], ["#xSpotCol", "spotColor"], ["#xBoxCol", "boxColor"]];
   const syncColors = () => { for (const [id, key] of COLS) $(id).value = V[key] || "#ffffff"; };
   for (const [id, key, theme] of COLS) $(id).addEventListener("input", e => { V[key] = e.target.value; if (theme) { V.theme = "custom"; showTheme(); } look(); });
   // ---- text
   $("#xTitle").addEventListener("input", e => { V.title = e.target.value; look(); });
   $("#xCredit").addEventListener("input", e => { V.credit = e.target.value; look(); });
   $("#xSubText").addEventListener("input", e => { V.subText = e.target.value; look(); });
+  $("#xCoverPick").addEventListener("click", () => $("#xCoverFile").click());
+  $("#xCoverFile").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; $("#xCoverName").textContent = f.name; onCoverFile(f); });
+  $("#xPosReset").addEventListener("click", () => { V.titleXY = null; V.pointXY = null; vis(); look(); });
   // ---- labels
   let AUTO = [];
   $("#xDetect").addEventListener("click", () => onDetect());
@@ -272,9 +317,21 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#l_xBotB").hidden = fill === "solid";
     $("#l_xBotA span").textContent = fill === "gradient" ? "Left" : fill === "reactive" ? "Quiet" : "Colour";
     $("#l_xBotB span").textContent = fill === "gradient" ? "Right" : "Loud";
+    const ln = V.line || "glow";
+    sl.curve.el.hidden = V.lineShape !== "curved";
+    $("#xDashBox").hidden = !["dashed", "dotted", "marching"].includes(ln); sl.dashLen.el.hidden = ln === "dotted";
+    sl.glow.el.hidden = !["glow", "neon"].includes(ln);
+    $("#l_xPathCol2").hidden = (V.pathFill || "solid") === "solid";
+    $("#l_xPathColA span").textContent = V.pathFill === "gradient" ? "Start" : V.pathFill === "story" ? "Calm" : "Colour";
+    $("#l_xPathCol2 span").textContent = V.pathFill === "gradient" ? "End" : "Tense";
+    $("#xClimaxCols").hidden = !V.climaxOwn;
+    $("#xBoxCols").hidden = !["box", "outline"].includes(V.textStyle || "shadow");
+    $("#xPosReset").hidden = !(V.titleXY || V.pointXY);
+    $("#xCoverBox").hidden = V.cover === "off"; sl.coverTime.el.hidden = V.cover !== "time"; $("#xCoverPickBox").hidden = V.cover !== "image";
   }
   // every control from P (after a recipe or a look)
   function sync() {
+    if (V.numbers === false && V.numberStyle !== "none") V.numberStyle = "none";
     showFmt();
     for (const [id, key] of SEGS) segs[id].set(String(V[key]));
     for (const [id, key] of SELS) $("#" + id).value = V[key];

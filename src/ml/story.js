@@ -17,7 +17,7 @@
 // TensorFlow and can be tested with a fake model.
 import { clamp } from "../core/util.js";
 import { degMidi } from "../core/theory.js";
-import { doubleClimax, applyContours } from "../core/compose.js";
+import { doubleClimax, applyContours, fitMelody, cleanVoices } from "../core/compose.js";
 import { doubleNotes } from "../core/arrange.js";
 
 export const STEPS = 32, SPQ = 4; // 2 bars of sixteenth notes
@@ -168,8 +168,12 @@ export function applyStory(score, story) {
   }
   score.notes = keep;
   applyContours({ notes: keep, points: score.points, body: score.body, smooth: score.smooth, extraIds: new Set((score.extra || []).map(L => L.id)) });
-  doubleClimax({ notes: keep, points: score.points });
-  doubleNotes({ notes: keep, points: score.points, extra: score.extra, inst: score.inst, body: score.body });
-  keep.sort((a, b) => a.t - b.t || a.midi - b.midi); score.story = { places: story.places, segments: story.segments.length };
+  // the model writes over the chords: the same harmony rules as the classic melody
+  fitMelody(score);
+  doubleClimax({ notes: score.notes, points: score.points });
+  doubleNotes({ notes: score.notes, points: score.points, extra: score.extra, inst: score.inst, body: score.body });
+  cleanVoices(score);
+  const keep2 = score.notes;
+  keep2.sort((a, b) => a.t - b.t || a.midi - b.midi); score.story = { places: story.places, segments: story.segments.length };
   return score;
 }

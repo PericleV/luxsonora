@@ -56,6 +56,11 @@ export function defaultVideo() {
     fx: { pulse: true, ripple: false, spotlight: true, glow: true, flash: true }, strength: 0.6, react: 0.4, dim: 0.1,
     grade: "none", gradeAmt: 0.6, vignette: 0.25, grain: 0,
     caption: "title", title: "", subtitle: "info", subText: "", titleColor: "#FFFFFF", subColor: "#FFFFFF", eyeColor: "#FFFFFF", labelColor: "#FFFFFF", labelBg: "#080A0E", font: "geist", titlePos: "tl", titleWhen: "always", titleSecs: 4.5, textSize: 1,
+    cover: "climax", coverTime: 5, coverHold: 0.5,
+    pathFill: "solid", pathColor2: VIDEO_THEMES.gold.point, glow: 0.6, dashLen: 3.2, dashGap: 2.6, curve: 0.3,
+    placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
+    spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
+    titleAlign: "auto", titleXY: null, pointXY: null, pointAlign: "left", textStyle: "shadow", boxColor: "#000000", caps: false, letterSpace: 0, titleAnim: "fade",
     bottom: "bars", bottomFill: "solid", bottomColor: VIDEO_THEMES.gold.point, bottomColor2: VIDEO_THEMES.gold.path, fadeIn: 0.6, fadeOut: 1.5, fadeSound: true, endCard: false, credit: "Made with Lux Sonora",
     gifWidth: 480, gifFps: 12, gifRange: "climax"
   };
@@ -74,7 +79,14 @@ export function mixHex(a, b, t) {
   const A = p(a), B = p(b), k = clamp(t);
   return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, "0")).join("");
 }
+export const COVERS = { off: "Off", climax: "The climax", time: "A moment", image: "My own image" };
 export const BOTTOM_FILLS = { solid: "One colour", gradient: "Gradient", reactive: "Follows the sound" };
+export const PATH_FILLS = { solid: "One colour", gradient: "Along the path", story: "Follows the story" };
+export const PLACE_STYLES = { ring: "Ring", filled: "Filled", dashed: "Dashed", dot: "Dot", none: "No circle" };
+export const NUMBER_STYLES = { pill: "In a pill", plain: "Plain", none: "None" };
+export const TEXT_STYLES = { shadow: "Soft shadow", outline: "Outline", box: "Box", none: "Plain" };
+export const TITLE_ANIMS = { fade: "Fade", rise: "Rise", type: "Typed", none: "At once" };
+export const ALIGNS = { auto: "Auto", left: "Left", center: "Centre", right: "Right" };
 const eyeStyle = o => (o.eye === true ? "dot" : o.eye === false ? "off" : o.eye || "dot");
 
 // Frame size in pixels (even numbers): the short side is `size`; "image" keeps the image's
@@ -225,13 +237,66 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
   return {
     sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || [],
     an: extra.an || analyzeNotes(sc, env), passages: sc.notes.filter(n => n.passage && n.layer === "lead"),
-    geo(shape) { return geos[shape] || (geos[shape] = pathGeometry(tl, shape === "curved")); }
+    geo(shape, tension = 0.5) { const k = shape + "|" + tension; return geos[k] || (geos[k] = pathGeometry(tl, shape === "curved", 18, tension)); }
   };
 }
 
 const FONT_UI = '"Geist", system-ui, -apple-system, "Segoe UI", sans-serif';
 function ring(g, x, y, r, col, a, w) { if (a <= 0 || r <= 0) return; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.strokeStyle = hexA(col, a); g.lineWidth = w; g.stroke(); }
 function pill(g, x, y, w, h) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, h / 2); else g.rect(x, y, w, h); }
+// The cover: the first frame of the video (what messaging apps show as its preview), held for a
+// moment and then blended into the video, instead of fading in from black. A frame of the video
+// (at the climax, or at a chosen second) or the user's own image, filling the frame.
+export function coverTime(S) {
+  const o = S.o;
+  if (o.cover === "time") return clamp(o.coverTime ?? 0, 0, Math.max(0, S.total - 0.05));
+  const c = S.tl.find(p => p.section === "climax");
+  return c ? Math.min(S.total - 0.05, c.t0 + 0.45) : S.total * 0.6;
+}
+export const hasCover = S => !!(S.o.cover && S.o.cover !== "off" && (S.o.cover !== "image" || S.coverImg));
+function coverCanvas(S, W, H) {
+  const o = S.o, look = { ...o, cover: undefined, coverHold: undefined };
+  const key = [W, H, o.cover, o.cover === "time" ? o.coverTime : 0, S.coverImgId || 0, JSON.stringify(look)].join("|");
+  if (S._cover && S._cover.key === key) return S._cover.c;
+  const c = typeof document !== "undefined" ? document.createElement("canvas") : null; if (!c) return null;
+  c.width = W; c.height = H; const g = c.getContext("2d");
+  if (o.cover === "image" && S.coverImg) {
+    const im = S.coverImg, k = Math.max(W / im.width, H / im.height);
+    g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.imageSmoothingQuality = "high";
+    g.drawImage(im, (W - im.width * k) / 2, (H - im.height * k) / 2, im.width * k, im.height * k);
+  } else {
+    const keep = { hit: S.hit, pt: S._pointText };
+    drawVideoFrame(g, W, H, coverTime(S), S, { noCover: true, frame: 0 });
+    S.hit = keep.hit; S._pointText = keep.pt;
+  }
+  S._cover = { key, c };
+  return c;
+}
+
+// A block of text lines at (x, y) (the first line's baseline), aligned left, centre or right, in
+// the chosen style: a soft shadow, an outline, a box behind it, or plain. Returns its bounds.
+function textBlock(g, lines, x, y, align, alpha, o, u, maxW) {
+  const vis = lines.filter(l => l.text);
+  if (!vis.length || alpha <= 0.01) return null;
+  g.save(); g.globalAlpha = alpha; g.textAlign = align; g.textBaseline = "alphabetic";
+  const canLS = "letterSpacing" in g, setLS = l => { if (canLS) g.letterSpacing = `${((o.letterSpace || 0) * l.size).toFixed(2)}px`; };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const l of vis) {
+    g.font = l.font; setLS(l);
+    const w = Math.min(maxW, g.measureText(l.measure || l.text).width), lx = align === "center" ? x - w / 2 : align === "right" ? x - w : x;
+    x0 = Math.min(x0, lx); x1 = Math.max(x1, lx + w); y0 = Math.min(y0, y + l.dy - l.size * 0.8); y1 = Math.max(y1, y + l.dy + l.size * 0.25);
+  }
+  const style = o.textStyle || "shadow", pad = 14 * u;
+  if (style === "box") { g.beginPath(); if (g.roundRect) g.roundRect(x0 - pad, y0 - pad * 0.8, x1 - x0 + 2 * pad, y1 - y0 + 1.6 * pad, 10 * u); else g.rect(x0 - pad, y0 - pad * 0.8, x1 - x0 + 2 * pad, y1 - y0 + 1.6 * pad); g.fillStyle = hexA(o.boxColor || "#000000", 0.55); g.fill(); }
+  for (const l of vis) {
+    g.font = l.font; setLS(l);
+    if (style === "shadow") { g.shadowColor = "rgba(0,0,0,0.55)"; g.shadowBlur = 12 * u; } else g.shadowBlur = 0;
+    if (style === "outline") { g.lineJoin = "round"; g.lineWidth = Math.max(1.5 * u, l.size * 0.09); g.strokeStyle = hexA(o.boxColor || "#000000", 0.85); g.strokeText(l.text, x, y + l.dy, maxW); }
+    g.fillStyle = l.color; g.fillText(l.text, x, y + l.dy, maxW);
+  }
+  g.restore();
+  return { x0: x0 - pad * 0.6, y0: y0 - pad * 0.6, x1: x1 + pad * 0.6, y1: y1 + pad * 0.6 };
+}
 
 /*
  * Draws the frame at `sec` seconds into context g (W × H, in the context's units).
@@ -264,13 +329,13 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   const endA = o.endCard ? ease((sec - (S.total - 3.2)) / 0.8) : 0;
   if (gz) {
     const last = tl[n - 1], fadeEnd = 1 - ease((sec - last.t1) / Math.max(0.5, S.total - last.t1));
-    const R = p => Math.max(8 * u, p.r * diag), str = o.strength, beat = clamp(valueAt(S.an, S.an.beat, sec) * (o.react || 0));
+    const R = p => Math.max(8 * u, p.r * diag) * (o.placeSize || 1), str = o.strength, beat = clamp(valueAt(S.an, S.an.beat, sec) * (o.react || 0));
     const boostOf = p => (p.section === "climax" ? 1.6 : 1);
-    const geo = S.geo(o.lineShape || "straight"), eye = geo.at(gz.i + gz.u), exX = X(eye.x), exY = Y(eye.y);
+    const geo = S.geo(o.lineShape || "straight", o.curve ?? 0.5), eye = geo.at(gz.i + gz.u), exX = X(eye.x), exY = Y(eye.y);
     // spotlight: the rest of the frame darkens around the eye
     if (o.fx.spotlight && str > 0) {
       const rc = R(tl[gz.i]), gr = g.createRadialGradient(exX, exY, rc * 0.9, exX, exY, rc * 2.6 + 0.22 * Math.min(W, H));
-      gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, `rgba(0,0,0,${0.6 * str * fadeEnd})`);
+      gr.addColorStop(0, hexA(o.spotColor || "#000000", 0)); gr.addColorStop(1, hexA(o.spotColor || "#000000", 0.6 * str * fadeEnd));
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
     }
     // the path: the travelled part at its opacity; with "From the start" the part still ahead too
@@ -279,7 +344,9 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       const parts = [];
       if (o.path === "trail") { const j = Math.floor(drawn); if (j > 0) parts.push({ f0: j - 1, f1: j, a: dOp * (1 - ease(gz.age / 1.6)), done: true }); parts.push({ f0: j, f1: drawn, a: dOp, done: true }); }
       else { parts.push({ f0: 0, f1: drawn, a: dOp, done: true }); if (aOp > 0) parts.push({ f0: drawn, f1: n - 1, a: aOp, done: false }); }
-      drawPath(g, geo, X, Y, { ...o, lineWidth: o.lineWidth * (1 + 0.35 * beat) }, u, sec, parts, hexA);
+      const pf = o.pathFill || "solid", c2 = o.pathColor2 || o.pointColor;
+      const colorAt = pf === "gradient" ? f => mixHex(o.pathColor, c2, f / Math.max(1, n - 1)) : pf === "story" ? f => mixHex(o.pathColor, c2, clamp(((S.sc.points[Math.min(n - 1, Math.floor(f))] || {}).tension ?? 0.6) * 1.4 - 0.4)) : null;
+      drawPath(g, geo, X, Y, { ...o, lineWidth: o.lineWidth * (1 + 0.35 * beat) }, u, sec, parts, hexA, colorAt);
     }
     // connection notes: dots along the path (with the opacity of their part), lit while they play
     if (o.passages && o.path !== "off") {
@@ -315,12 +382,20 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       // the first arrival grows the marker in (when it was not shown before)
       const grow = o.points === "all" || first < 0 ? 1 : 0.6 + 0.4 * ease((sec - first) / 0.35), r = R(p) * grow * (cur ? 1 + 0.12 * beat : 1);
       if (show && a > 0.005) {
-        g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = hexA(o.pointColor, 0.18 * a); g.fill();
-        ring(g, x, y, r, o.pointColor, 0.95 * a, (cur ? 2.6 : 1.6) * u);
-        if (o.numbers) {
+        const pcol = o.climaxOwn && js.some(j => tl[j].section === "climax") ? o.climaxColor || "#FF6B6B" : o.pointColor, ps = o.placeStyle || "ring";
+        if (ps === "ring" || ps === "filled" || ps === "dashed") { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = hexA(pcol, (ps === "filled" ? 0.42 : 0.18) * a); g.fill(); }
+        if (ps === "dashed") { g.save(); g.setLineDash([6 * u, 5 * u]); ring(g, x, y, r, pcol, 0.95 * a, (cur ? 2.6 : 1.8) * u); g.restore(); }
+        else if (ps === "ring" || ps === "filled") ring(g, x, y, r, pcol, 0.95 * a, (cur ? 2.6 : 1.6) * u);
+        else if (ps === "dot") { g.beginPath(); g.arc(x, y, (cur ? 7 : 5) * u, 0, Math.PI * 2); g.fillStyle = hexA(pcol, a); g.fill(); }
+        const nst = o.numbers === false ? "none" : o.numberStyle || "pill";
+        if (nst === "plain") {
+          const label = (o.points === "all" ? js : reached.length ? reached : js).map(j => j + 1).join("·");
+          g.save(); g.globalAlpha = a; g.font = `600 ${18 * u}px ${FONT_UI}`; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "rgba(0,0,0,0.6)"; g.shadowBlur = 6 * u;
+          g.fillStyle = pcol; g.fillText(label, x, ps === "dot" ? y - 16 * u : y); g.restore();
+        } else if (nst === "pill") {
           const label = (o.points === "all" ? js : reached.length ? reached : js).map(j => j + 1).join("·"); g.font = `600 ${16 * u}px ${FONT_UI}`;
           const tw = Math.max(26 * u, g.measureText(label).width + 14 * u), th = 26 * u;
-          g.globalAlpha = a; pill(g, x - tw / 2, y - th / 2, tw, th); g.fillStyle = o.pointColor; g.fill();
+          g.globalAlpha = a; pill(g, x - tw / 2, y - th / 2, tw, th); g.fillStyle = pcol; g.fill();
           g.fillStyle = "#0B0D11"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(label, x, y + 0.5 * u);
           g.globalAlpha = 1;
         }
@@ -380,7 +455,8 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     if (o.caption === "points" && C.point && sec < last.t1 && endA < 1) S._pointText = { text: C.point(gz.i), a: ease(gz.age / 0.4) * (1 - endA) };
     else S._pointText = null;
   }
-  drawVignette(g, W, H, o.vignette || 0);
+  if ((o.tintAmt || 0) > 0) { g.save(); g.globalCompositeOperation = "soft-light"; g.fillStyle = hexA(o.tintColor || "#2B1B4A", Math.min(1, o.tintAmt * 1.4)); g.fillRect(0, 0, W, H); g.restore(); }
+  drawVignette(g, W, H, o.vignette || 0, o.vigColor);
   // bottom: overview bars, live spectrum, live waveform or a progress line
   const prog = clamp(sec / S.total), base = H - B, hMax = 60 * u, x0 = L, x1 = W - Rm, bw0 = x1 - x0;
   // its colour: one colour, a gradient from left to right, or a colour that follows the sound
@@ -429,25 +505,39 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   // text: the title (always, or the first seconds), the point line, the end card
   // the line under the title: the style, key and tempo, the user's own text, or nothing
   const sub = o.subtitle === "none" ? "" : o.subtitle === "custom" ? (o.subText || "").trim() : C.sub || "";
-  const title = C.title ? (Fnt.caps ? C.title.toUpperCase() : C.title) : "";
-  const tA = (o.caption === "none" ? 0 : o.titleWhen === "intro" ? ease((sec - 0.2) / 0.6) * (1 - ease((sec - (o.titleSecs ?? 4.5)) / 1)) : 1) * (1 - endA);
+  const title = C.title ? (Fnt.caps || o.caps ? C.title.toUpperCase() : C.title) : "";
+  const tA = (o.caption === "none" ? 0 : opt.noCover ? 1 : o.titleWhen === "intro" ? ease((sec - 0.2) / 0.6) * (1 - ease((sec - (o.titleSecs ?? 4.5)) / 1)) : 1) * (1 - endA);
   const tSize = (Fnt.caps ? 58 : 44) * u * ts, sSize = 22 * u * ts;
+  S.hit = {};
+  // how the title comes in: fade, rise, typed letter by letter, or at once
+  const inP = clamp((sec - 0.2) / 0.9), anim = o.titleAnim || "fade";
+  const shownTitle = anim === "type" ? title.slice(0, Math.ceil(title.length * clamp((sec - 0.2) / 1.4))) : title;
+  // with "Always" the title still comes in at the start (with "First seconds" it fades in anyway)
+  const animA = o.titleWhen === "always" && anim !== "none" && anim !== "type" ? ease(inP) : 1;
+  const rise = (anim === "rise" ? 1 - ease(inP) : 0) * 26 * u;
   if (tA > 0.01 && (title || sub)) {
-    g.save(); g.globalAlpha = tA; g.shadowColor = "rgba(0,0,0,0.55)"; g.shadowBlur = 12 * u; g.textBaseline = "alphabetic";
     let x = L, y = T + tSize, align = "left";
-    if (o.titlePos === "tc") { x = W / 2; align = "center"; }
+    if (o.titleXY) { x = o.titleXY.x * W; y = o.titleXY.y * H; align = o.titleAlign || "left"; }
+    else if (o.titlePos === "tc") { x = W / 2; align = "center"; }
     else if (o.titlePos === "center") { x = W / 2; y = H / 2; align = "center"; }
     else if (o.titlePos === "bl") y = base - bottomH - 18 * u - sSize * 1.5;
-    g.textAlign = align;
-    g.fillStyle = o.titleColor || "#fff"; g.font = `${Fnt.weight} ${tSize}px ${Fnt.css}`; if (title) g.fillText(title, x, y, W - L - Rm);
-    g.fillStyle = hexA(o.subColor || "#ffffff", 0.85); g.font = `450 ${sSize}px ${FONT_UI}`; if (sub) g.fillText(sub, x, y + sSize * 1.5, W - L - Rm);
-    g.restore();
+    if (!o.titleXY && o.titleAlign && o.titleAlign !== "auto") { align = o.titleAlign; x = align === "center" ? W / 2 : align === "right" ? W - Rm : L; }
+    const box = textBlock(g, [{ text: shownTitle, measure: title, font: `${Fnt.weight} ${tSize}px ${Fnt.css}`, size: tSize, color: o.titleColor || "#fff", dy: 0 },
+      { text: sub, font: `450 ${sSize}px ${FONT_UI}`, size: sSize, color: hexA(o.subColor || "#ffffff", 0.85), dy: sSize * 1.5 }], x, y + rise, align, tA * animA, o, u, W - L - Rm);
+    if (box) S.hit.title = { ...box, ax: x, ay: y, align };
   }
   if (S._pointText && S._pointText.a > 0.01) {
     const top = o.titlePos === "bl";
-    g.save(); g.globalAlpha = S._pointText.a; g.shadowColor = "rgba(0,0,0,0.6)"; g.shadowBlur = 10 * u; g.textAlign = "left";
-    g.fillStyle = o.subColor || "#fff"; g.font = `550 ${26 * u * ts}px ${FONT_UI}`;
-    g.fillText(S._pointText.text, L, top ? T + 26 * u * ts : base - bottomH - 16 * u, W - L - Rm); g.restore();
+    let x = L, y = top ? T + 26 * u * ts : base - bottomH - 16 * u, align = "left";
+    if (o.pointXY) { x = o.pointXY.x * W; y = o.pointXY.y * H; align = o.pointAlign || "left"; }
+    const box = textBlock(g, [{ text: S._pointText.text, font: `550 ${26 * u * ts}px ${FONT_UI}`, size: 26 * u * ts, color: o.subColor || "#fff", dy: 0 }], x, y, align, S._pointText.a, o, u, W - L - Rm);
+    if (box) S.hit.point = { ...box, ax: x, ay: y, align };
+  }
+  // guides while a text is dragged on the preview
+  if (opt.preview && S.guides) {
+    g.save(); g.strokeStyle = "rgba(120,220,255,0.9)"; g.lineWidth = 1.5 * u; g.setLineDash([6 * u, 5 * u]);
+    for (const gd of S.guides) { g.beginPath(); if (gd.x !== undefined) { g.moveTo(gd.x * W, 0); g.lineTo(gd.x * W, H); } else { g.moveTo(0, gd.y * H); g.lineTo(W, gd.y * H); } g.stroke(); }
+    g.restore();
   }
   if (endA > 0.01) {
     g.fillStyle = `rgba(4,6,10,${0.6 * endA})`; g.fillRect(0, 0, W, H);
@@ -459,9 +549,14 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     g.restore();
   }
   drawGrain(g, W, H, o.grain || 0, opt.frame ?? Math.round(sec * 24), u);
-  // fades from and to black
-  const fa = fadeAt(sec, S.total, o.fadeIn || 0, o.fadeOut || 0);
+  // fades from and to black (with a cover, the video starts from the cover instead)
+  const withCover = !opt.noCover && hasCover(S);
+  const fa = fadeAt(sec, S.total, withCover ? 0 : o.fadeIn || 0, o.fadeOut || 0);
   if (fa > 0) { g.fillStyle = `rgba(0,0,0,${fa})`; g.fillRect(0, 0, W, H); }
+  if (withCover) {
+    const hold = o.coverHold ?? 0.5, xf = Math.max(0.4, o.fadeIn || 0.6), ca = sec <= hold + 1e-9 ? 1 : 1 - ease((sec - hold) / xf);
+    if (ca > 0.001) { const cc = coverCanvas(S, W, H); if (cc) { g.globalAlpha = ca; g.drawImage(cc, 0, 0, W, H); g.globalAlpha = 1; } }
+  }
   if (opt.preview && o.safe && (o.shape === "vertical" || o.shape === "portrait")) drawSafeGuides(g, W, H, o.shape, u);
   g.restore();
 }

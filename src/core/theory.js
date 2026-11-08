@@ -138,6 +138,56 @@ export const STYLES = {
       pad: I("pad", "String quartet", { a: 0.6, d: 1.0, s: 0.85, r: 1.2, cut: 2400, q: 0.8, col: 0.55, det: 6 })
     },
     gm: { lead: 0, harm: 0, bass: 42, pad: 48 }
+  },
+  pop: {
+    name: "Pop", modes: ["ionian", "mixolydian", "aeolian", "dorian"], tempo: [96, 124], pent: false, ext: 5, swing: 0, perc: "pop", bass: "pick8", reverb: 0.35,
+    inst: {
+      lead: I("pad", "Pop lead", { a: 0.02, d: 0.5, s: 0.8, r: 0.35, cut: 3600, q: 1.1, col: 0.5, det: 6, vib: 6, lvl: 0.6 }),
+      harm: I("fm", "Pop piano", { a: 0.004, d: 1.4, s: 0.2, r: 0.5, cut: 4200, q: 0.6, col: 0.2, ratio: 1 }),
+      bass: I("bass", "Pop bass", { a: 0.005, d: 0.3, s: 0.6, r: 0.12, cut: 1100, q: 1.2, col: 0.5 }),
+      pad: I("pad", "Synth strings", { a: 0.5, d: 1.0, s: 0.85, r: 1.4, cut: 2200, q: 0.8, col: 0.55, det: 12 })
+    },
+    gm: { lead: 80, harm: 0, bass: 33, pad: 50 }
+  },
+  rock: {
+    name: "Rock", modes: ["mixolydian", "aeolian", "dorian", "ionian"], tempo: [100, 140], pent: false, ext: 5, swing: 0, perc: "rock", bass: "pick8", reverb: 0.3,
+    inst: {
+      lead: I("pad", "Lead guitar", { a: 0.01, d: 0.6, s: 0.85, r: 0.3, cut: 3000, q: 1.4, col: 0.9, det: 8, vib: 10, lvl: 0.55 }),
+      harm: I("pad", "Rhythm guitar", { a: 0.006, d: 0.4, s: 0.8, r: 0.15, cut: 2600, q: 1.1, col: 0.95, det: 14, lvl: 0.7 }),
+      bass: I("bass", "Picked bass", { a: 0.004, d: 0.25, s: 0.7, r: 0.1, cut: 1300, q: 1.4, col: 0.65 }),
+      pad: I("pad", "Rock organ", { a: 0.05, d: 0.8, s: 0.85, r: 0.5, cut: 2200, q: 0.8, col: 0.4, det: 6 })
+    },
+    gm: { lead: 29, harm: 30, bass: 34, pad: 18 }
+  },
+  metal: {
+    name: "Metal", modes: ["phrygian", "aeolian"], tempo: [120, 168], pent: false, ext: 5, swing: 0, perc: "metal", bass: "chug16", reverb: 0.28,
+    inst: {
+      lead: I("pad", "Lead guitar", { a: 0.01, d: 0.6, s: 0.85, r: 0.3, cut: 3200, q: 1.6, col: 0.95, det: 8, vib: 12, lvl: 0.55 }),
+      harm: I("pad", "Heavy guitar", { a: 0.004, d: 0.3, s: 0.85, r: 0.08, cut: 2200, q: 1.3, col: 1, det: 16, lvl: 0.7 }),
+      bass: I("bass", "Heavy bass", { a: 0.003, d: 0.2, s: 0.8, r: 0.08, cut: 1000, q: 1.6, col: 0.8 }),
+      pad: I("pad", "Dark choir", { a: 0.8, d: 1.0, s: 0.85, r: 1.4, cut: 1600, q: 0.8, col: 0.3, det: 10 })
+    },
+    gm: { lead: 30, harm: 30, bass: 34, pad: 52 }
+  },
+  blues: {
+    name: "Blues", modes: ["mixolydian"], tempo: [72, 104], pent: false, melScale: [0, 2, 3, 4, 7, 9, 10], ext: 7, swing: 0.95, perc: "shuffle", bass: "boogie", reverb: 0.35,
+    inst: {
+      lead: I("pluck", "Blues guitar", { a: 0.004, d: 1.6, r: 0.3, cut: 3000, q: 0.9, col: 0.5 }),
+      harm: I("fm", "Blues piano", { a: 0.004, d: 1.3, s: 0.2, r: 0.5, cut: 3600, q: 0.6, col: 0.22, ratio: 1 }),
+      bass: I("bass", "Upright bass", { a: 0.008, d: 0.4, s: 0.45, r: 0.15, cut: 700, q: 0.9, col: 0.1 }),
+      pad: I("pad", "Hammond organ", { a: 0.03, d: 0.8, s: 0.85, r: 0.4, cut: 2400, q: 0.8, col: 0.3, det: 4 })
+    },
+    gm: { lead: 26, harm: 0, bass: 32, pad: 16 }
+  },
+  funk: {
+    name: "Funk", modes: ["dorian", "mixolydian"], tempo: [92, 116], pent: false, ext: 9, swing: 0, swing16: 0.4, perc: "funk", bass: "funk16", reverb: 0.25,
+    inst: {
+      lead: I("pad", "Horn section", { a: 0.02, d: 0.5, s: 0.8, r: 0.2, cut: 3200, q: 1.2, col: 0.8, det: 6, lvl: 0.6 }),
+      harm: I("pluck", "Funk guitar", { a: 0.003, d: 0.35, r: 0.06, cut: 3400, q: 0.9, col: 0.6 }),
+      bass: I("bass", "Slap bass", { a: 0.003, d: 0.25, s: 0.5, r: 0.08, cut: 1600, q: 1.6, col: 0.55 }),
+      pad: I("pad", "Organ", { a: 0.03, d: 0.8, s: 0.85, r: 0.3, cut: 2200, q: 0.8, col: 0.3, det: 4 })
+    },
+    gm: { lead: 61, harm: 28, bass: 36, pad: 16 }
   }
 };
 
@@ -167,6 +217,16 @@ export const RULES = {
   bossa: { grid: 1, unit: 4, phrase: 2, harm: ["block", "bossa"], bass: ["bossa", "bossa"], cands: [[0, 1, 4], [1, 4, 5]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
   synthwave: { grid: 2, unit: 4, phrase: 4, harm: ["block", "arp"], bass: ["hold", "octave8"], cands: [[5, 2, 6], [0, 5, 3]], sidechain: 0.3, pickups: false, approach: false, swell: "riser", stopDown: false },
   classical: { grid: 1, unit: 4, phrase: 4, harm: ["block", "broken"], bass: ["hold", "rootfifth"], cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
+  // pop: one chord per bar on the four-chord loop (I-V-vi-IV in major, i-VI-III-VII in minor)
+  pop: { grid: 1, unit: 4, phrase: 4, harm: ["block", "pulse", "arp"], bass: ["hold", "pick8"], cands: [[0, 4, 5], [5, 3, 0]], loop: { major: [0, 4, 5, 3], minor: [0, 5, 2, 6] }, sidechain: 0.12, pickups: true, approach: false, swell: "riser", stopDown: false },
+  // rock: power chords, held when calm and in eighths when driving; the bass in eighths
+  rock: { grid: 1, unit: 4, phrase: 4, harm: ["power", "power8"], padLevel: 0.7, bass: ["pick8", "pick8"], cands: [[0, 3, 4], [5, 3, 4]], sidechain: 0, pickups: true, approach: false, swell: "cymbal", stopDown: false, drive: { harm: 0.45, lead: 0.3 } },
+  // metal: palm-muted sixteenth riffs locked with the bass, a break before the climax
+  metal: { grid: 1, unit: 4, phrase: 2, harm: ["powerhit", "power8", "chug16"], padLevel: 0.5, bass: ["pick8", "chug16"], cands: [[0, 5, 6], [0, 3, 5]], sidechain: 0, pickups: false, approach: false, swell: "cymbal", stopDown: true, drive: { harm: 0.6, lead: 0.4, bass: 0.15 } },
+  // blues: the 12-bar form, every chord a dominant seventh (I7 IV7 V7), a boogie bass, shuffle
+  blues: { grid: 1, unit: 4, phrase: 4, harm: ["block", "comp"], padLevel: 0.8, bass: ["boogie", "boogie"], cands: [[0, 3, 4], [0, 3, 4]], loop: { major: [0, 0, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4], minor: [0, 0, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4] }, quality: "dom7", sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
+  // funk: a vamp on one or two chords, scratch guitar and syncopated bass in sixteenths
+  funk: { grid: 1, unit: 4, phrase: 2, harm: ["comp", "funk16"], padLevel: 0.6, bass: ["funk16", "funk16"], cands: [[0, 3, 4], [0, 3, 6]], loop: { major: [0, 0, 3, 0], minor: [0, 0, 3, 3] }, sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
   movie: { grid: 1, unit: 8, phrase: 2, harm: ["swell", "arp"], bass: ["pedal", "hold"], cands: [[0, 3, 4], [5, 3, 1]], sidechain: 0, pickups: true, approach: true, swell: "cymbal", stopDown: false }
 };
 
@@ -190,4 +250,4 @@ export function objectAt(sem, x, y) {
 export const LAYERS = ["lead", "harm", "bass", "pad", "perc"];
 export const LAYER_NAME = { lead: "Melody", harm: "Harmony", bass: "Bass", pad: "Pad", perc: "Rhythm" };
 // Drum kit of each style (see rhythm.js)
-export const PERC_NAME = { ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums" };
+export const PERC_NAME = { ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };

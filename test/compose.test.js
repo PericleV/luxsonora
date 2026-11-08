@@ -68,7 +68,7 @@ describe("compose", () => {
           if (nn.layer !== "perc") expect(nn.tim.type).toBe(STYLES[style].inst[nn.layer].type);
         }
         // sixteenth-note grid for the melody (without swing)
-        if (!STYLES[style].swing) for (const nn of sc.notes) if (nn.layer === "lead") expect(Math.abs(nn.t * 4 - Math.round(nn.t * 4))).toBeLessThan(1e-9);
+        if (!STYLES[style].swing && !STYLES[style].swing16) for (const nn of sc.notes) if (nn.layer === "lead") expect(Math.abs(nn.t * 4 - Math.round(nn.t * 4))).toBeLessThan(1e-9);
         // cadence: everything dies out before T when the note could be shortened
         for (const nn of sc.notes) if (nn.point === -2 && nn.layer !== "perc" && nn.dur > 1) expect((nn.t + nn.dur) * spb + nn.tim.r * 1.6).toBeLessThanOrEqual(T + 1e-6);
         // modulation stays in [−1, 1]

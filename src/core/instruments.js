@@ -58,7 +58,16 @@ const SAMPLED = {
   "s.synthbass": SF("Synth bass (GM)", "synth_bass_1", "bass", { a: 0.004, r: 0.12, cut: 3000, col: 0.7 }),
   "s.organ": SF("Drawbar organ", "drawbar_organ", "pad", { a: 0.02, r: 0.3, col: 0.3 }),
   "s.warmpad": SF("Warm pad (GM)", "pad_2_warm", "pad", { a: 0.6, r: 1.6, col: 0.35 }),
-  "s.timpani": SF("Timpani", "timpani", "bass", { a: 0.005, d: 1.2, s: 0.2, r: 1.0, cut: 4000 })
+  "s.timpani": SF("Timpani", "timpani", "bass", { a: 0.005, d: 1.2, s: 0.2, r: 1.0, cut: 4000 }),
+  "s.cleangtr": SF("Clean electric guitar", "electric_guitar_clean", "pluck", { d: 1.6, r: 0.3 }),
+  "s.overdrive": SF("Overdriven guitar", "overdriven_guitar", "pad", { a: 0.01, r: 0.3, cut: 7000, col: 0.9 }),
+  "s.harmonica": SF("Harmonica", "harmonica", "pad", { a: 0.03, r: 0.3, col: 0.45, vib: 8 }),
+  "s.clav": SF("Clavinet", "clavinet", "pluck", { d: 0.6, r: 0.1, col: 0.6 }),
+  "s.slapbass": SF("Slap bass", "slap_bass_1", "bass", { a: 0.003, r: 0.08, cut: 4000, col: 0.6 }),
+  "s.mutedgtr": SF("Muted guitar", "electric_guitar_muted", "pluck", { d: 0.4, r: 0.06, col: 0.5 }),
+  "s.distortion": SF("Distortion guitar", "distortion_guitar", "pad", { a: 0.006, r: 0.15, cut: 6000, col: 0.95 }),
+  "s.pickbass": SF("Picked bass", "electric_bass_pick", "bass", { a: 0.004, r: 0.12, cut: 3500, col: 0.6 }),
+  "s.rockorgan": SF("Rock organ", "rock_organ", "pad", { a: 0.02, r: 0.3, col: 0.4 })
 };
 Object.assign(extra, SAMPLED);
 
@@ -75,13 +84,18 @@ export const STYLE_SAMPLED = {
   lofi: { lead: "s.cp80", harm: "s.wurli", bass: "s.fingerbass" },
   bossa: { lead: "s.flute", harm: "s.nylon", bass: "s.acbass", pad: "s.strings" },
   synthwave: {},
-  classical: { lead: "s.piano", harm: "s.piano", bass: "s.cello", pad: "s.strings" }
+  classical: { lead: "s.piano", harm: "s.piano", bass: "s.cello", pad: "s.strings" },
+  pop: { lead: "s.piano", harm: "s.cleangtr", bass: "s.fingerbass", pad: "s.synthstrings" },
+  rock: { lead: "s.overdrive", harm: "s.distortion", bass: "s.pickbass", pad: "s.organ" },
+  metal: { lead: "s.overdrive", harm: "s.distortion", bass: "s.pickbass", pad: "s.choir" },
+  blues: { lead: "s.jazzgtr", harm: "s.piano", bass: "s.acbass", pad: "s.organ" },
+  funk: { lead: "s.brass", harm: "s.mutedgtr", bass: "s.slapbass", pad: "s.organ" }
 };
-export const STORY_SAMPLED = { ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
+export const STORY_SAMPLED = { pop: "s.flute", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
 
 // With the Story melody the line is long and tied, so a plucked default would cut it into
 // separate attacks: each style uses a sustained lead instead, unless a preset is chosen.
-export const STORY_LEAD = { ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
+export const STORY_LEAD = { blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
 
 // Adds catalog entries (sampled instruments listed at runtime by the UI, see samples.js) to
 // the library without replacing curated presets.

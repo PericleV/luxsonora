@@ -47,7 +47,12 @@ export const STYLE_ROLES = {
   lofi: ["counter", "ornament", "runs", "drone", "ostinato", "sustain", "double"],
   bossa: ["counter", "ornament", "runs", "sustain", "double", "ostinato", "pulse"],
   synthwave: ["ostinato", "sustain", "runs", "counter", "ornament", "double", "pulse"],
-  classical: ["counter", "sustain", "runs", "ornament", "double", "drone", "pulse"]
+  classical: ["counter", "sustain", "runs", "ornament", "double", "drone", "pulse"],
+  pop: ["counter", "ornament", "runs", "sustain", "double", "ostinato", "pulse"],
+  rock: ["sustain", "counter", "runs", "double", "ostinato", "ornament", "pulse"],
+  metal: ["double", "sustain", "runs", "pulse", "counter", "ostinato", "ornament"],
+  blues: ["counter", "sustain", "runs", "ornament", "double", "ostinato", "drone"],
+  funk: ["ostinato", "counter", "sustain", "runs", "ornament", "double", "pulse"]
 };
 // Instrument per style and role: sampled (when sampled instruments are on) and synthesized.
 const SAMPLED = {
@@ -61,7 +66,12 @@ const SAMPLED = {
   lofi: { runs: "s.vibes", counter: "s.tenorsax", ornament: "s.vibes", drone: "s.warmpad", ostinato: "s.nylon", sustain: "s.organ", double: "s.flute", pulse: "s.vibes" },
   bossa: { runs: "s.flute", counter: "s.tenorsax", ornament: "s.vibes", sustain: "s.strings", double: "s.flute", ostinato: "s.nylon", pulse: "s.marimba", drone: "s.contrabass" },
   synthwave: {},
-  classical: { runs: "s.harp", counter: "s.violin", sustain: "s.strings", ornament: "s.flute", double: "s.oboe", drone: "s.contrabass", pulse: "s.timpani", ostinato: "s.pizz" }
+  classical: { runs: "s.harp", counter: "s.violin", sustain: "s.strings", ornament: "s.flute", double: "s.oboe", drone: "s.contrabass", pulse: "s.timpani", ostinato: "s.pizz" },
+  pop: { runs: "s.piano", counter: "s.cleangtr", ornament: "s.glock", sustain: "s.synthstrings", double: "s.flute", ostinato: "s.cleangtr", pulse: "s.fingerbass", drone: "s.warmpad" },
+  blues: { runs: "s.piano", counter: "s.harmonica", sustain: "s.organ", ornament: "s.piano", double: "s.harmonica", ostinato: "s.jazzgtr", drone: "s.organ", pulse: "s.acbass" },
+  funk: { ostinato: "s.clav", counter: "s.tenorsax", sustain: "s.brass", runs: "s.clav", ornament: "s.trumpet", double: "s.trumpet", pulse: "s.slapbass", drone: "s.organ" },
+  rock: { runs: "s.overdrive", counter: "s.overdrive", sustain: "s.organ", double: "s.overdrive", ostinato: "s.cleangtr", ornament: "s.rockorgan", pulse: "s.pickbass", drone: "s.rockorgan" },
+  metal: { runs: "s.overdrive", counter: "s.overdrive", sustain: "s.choir", double: "s.overdrive", ostinato: "s.distortion", ornament: "s.celesta", pulse: "s.timpani", drone: "s.choir" }
 };
 // synthesizer styles take their own sounds for some roles
 const STYLE_SYNTH = { electronic: { ostinato: "electronic.lead", sustain: "electronic.pad", pulse: "electronic.bass" }, synthwave: { ostinato: "synthwave.harm", sustain: "synthwave.pad", pulse: "synthwave.bass", counter: "x.synthlead" } };
@@ -193,6 +203,8 @@ export function extraNotes(ctx) {
         if (from === null || to === null) continue;
         const ps = passage(from, to, F.t1 - win, F.t1, prof, density > 0.6 ? "rich" : "light", ctx.style, ctx.modePcs, t => slotAt(t).pcs);
         for (const x of ps) add(x.t, x.dur, x.midi, 52 + 30 * x.f, { passage: { from: i, to: i + 1, f: x.f }, ...(x.chromatic ? { chromatic: true } : {}) });
+        // the run lands: its arrival note on the next point's first beat, a chord tone there
+        if (ps.length) add(G.t0, Math.min(1, G.dur), to, 70, { passage: { from: i, to: i + 1, f: 1 } });
       }
     } else if (role === "pulse") {
       const [lo, hi] = reg("pulse");

@@ -37,13 +37,14 @@ describe("orchestration levels", () => {
 describe("extra layers", () => {
   for (const style of Object.keys(STYLES)) it(`play in the scale, in their own register, and enter with the arc (${style})`, () => {
     for (const seed of [1, 2]) {
-      const sc = run({ ...P0, style, orch: "full" }, seed), base = 60 + sc.pcOff, scale = new Set(sc.modeIv.map(v => (((v + sc.pc) % 12) + 12) % 12));
+      const sc = run({ ...P0, style, orch: "full" }, seed), base = 60 + sc.pcOff, scale = new Set([...sc.modeIv, ...(sc.melIv || [])].map(v => (((v + sc.pc) % 12) + 12) % 12));
+      const inChord = n => { const S = sc.slots.find(S => n.t >= S.t0 - 1e-9 && n.t < S.t1 - 1e-9); return !!S && S.chord.some(m => ((m - n.midi) % 12 + 12) % 12 === 0); };
       expect(sc.extra.length).toBeGreaterThanOrEqual(4);
       const ids = new Set(sc.extra.map(L => L.id));
       const xs = sc.notes.filter(n => ids.has(n.layer));
       expect(xs.length).toBeGreaterThan(0);
       for (const n of xs) {
-        if (!n.chromatic) expect(scale.has(((n.midi % 12) + 12) % 12)).toBe(true);
+        if (!n.chromatic) expect(scale.has(((n.midi % 12) + 12) % 12) || inChord(n)).toBe(true);
         expect(n.midi).toBeGreaterThanOrEqual(base - 30); expect(n.midi).toBeLessThanOrEqual(base + 28);
         expect(n.tim).toBeTruthy();
         expect((n.t + n.dur) * 60 / sc.bpm).toBeLessThanOrEqual(sc.seconds + 6);

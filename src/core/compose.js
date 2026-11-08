@@ -48,7 +48,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const used = points.slice(0, plan.count);
   const major = modeIv[2] === 4;
   const pent = scale ? (scale === "majpent" || scale === "minpent") : st.pent;
-  const melIv = pent ? (major ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]) : modeIv, n = melIv.length;
+  const melIv = pent ? (major ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]) : !scale && st.melScale ? st.melScale : modeIv, n = melIv.length;
   const baseLead = 60 + pcOff + 12 * octave, stats = imageStats(A), maxE = stats.maxE;
   const inst = resolveInstruments(P.style, P.instruments, P.melody, P.samples === true);
   const texImg = lum || { w: A.W, h: A.H, data: A.L };
@@ -159,17 +159,21 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     let best = null, bo = -1;
     for (const F of out) { const o = Math.min(F.t1, s1) - Math.max(F.t0, s0); if (o > bo + 1e-9) { bo = o; best = F; } }
     const last = slots[slots.length - 1];
-    if (last && last.F === best) last.t1 = s1; else slots.push({ t0: s0, t1: s1, F: best });
+    if (last && last.F === best && !R.loop) last.t1 = s1; else slots.push({ t0: s0, t1: s1, F: best });
     s0 = s1;
   }
   // classical: the chord before the final cadence is the dominant, so the piece ends V-I
   if (R.cadentialV && slots.length > 1) { const S = slots[slots.length - 1]; S.F = { ...S.F, root: 4, tones: S.F.tones }; }
+  // pop: the four-chord loop, one chord per bar, whatever the points (they still shape everything else)
+  if (R.loop) { const seq = modeIv[2] === 3 ? R.loop.minor : R.loop.major; slots.forEach((S, k) => { S.F = { ...S.F, root: seq[k % seq.length] }; }); }
   // voicing: each slot's chord moves to the octave closest to the previous chord's centre
   let vPrev = null;
   for (const S of slots) {
     const centre = vPrev ? vPrev.reduce((a, b) => a + b, 0) / vPrev.length : 60;
     S.root = S.F.root; S.tones = S.F.tones;
-    S.chord = [...new Set(S.tones.map(o => { let m = degMidi(S.root + o, modeIv, 48 + pcOff); while (m < centre - 7) m += 12; while (m > centre + 7) m -= 12; return m; }))].sort((a, b) => a - b);
+    // blues: every chord is a dominant seventh on its root (I7, IV7, V7), outside the mode on purpose
+    const pitches = R.quality === "dom7" ? [0, 4, 7, 10].map(sm => degMidi(S.root, modeIv, 48 + pcOff) + sm) : S.tones.map(o => degMidi(S.root + o, modeIv, 48 + pcOff));
+    S.chord = [...new Set(pitches.map(m0 => { let m = m0; while (m < centre - 7) m += 12; while (m > centre + 7) m -= 12; return m; }))].sort((a, b) => a - b);
     S.pcs = new Set(S.chord.map(m => ((m % 12) + 12) % 12));
     vPrev = S.chord;
   }
@@ -177,15 +181,38 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const slotAt = tt => slots.find(S => tt >= S.t0 - 1e-9 && tt < S.t1 - 1e-9) || slots[slots.length - 1];
 
   // melody on the grid: a note on a beat (or a long note) that is not in the slot's chord moves
-  // to the nearest chord tone of the melody scale within a whole tone
+  // to the nearest chord tone (within a minor third); so does an "avoid note", a non-chord note
+  // a semitone from a chord tone held half a beat or more (it rubs against the chord), which may
+  // instead become a tension (a scale tone a whole step from the chord, like a ninth or a sixth)
   const scalePcs = new Set(melIv.map(iv => (((iv + pcOff) % 12) + 12) % 12));
   const pcOf = m => ((m % 12) + 12) % 12;
-  for (const nn of notes) {
-    if (nn.layer !== "lead" || nn.point < 0 || !slots.length) continue;
-    const S = slotAt(nn.t), strong = Math.abs(nn.t - Math.round(nn.t)) < 1e-6 || nn.dur >= 0.9;
-    if (!strong || S.pcs.has(pcOf(nn.midi))) continue;
-    for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (scalePcs.has(pcOf(m)) && S.pcs.has(pcOf(m))) { nn.midi = m; nn.snapped = true; break; } }
-  }
+  const rubs = (p, S) => S.pcs.has(pcOf(p + 1)) || S.pcs.has(pcOf(p - 1));
+  // a non-chord note that moves by step into a chord tone right after it is an appoggiatura or a
+  // passing note: it resolves, so it stays
+  const resolves = nn => {
+    let nx = null;
+    for (const m of notes) if (m.layer === "lead" && !m.dbl && m.t > nn.t + 1e-6 && (!nx || m.t < nx.t)) nx = m;
+    if (!(nx && nx.t <= nn.t + nn.dur + 0.25 && Math.abs(nx.midi - nn.midi) <= 2 && slotAt(nx.t).pcs.has(pcOf(nx.midi)) && nn.dur <= 1 + 1e-9)) return false;
+    // longer than half a beat, it must not sit a semitone from the chord's root (a minor ninth)
+    const S = slotAt(nn.t), r = pcOf(modeIv[((S.root % modeIv.length) + modeIv.length) % modeIv.length] + pcOff), p = pcOf(nn.midi);
+    return nn.dur <= 0.5 + 1e-9 || (pcOf(p - r) !== 1 && pcOf(r - p) !== 1);
+  };
+  const lastOfPassage = nn => { let last = nn; for (const m of notes) if (m.layer === "lead" && m.passage && nn.passage && m.passage.from === nn.passage.from && m.t > last.t) last = m; return last; };
+  const snapLead = list => {
+    for (const nn of list) {
+      if (nn.layer !== "lead" || nn.point < 0 || nn.dbl || !slots.length) continue;
+      const S = slotAt(nn.t), p = pcOf(nn.midi);
+      if (S.pcs.has(p)) continue;
+      const strong = Math.abs(nn.t - Math.round(nn.t)) < 1e-6 || nn.dur >= 0.9, avoid = nn.dur >= 0.5 - 1e-9 && rubs(p, S);
+      if (!strong && !avoid) continue;
+      if (!strong && resolves(nn)) continue;
+      let to = null;
+      for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (scalePcs.has(pcOf(m)) && S.pcs.has(pcOf(m))) { to = m; break; } }
+      if (to === null && !strong) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (scalePcs.has(pcOf(m)) && !rubs(pcOf(m), S)) { to = m; break; } }
+      if (to !== null) { nn.midi = to; nn.snapped = true; }
+    }
+  };
+  snapLead(notes);
   // connections (passages.js): the path between two points becomes a passage into the next point
   const connect = P.connect ?? "off";
   if (connect !== "off") {
@@ -203,7 +230,9 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
       // the passage replaces the end of the point: its later notes give way
       for (let k = notes.length - 1; k >= 0; k--) if (notes[k].layer === "lead" && notes[k].point === i && notes[k] !== L && notes[k].t >= ps[0].t - 1e-9) notes.splice(k, 1);
       L.dur = Math.max(0.2, (ps[0].t - L.t) * 0.97);
-      for (const x of ps) notes.push({ ...L, t: x.t, dur: x.dur, midi: x.midi, vel: Math.round(L.vel * (0.72 + 0.2 * x.f)), glide: null, passage: { from: i, to: i + 1, f: x.f }, ...(x.chromatic ? { chromatic: true } : {}) });
+      const added = ps.map(x => ({ ...L, t: x.t, dur: x.dur, midi: x.midi, vel: Math.round(L.vel * (0.72 + 0.2 * x.f)), glide: null, passage: { from: i, to: i + 1, f: x.f }, ...(x.chromatic ? { chromatic: true } : {}) }));
+      snapLead(added.slice(0, -1));
+      notes.push(...added);
       F.passage = { notes: ps.length, crossings: prof.crossings.length, regions: prof.regions, len: prof.len, at: ps.map(x => x.f) };
     }
   } else if (R.pickups && smooth > 0) {
@@ -230,7 +259,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     // the bass enters after the introduction (drone-based styles keep a pedal; epic keeps its pulse)
     if (arcOn && sec === "intro" && bKind !== "pedal" && P.style !== "epic") bKind = "rest";
     S.bassKind = bKind;
-    const hn = harmonyNotes(S.harmKind, S.chord, S.t0, S.t1 - S.t0, D, ad, { vel: Math.round((40 + 30 * F.reg.entropy) * dyn), tim: F.tim.harm, pan: F.pan * 0.4, glide: F.glides.harm });
+    const hn = harmonyNotes(S.harmKind, S.chord, S.t0, S.t1 - S.t0, D, ad, { vel: Math.round((40 + 30 * F.reg.entropy) * dyn), tim: F.tim.harm, pan: F.pan * 0.4, glide: F.glides.harm, rootPc: (((degMidi(S.root, modeIv, pcOff)) % 12) + 12) % 12 });
     const bn = bassNotes(bKind, S.root, modeIv, pcOff, bmOf(S.root), S.t0, S.t1 - S.t0, ad, { tim: F.tim.bass, glide: F.glides.bass }, { tonic: tonicBm, nextBm: next ? bmOf(next.root) : null, nextRoot: next ? next.root : null, approach: R.approach });
     for (const nn of hn) notes.push({ ...nn, point: pointAt(nn.t).idx });
     for (const nn of bn) notes.push({ ...nn, point: pointAt(nn.t).idx, vel: clampInt(Math.round(nn.vel * dyn), 1, 127) });
@@ -294,13 +323,15 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   let ptim = modulate(inst.pad, padM, LAYER_DEPTH.pad, P.timbre);
   // a wavetable pad reads a wide profile through the image centre, across the background's dominant orientation
   if (ptim.type === "wave") ptim = { ...ptim, wave: makeWave(0.5, 0.5, 0.3, bgZone.ori || [1, 1, 1, 1]) };
-  const padVel = Math.round(30 + 50 * clamp(bgArea * 1.4));
+  // a style can keep the pad lower (rock and metal: a held pad under distorted guitars drones)
+  const padK = R.padLevel ?? 1;
+  const padVel = Math.round((30 + 50 * clamp(bgArea * 1.4)) * padK);
   if (cov && out.length) {
     // The pad follows the harmony: three voices move to the chord of each focus point by the
     // smallest total motion, and a voice whose note stays the same is held across the
     // boundary instead of restruck (its filter glides to the new timbre). Each new note takes
     // the timbre of the background around the current point (surroundZone).
-    const triad = rt => [0, 2, 4].map(o => (((48 + pcOff + degMidi(rt + o, modeIv, 0)) % 12) + 12) % 12);
+    const triad = rt => (R.quality === "dom7" ? [0, 4, 7].map(sm => (((48 + pcOff + degMidi(rt, modeIv, 0) + sm) % 12) + 12) % 12) : [0, 2, 4].map(o => (((48 + pcOff + degMidi(rt + o, modeIv, 0)) % 12) + 12) % 12));
     const local = new Map(), voices = [null, null, null];
     const localPad = F => {
       const key = F.x.toFixed(5) + "," + F.y.toFixed(5) + "," + (F.r ?? 0);
@@ -308,7 +339,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
         const sz = surroundZone(A, cov, F.x, F.y, F.r ?? 0.07), m = modulation(zoneFeatures(sz.zone, maxE), stats, null, 0);
         let tim = modulate(inst.pad, m, LAYER_DEPTH.pad, P.timbre);
         if (tim.type === "wave") tim = { ...tim, wave: ptim.wave };
-        local.set(key, { tim, m, vel: Math.round(30 + 50 * clamp(lerp(bgArea, sz.amount, 0.5) * 1.4)) });
+        local.set(key, { tim, m, vel: Math.round((30 + 50 * clamp(lerp(bgArea, sz.amount, 0.5) * 1.4)) * padK) });
       }
       return local.get(key);
     };
@@ -342,6 +373,26 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
 
   const extraIds = new Set(extra.map(L => L.id));
   applyContours({ notes, points: out, body: plan.body, smooth, extraIds });
+  // ties and legato lengthen notes: a passing note held longer now may rub against the chord
+  snapLead(notes.filter(nn => !(nn.passage && !nn.snapped && nn === lastOfPassage(nn))));
+  // a long melody note held into a chord it rubs against (a semitone from one of its tones) is
+  // held until the change, then moves by step to the nearest tone of the new chord: a suspension
+  // that resolves
+  if (slots.length) for (const nn of notes.filter(m => m.layer === "lead" && !m.dbl && m.dur > 0.5)) {
+    for (const S of slots) {
+      if (S.t0 <= nn.t + 0.25 || S.t0 >= nn.t + nn.dur - 0.25) continue;
+      const p = pcOf(nn.midi);
+      if (S.pcs.has(p) || !rubs(p, S)) continue;
+      let to = null;
+      for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pcOf(nn.midi + d)) && scalePcs.has(pcOf(nn.midi + d))) { to = nn.midi + d; break; }
+      const rest = nn.t + nn.dur - S.t0;
+      // another melody note starts right there: the held one just ends at the change
+      if (to === null || notes.some(m => m.layer === "lead" && !m.dbl && m !== nn && m.t >= S.t0 - 1e-6 && m.t < S.t0 + 0.25)) { nn.dur = S.t0 - nn.t; break; }
+      nn.dur = S.t0 - nn.t;
+      notes.push({ ...nn, t: S.t0, dur: rest, midi: to, vel: Math.round(nn.vel * 0.85), glide: null, resolved: true });
+      break;
+    }
+  }
   // stop-down (trailer device): everything stops for the half beat before the climax; notes
   // held across that gap are cut and the held ones come back on the climax
   if (R.stopDown && arcOn && arc.climax > 0) {
@@ -361,6 +412,9 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const score = { notes, points: out };
   doubleClimax(score);
   doubleNotes({ notes, points: out, extra, inst, body: plan.body });
+  keepMelodyOnTop(notes, extra);
+  trimRestrikes(notes, extra);
+  clipAtChanges(notes, slots, extra, plan.body);
   notes.sort((a, b) => a.t - b.t || a.midi - b.midi);
   return {
     version: SCORE_VERSION, bpm, bpmStyle, bars: plan.bars, total: plan.total, body: plan.body, seconds: P.duration,
@@ -438,6 +492,122 @@ export function applyContours(score) {
 
 // Orchestration of the climax: the melody is doubled an octave above (below when it would
 // pass MIDI 96) at 55% velocity. Applied after the story melody too (see story.js).
+// The melody stays on top: a harmony note (or a held section chord) that would sound above the
+// melody moves down an octave while it stays at or above MIDI 48 (lower it would get muddy).
+export function keepMelodyOnTop(notes, extra = []) {
+  const held = new Set(["harm", ...extra.filter(L => L.role === "sustain").map(L => L.id)]);
+  const lead = notes.filter(n => n.layer === "lead" && !n.dbl), above = [];
+  for (const n of notes) {
+    if (!held.has(n.layer)) continue;
+    let low = Infinity;
+    for (const m of lead) if (m.t < n.t + n.dur - 0.05 && m.t + m.dur > n.t + 0.05 && m.midi < low) low = m.midi;
+    if (low === Infinity) continue;
+    while (n.midi > low - 1 && n.midi - 12 >= 48) n.midi -= 12;
+    if (n.midi > low - 1) above.push([n, low]);
+  }
+  // a voice that still covers the melody is left out when its chord keeps others under the melody;
+  // a voice moved onto another of its chord (an octave folded onto the root) is left out too
+  const drop = new Set(), seen = new Map();
+  for (const n of notes) {
+    if (!held.has(n.layer)) continue;
+    const k = n.layer + "|" + n.t.toFixed(6) + "|" + n.midi;
+    if (seen.has(k)) drop.add(n); else seen.set(k, n);
+  }
+  for (const [n, low] of above) if (notes.some(m => m !== n && m.layer === n.layer && Math.abs(m.t - n.t) < 1e-6 && m.midi < low - 1 && !drop.has(m))) drop.add(n);
+  for (let k = notes.length - 1; k >= 0; k--) if (drop.has(notes[k])) notes.splice(k, 1);
+}
+// A note that starts while the same pitch still sounds in its layer ends the earlier one there:
+// two copies of one sampled note would phase and click. Single-line layers (the melody, the
+// bass, counter-melody, runs, doubling, ostinato, pulse, ornaments) end the earlier note at any
+// pitch, so a held note never rubs against the next one.
+const MONO_ROLES = new Set(["counter", "runs", "double", "ostinato", "pulse", "ornament"]);
+export function trimRestrikes(notes, extra = []) {
+  const mono = new Set(["lead", "bass", ...extra.filter(L => MONO_ROLES.has(L.role)).map(L => L.id)]);
+  const by = new Map();
+  for (const n of notes) { if (n.layer === "perc" || n.dbl) continue; const k = mono.has(n.layer) ? n.layer : n.layer + "|" + n.midi; if (!by.has(k)) by.set(k, []); by.get(k).push(n); }
+  for (const list of by.values()) {
+    list.sort((a, b) => a.t - b.t);
+    for (let i = 0; i + 1 < list.length; i++) { const a = list[i], b = list[i + 1]; if (b.t > a.t + 1e-6 && b.t < a.t + a.dur - 1e-6) a.dur = Math.max(0.05, b.t - a.t - 0.02); }
+  }
+}
+
+// An accompaniment note (the harmony or an extra layer, not the drone, which is a pedal) that
+// would sound on into a chord it rubs against (a semitone from one of its tones) ends at the change.
+// The same rules for a melody written after the composition (Story, Improvise): a note on a
+// beat or a long one moves to a chord tone of the melody's scale; an "avoid note" held half a
+// beat moves too, unless it resolves by step into a chord tone; a long note held into a chord it
+// rubs against resolves by step at the change.
+export function fitMelody(score) {
+  const pc = m => ((m % 12) + 12) % 12;
+  const slots = (score.slots || []).map(S => ({ ...S, pcs: new Set(S.chord.map(pc)) }));
+  if (!slots.length) return;
+  const scalePcs = new Set(score.melIv.map(iv => pc(iv + score.pcOff)));
+  const slotAt = t => slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || slots[slots.length - 1];
+  const rubs = (p, S) => S.pcs.has(pc(p + 1)) || S.pcs.has(pc(p - 1));
+  const lead = score.notes.filter(n => n.layer === "lead" && !n.dbl && n.point >= 0).sort((a, b) => a.t - b.t);
+  lead.forEach((nn, i) => {
+    if (nn.t >= score.body - 1e-9) return;
+    const S = slotAt(nn.t), p = pc(nn.midi);
+    if (S.pcs.has(p)) return;
+    const strong = Math.abs(nn.t - Math.round(nn.t)) < 1e-6 || nn.dur >= 0.9, avoid = nn.dur >= 0.5 - 1e-9 && rubs(p, S);
+    if (!strong && !avoid) return;
+    const nx = lead[i + 1];
+    const r = pc(score.modeIv[((S.root % score.modeIv.length) + score.modeIv.length) % score.modeIv.length] + score.pcOff);
+    const rootRub = pc(p - r) === 1 || pc(r - p) === 1;
+    if (!strong && nx && nx.t <= nn.t + nn.dur + 0.25 && Math.abs(nx.midi - nn.midi) <= 2 && slotAt(nx.t).pcs.has(pc(nx.midi)) && nn.dur <= 1 && (nn.dur <= 0.5 || !rootRub)) return;
+    let to = null;
+    for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (scalePcs.has(pc(m)) && S.pcs.has(pc(m))) { to = m; break; } }
+    if (to === null && !strong) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (scalePcs.has(pc(m)) && !rubs(pc(m), S)) { to = m; break; } }
+    if (to !== null) { nn.midi = to; nn.snapped = true; }
+  });
+  for (const nn of lead) {
+    if (nn.dur <= 0.5) continue;
+    for (const S of slots) {
+      if (S.t0 <= nn.t + 0.25 || S.t0 >= nn.t + nn.dur - 0.25) continue;
+      const p = pc(nn.midi);
+      if (S.pcs.has(p) || !rubs(p, S)) continue;
+      let to = null;
+      for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pc(nn.midi + d)) && scalePcs.has(pc(nn.midi + d))) { to = nn.midi + d; break; }
+      const rest = nn.t + nn.dur - S.t0;
+      if (to === null || lead.some(m => m !== nn && m.t >= S.t0 - 1e-6 && m.t < S.t0 + 0.25)) { nn.dur = S.t0 - nn.t; break; }
+      nn.dur = S.t0 - nn.t;
+      score.notes.push({ ...nn, t: S.t0, dur: rest, midi: to, vel: Math.round(nn.vel * 0.85), glide: null, resolved: true });
+      break;
+    }
+  }
+}
+// Voices after any melody change: the melody on top, no restrikes, no notes held into a chord
+// they rub against.
+export function cleanVoices(score) {
+  const pc = m => ((m % 12) + 12) % 12;
+  keepMelodyOnTop(score.notes, score.extra || []);
+  trimRestrikes(score.notes, score.extra || []);
+  clipAtChanges(score.notes, (score.slots || []).map(S => ({ ...S, pcs: new Set(S.chord.map(pc)) })), score.extra || [], score.body);
+}
+
+export function clipAtChanges(notes, slots, extra = [], body = Infinity) {
+  if (!slots.length) return;
+  const lines = new Set(extra.filter(L => ["runs", "counter", "ornament"].includes(L.role)).map(L => L.id));
+  const pcx = m => ((m % 12) + 12) % 12;
+  for (const n of notes) {
+    if (!lines.has(n.layer) || n.chromatic || n.dur < 0.5 - 1e-9) continue;
+    const S = slots.find(S => n.t >= S.t0 - 1e-9 && n.t < S.t1 - 1e-9); if (!S) continue;
+    const p = pcx(n.midi);
+    if (S.pcs.has(p) || !(S.pcs.has(pcx(p + 1)) || S.pcs.has(pcx(p - 1)))) continue;
+    for (const d of [-1, 1, -2, 2]) if (S.pcs.has(pcx(n.midi + d))) { n.midi += d; break; }
+  }
+  const layers = new Set(["harm", ...extra.filter(L => L.role !== "drone").map(L => L.id)]);
+  const pc = m => ((m % 12) + 12) % 12;
+  for (const n of notes) {
+    if (!layers.has(n.layer) || n.chromatic) continue;
+    for (const S of slots) {
+      if (S.t0 <= n.t + 0.05 || S.t0 >= n.t + n.dur - 0.1 || S.t0 >= body) continue;
+      const p = pc(n.midi);
+      if (!S.pcs.has(p) && (S.pcs.has(pc(p + 1)) || S.pcs.has(pc(p - 1)))) { n.dur = Math.max(0.1, S.t0 - n.t - 0.02); break; }
+    }
+  }
+}
+
 export function doubleClimax(score) {
   const dbl = [];
   for (const nn of score.notes) {

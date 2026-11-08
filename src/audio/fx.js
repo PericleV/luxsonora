@@ -31,6 +31,19 @@ export function defaultFx() {
 }
 
 // tanh soft clipping, normalized so the curve passes through ±1.
+// A style's own distortion (rock and metal guitars, theory.js RULES.drive) on its synthesized
+// layers: the drive of a layer is the larger of the user's and the style's; sampled guitars are
+// already distorted and get none (a second distortion over them sounds harsh).
+export function styleFx(fx, style, inst = {}, rules = {}) {
+  const d = rules[style] && rules[style].drive;
+  if (!d) return fx;
+  const out = structuredClone(fx);
+  for (const [l, v] of Object.entries(d)) {
+    const want = inst[l] && inst[l].type === "sample" ? 0 : v;
+    out.layer[l] = { ...(out.layer[l] || { drive: 0, rev: 0.45, dly: 0.1 }), drive: Math.max((out.layer[l] && out.layer[l].drive) || 0, want) };
+  }
+  return out;
+}
 export function driveCurve(drive, n = 2048) {
   const k = 1 + 9 * drive, c = new Float32Array(n), norm = Math.tanh(k);
   for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(k * x) / norm; }

@@ -140,6 +140,8 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [ ] Spectral texture layer (Photosounder / Virtual ANS-style additive synthesis)
 - [x] Video export (MP4: image, animated path and effects, sound) in the image's shape, 16:9, 1:1 or 9:16 for Stories and Reels, with a live preview on the stage
 - [x] Professional video: platform presets and safe areas, 1440p and 4K, quality levels, smoothed camera with easing curves, curved paths and 11 line styles, opacities for travelled and upcoming parts, labels on places (detected or your own), sound-reactive effects (beats, spectrum, waveform), colour grades, vignette, grain, fonts, end card, fades, saved looks; WebM, GIF and PNG poster exports
+- [x] Harmony audit and voice-leading rules (avoid notes, suspensions, melody on top, restrikes); video cover; draggable text and more line, place and colour options
+- [x] Pop, Rock, Metal, Blues and Funk with their genre rules (four-chord loop, power chords, palm-muted riffs, double bass drum, the 12-bar form with dominant sevenths and a boogie bass, a funk vamp with scratch guitar and ghost notes)
 - [x] Audio export as WAV 16/24-bit, MP3 and M4A (AAC); Play waits for the neural models instead of starting by itself
 - [ ] Optional perfect loop (reverb tail added over the start)
 - [ ] Import of real eye-tracker focus points (x, y, duration)

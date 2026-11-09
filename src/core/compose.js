@@ -6,6 +6,7 @@ import { planTime } from "./duration.js";
 import { surroundZone } from "./focus.js";
 import { pathProfile, passage } from "./passages.js";
 import { expertLayers, applyExpertChords, applyExpertNotes } from "./expert.js";
+import { introNotes } from "./intro.js";
 import { ruleOn, planModulation, applyPivots, transposeWindow, phraseCadences, contrastOf, leapRecovery, noParallels, melodyPeak, picardy } from "./rules.js";
 import { dramaticArc, dynamics } from "./arc.js";
 import { rhythmPart, areaDrive, DRUM_NAME } from "./rhythm.js";
@@ -48,7 +49,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const bpmStyle = lerp(st.tempo[0], st.tempo[1], clamp(energy)) * (1 + P.tempoAdj);
   // weight w (editable; defaults to the saliency at the point) sets the share of time
   const weightOf = f => (f.w ?? f.s);
-  const plan = planTime(P.duration, bpmStyle, points.map(f => 1 + 3 * weightOf(f)), R.grid ?? 1);
+  const plan = planTime(P.duration, bpmStyle, points.map(f => 1 + 3 * weightOf(f)), R.grid ?? 1, P.intro ?? "off", P.end ?? 1);
   const bpm = plan.bpm, spb = 60 / bpm;
   const used = points.slice(0, plan.count);
   const major = modeIv[2] === 4;
@@ -464,15 +465,32 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   if (ruleOn(P, "melodyTop")) keepMelodyOnTop(notes, extra);
   if (ruleOn(P, "restrikes")) trimRestrikes(notes, extra);
   if (ruleOn(P, "stale")) clipAtChanges(notes, slots, extra, plan.body);
+  // no ending: the piece stops with its last place (nothing generated after it)
+  if (plan.end === 0) for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.point === -2 || nn.t >= plan.total - 1e-9) notes.splice(k, 1); else if (nn.t + nn.dur > plan.total) nn.dur = plan.total - nn.t; }
+  // the generated intro: everything so far moves later by its length, and the intro is written before it
+  const I = plan.intro;
+  let introSlot = null;
+  if (I > 0) {
+    for (const nn of notes) nn.t += I;
+    for (const F of out) { F.t0 += I; F.t1 += I; }
+    for (const S of slots) { S.t0 += I; S.t1 += I; }
+    if (mod) { mod.t0 += I; mod.t1 += I; }
+    const firstLead = notes.filter(nn => nn.layer === "lead" && !nn.dbl && nn.point >= 0).sort((a, b) => a.t - b.t)[0];
+    const tonicChord = [0, 2, 4].map(o => degMidi(o, modeIv, 48 + pcOff)).map(m => { while (m < 52) m += 12; while (m > 64) m -= 12; return m; }).sort((a, b) => a - b);
+    notes.push(...introNotes({ I, style: P.style, R, tonicChord, bass: cadBass, padChord: [0, 2, 4].map(o => degMidi(o, modeIv, 48 + pcOff)), firstLead, scalePcs, tim: { lead: cadTim.lead, harm: cadTim.harm, bass: cadTim.bass, pad: ptim }, padVel }));
+    introSlot = { t0: 0, t1: I, point: -3, root: 0, chord: tonicChord, harmKind: "intro", bassKind: "intro", shift: 0, cadence: null, expert: null, intro: true };
+  }
+  const T = plan.total + I;
+  for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.t >= T - 1e-9) notes.splice(k, 1); else if (nn.t + nn.dur > T) nn.dur = T - nn.t; }
   notes.sort((a, b) => a.t - b.t || a.midi - b.midi);
   return {
-    version: SCORE_VERSION, bpm, bpmStyle, bars: plan.bars, total: plan.total, body: plan.body, seconds: P.duration,
+    version: SCORE_VERSION, bpm, bpmStyle, bars: plan.bars, total: T, body: plan.body + I, intro: I, endBeats: plan.end, seconds: P.duration,
     requested: points.length, truncated: points.length - plan.count,
     pc, pcOff, modeKey, modeIv, melIv, major, val, energy, notes, points: out, stats, keyManual: P.keyMode === "manual", scaleManual: !!scale, pent, smooth,
-    cadence: { t: tc, chord: cadChord, lead: cadLead, bass: cadBass },
+    cadence: plan.end > 0 ? { t: tc + I, chord: cadChord, lead: cadLead, bass: cadBass } : null,
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
     extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name, ...(L.only ? { only: true, rule: L.rule } : {}) })), expert: P.expert && P.expert.length ? P.expert : null, orch: P.orch === "custom" ? "custom" : (P.orch || "small"),
-    slots: slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null, expert: S.expert || null })),
+    slots: [...(introSlot ? [introSlot] : []), ...slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null, expert: S.expert || null }))],
     modulation: mod ? { t0: mod.t0, t1: mod.t1, shift: mod.shift, dir: mod.dir, keyPc: mod.keyPc } : null, picardy: !!picardyOn, rules: P.rules || null, sidechain: ruleOn(P, "sidechain") ? R.sidechain || 0 : 0, buildUp: P.buildUp ?? 0.5
   };
 }

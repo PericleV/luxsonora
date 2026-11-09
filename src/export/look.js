@@ -102,21 +102,70 @@ export function editPixel(r, g, b, e, L) {
   if (L.r) r = lutAt(L.r, r); if (L.g) g = lutAt(L.g, g); if (L.b) b = lutAt(L.b, b);
   return [clamp(r), clamp(g), clamp(b)];
 }
-// An edited and graded copy of a canvas (the same canvas when there is nothing to do).
-export function editCanvas(src, e, grade = "none", amount = 0) {
-  const doEdit = !editIsIdentity(e), doGrade = grade && grade !== "none" && amount > 0;
-  if (!doEdit && !doGrade) return src;
+// The per-channel part of the edit (white balance, exposure, levels, contrast) for each 8-bit value
+// of one channel (0 red, 1 green, 2 blue), as a table: the same result as editPixel, computed 256
+// times instead of once per pixel.
+function channelLUT(e, ch) {
+  const t = e.temp || 0, ti = e.tint || 0, gain = (ch === 0 ? 1 + 0.22 * t + 0.06 * ti : ch === 1 ? 1 - 0.14 * ti : 1 - 0.22 * t + 0.06 * ti) * Math.pow(2, e.exposure || 0);
+  const lo = e.black ?? 0, hi = Math.max(lo + 0.02, e.white ?? 1), gm = 1 / Math.max(0.1, e.gamma ?? 1), k = 1 + (e.contrast || 0);
+  const out = new Float32Array(256);
+  for (let v = 0; v < 256; v++) { let x = Math.pow(clamp(((v / 255) * gain - lo) / (hi - lo)), gm); if (k !== 1) x = 0.5 + (x - 0.5) * k; out[v] = x; }
+  return out;
+}
+// The edit prepared once (tables and amounts), then applied to a range of pixels: plain numbers, no
+// allocation per pixel.
+function prepareEdit(e, grade, amount) {
+  const doEdit = !editIsIdentity(e), doGrade = !!(grade && grade !== "none" && amount > 0);
+  const E = doEdit ? e : defaultEdit(), cv = (E && E.curves) || {}, Lc = {};
+  for (const k of ["l", "r", "g", "b"]) if (!isId(cv[k])) Lc[k] = curveLUT(cv[k]);
+  return { doEdit, doGrade, grade, amount, Lc, LR: channelLUT(E, 0), LG: channelLUT(E, 1), LB: channelLUT(E, 2),
+    shA: (E.shadows || 0) * 0.35, hlA: (E.highlights || 0) * 0.35, sat: E.saturation || 0, vib: E.vibrance || 0 };
+}
+function editRange(d, p0, p1, X) {
+  const { doEdit, doGrade, Lc, LR, LG, LB, shA, hlA, sat, vib } = X, cL = Lc.l, cR = Lc.r, cG = Lc.g, cB = Lc.b;
+  for (let p = p0; p < p1; p += 4) {
+    let r = LR[d[p]], gg = LG[d[p + 1]], b = LB[d[p + 2]];
+    if (doEdit) {
+      let lum = 0.2126 * r + 0.7152 * gg + 0.0722 * b; lum = lum < 0 ? 0 : lum > 1 ? 1 : lum;
+      if (shA !== 0 || hlA !== 0) { const dl = shA * (1 - lum) * (1 - lum) + hlA * lum * lum; r += dl; gg += dl; b += dl; lum = 0.2126 * r + 0.7152 * gg + 0.0722 * b; lum = lum < 0 ? 0 : lum > 1 ? 1 : lum; }
+      if (sat !== 0 || vib !== 0) {
+        const mx = r > gg ? (r > b ? r : b) : gg > b ? gg : b, mn = r < gg ? (r < b ? r : b) : gg < b ? gg : b, s0 = mx - mn;
+        const k = 1 + sat + vib * (1 - (s0 > 1 ? 1 : s0)); r = lum + (r - lum) * k; gg = lum + (gg - lum) * k; b = lum + (b - lum) * k;
+      }
+      if (cL) { let l0 = 0.2126 * r + 0.7152 * gg + 0.0722 * b; l0 = l0 < 0 ? 0 : l0 > 1 ? 1 : l0; const x = l0 * 255, i = x >= 255 ? 254 : x | 0, dl = cL[i] + (cL[i + 1] - cL[i]) * (x - i) - l0; r += dl; gg += dl; b += dl; }
+      if (cR) { const v = r < 0 ? 0 : r > 1 ? 1 : r, x = v * 255, i = x >= 255 ? 254 : x | 0; r = cR[i] + (cR[i + 1] - cR[i]) * (x - i); }
+      if (cG) { const v = gg < 0 ? 0 : gg > 1 ? 1 : gg, x = v * 255, i = x >= 255 ? 254 : x | 0; gg = cG[i] + (cG[i + 1] - cG[i]) * (x - i); }
+      if (cB) { const v = b < 0 ? 0 : b > 1 ? 1 : b, x = v * 255, i = x >= 255 ? 254 : x | 0; b = cB[i] + (cB[i + 1] - cB[i]) * (x - i); }
+    }
+    if (doGrade) { const o = gradePixel(r < 0 ? 0 : r > 1 ? 1 : r, gg < 0 ? 0 : gg > 1 ? 1 : gg, b < 0 ? 0 : b > 1 ? 1 : b, X.grade, X.amount); r = o[0]; gg = o[1]; b = o[2]; }
+    d[p] = r * 255; d[p + 1] = gg * 255; d[p + 2] = b * 255; // the clamped array clamps
+  }
+}
+const needsEdit = (e, grade, amount) => !editIsIdentity(e) || (grade && grade !== "none" && amount > 0);
+function editTarget(src) {
   const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
   const g = c.getContext("2d"); g.drawImage(src, 0, 0);
-  const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
-  const cv = (e && e.curves) || {}, L = {};
-  for (const k of ["l", "r", "g", "b"]) if (!isId(cv[k])) L[k] = curveLUT(cv[k]);
-  for (let p = 0; p < d.length; p += 4) {
-    let o = [d[p] / 255, d[p + 1] / 255, d[p + 2] / 255];
-    if (doEdit) o = editPixel(o[0], o[1], o[2], e, L);
-    if (doGrade) o = gradePixel(o[0], o[1], o[2], grade, amount);
-    d[p] = o[0] * 255; d[p + 1] = o[1] * 255; d[p + 2] = o[2] * 255;
+  return { c, g, im: g.getImageData(0, 0, c.width, c.height) };
+}
+// An edited and graded copy of a canvas (the same canvas when there is nothing to do).
+export function editCanvas(src, e, grade = "none", amount = 0) {
+  if (!needsEdit(e, grade, amount)) return src;
+  const { c, g, im } = editTarget(src);
+  editRange(im.data, 0, im.data.length, prepareEdit(e, grade, amount));
+  g.putImageData(im, 0, 0);
+  return c;
+}
+// The same, a slice at a time between frames, so a large picture never freezes the page; resolves
+// to null when cancelled (alive() turned false).
+export async function editCanvasAsync(src, e, grade = "none", amount = 0, alive = () => true) {
+  if (!needsEdit(e, grade, amount)) return src;
+  const { c, g, im } = editTarget(src), X = prepareEdit(e, grade, amount), d = im.data, step = 4 * 400000;
+  for (let p = 0; p < d.length; p += step) {
+    if (!alive()) return null;
+    editRange(d, p, Math.min(d.length, p + step), X);
+    await new Promise(r => setTimeout(r, 0));
   }
+  if (!alive()) return null;
   g.putImageData(im, 0, 0);
   return c;
 }

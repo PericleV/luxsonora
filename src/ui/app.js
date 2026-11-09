@@ -39,7 +39,7 @@ import { CONNECT } from "../core/passages.js";
 import { HARM_NAME, BASS_NAME } from "../core/patterns.js";
 import { AUDIO_FORMATS, encodeAudio, masterGain, wavEncode } from "../export/audio.js";
 import { defaultVideo, frameSize, videoScene, drawVideoFrame, encodeVideo, encodeGif, gifRange, posterPng, hasCover } from "../export/video.js";
-import { editCanvas, ensureFont, fadeAudio, QUALITY, safeArea } from "../export/look.js";
+import { editCanvas, editCanvasAsync, ensureFont, fadeAudio, QUALITY, safeArea } from "../export/look.js";
 import { analyzeAudio } from "../export/reactive.js";
 import { autoLabels } from "../export/labels.js";
 import qrUrl from "../assets/instagram-qr.webp";
@@ -57,6 +57,8 @@ const P = {
   expert: [],
   // Advanced: composition (chord changes, swing, how the layers build up, contrast) and performance (perform.js)
   chordRate: 1, swingAdj: 1, buildUp: 0.5, contrastThr: 0.45,
+  // the generated intro and ending: "off", 1 or 2 bars, or "auto"
+  intro: "auto", end: "auto",
   ...PERFORM_DEFAULTS,
   mix: defaultMix(),
   instruments: {},
@@ -625,6 +627,7 @@ function showHowItWorks() {
       <li><b>How long a place lasts</b> depends on how much it stands out. Important places last longer and play louder.</li>
       <li><b>The sound</b> of each place comes from its look: sharp edges give a fast attack, smooth areas long legato notes, busy textures a brighter tone, vivid colours a more resonant one.</li>
       <li><b>The story</b>: the song has an introduction, a build-up, a climax at the most striking place, and a resolution. Extra instruments join as it builds.</li>
+      <li><b>The start and the end</b> are written for the whole piece: a short intro where the key's chord grows out of silence and a few notes lead into the first place, and an ending on the home chord. Both can be one or two bars, or off, in Piece, Advanced, Composition.</li>
       <li><b>Between the places</b>, a few notes can follow the path of the eye, so one part flows into the next.</li>
     </ul>
 
@@ -974,9 +977,14 @@ function drawTimeline() {
     g.fillStyle = hexA(text3, 0.35); g.fillRect(x0, 5, 1, rulerH - 10);
     if (x1 - x0 > 14) { g.fillStyle = i === SEL ? text : text2; g.fillText(String(i + 1), (x0 + x1) / 2, rulerH / 2); }
   });
-  const xc = X(sc.cadence.t);
-  g.fillStyle = hexA(text3, 0.35); g.fillRect(xc, 5, 1, rulerH - 10);
-  if (X(sc.total) - xc > 30) { g.fillStyle = text3; g.font = '500 10.5px "Geist", system-ui, sans-serif'; g.fillText("End", (xc + X(sc.total)) / 2, rulerH / 2); }
+  // the generated intro and ending, named over the ruler like the places
+  g.font = '500 10.5px "Geist", system-ui, sans-serif';
+  if (sc.intro > 0 && X(sc.intro) - X(0) > 30) { g.fillStyle = text3; g.fillText("Intro", (X(0) + X(sc.intro)) / 2, rulerH / 2); }
+  if (sc.cadence) {
+    const xc = X(sc.cadence.t);
+    g.fillStyle = hexA(text3, 0.35); g.fillRect(xc, 5, 1, rulerH - 10);
+    if (X(sc.total) - xc > 30) { g.fillStyle = text3; g.fillText("End", (xc + X(sc.total)) / 2, rulerH / 2); }
+  }
   // notes per lane
   LANE_KEYS.forEach((l, li) => {
     const y0 = rulerH + li * laneH + 5, lh = laneH - 10, col = laneColor(l);
@@ -1030,7 +1038,7 @@ function initSeek() {
 }
 function renderPieceNotes() {
   const sc = SCORE;
-  const minB = Math.max(1, (RULES[sc.style] || {}).grid || 1), fits = Math.floor(sc.body / minB);
+  const minB = Math.max(1, (RULES[sc.style] || {}).grid || 1), fits = Math.floor((sc.body - (sc.intro || 0)) / minB);
   SL.count.setMax(Math.max(2, Math.min(32, fits)));
   const places = new Set(sc.points.map(q => q.revisitOf ?? q.index)).size, back = sc.points.length - places;
   SL.count.setNote(sc.truncated > 0 ? `At this duration the piece fits at most ${fits} segments (${minB === 1 ? "one beat" : minB + " beats"} each); the first ${sc.points.length} are used.` : PATH.mode !== "manual" && places < P.count ? `The image only offered ${places} distinct places at this inhibition radius.` : "");
@@ -1045,7 +1053,13 @@ function renderGlobal() {
   rows.push(["Key", pcName(sc.pc), sc.keyManual ? "chosen by hand" : hueTxt]);
   rows.push(["Mode", sc.scaleManual ? (SCALES.find(x => x[0] === P.scale) || [0, MODES[sc.modeKey].name])[1] : MODES[sc.modeKey].name, sc.scaleManual ? "chosen by hand" : `brightness ${nf(g.brightness)}, warmth ${nf(g.warmth01)}, saturation ${nf(g.sat)}`]);
   rows.push(["Tempo", `${nf1(sc.bpm)} BPM`, `the style asks for ${nf(sc.bpmStyle, 1)} BPM from the image energy (edges ${nf(g.edgeN)}, entropy ${nf(g.entropy)}); rounded to ${sc.bars} whole bars so the piece lasts exactly ${sc.seconds} s`]);
-  rows.push(["Duration", `${sc.seconds} s`, `${sc.body} beats split between focus points by weight (${nf(sc.body * spb, 1)} s), plus one cadence bar on the tonic (${nf((sc.total - sc.body) * spb, 1)} s)`]);
+  {
+    const I = sc.intro || 0, E = sc.total - sc.body, places = sc.body - I, bars = b => `${b / 4} bar${b === 4 ? "" : "s"}`;
+    const parts = [`${places} beats split between focus points by weight (${nf(places * spb, 1)} s)`];
+    if (I) parts.push(`an intro of ${bars(I)} (${nf(I * spb, 1)} s)`);
+    parts.push(E ? `an ending of ${bars(E)} on the tonic (${nf(E * spb, 1)} s)` : "no ending");
+    rows.push(["Duration", `${sc.seconds} s`, parts.join(", ").replace(/, ([^,]*)$/, ", and $1")]);
+  }
   rows.push(["Timbre", "relative to the image", "each area is compared with the image mean; the contrast shifts attack, legato, brightness, resonance and colour of the instruments within fixed bounds"]);
   rows.push(["Pad", `${Math.round(sc.bgArea * 100)}% background`, "areas that don't draw the eye hold a long chord with their average timbre"]);
   rows.push(["Motifs", `${sc.motifCount} families`, "regions grouped by colour and texture; returning to a family repeats its motif, varied"]);
@@ -1540,6 +1554,9 @@ function applySettings(j) {
   // recipes from before the composition rules play with them all on
   P.rules = { ...defaultRules(), ...(j.settings.rules || {}) };
   P.expert = Array.isArray(j.settings.expert) ? j.settings.expert : [];
+  // projects from before the generated intro had none, and a one-bar ending
+  if (!("intro" in j.settings)) P.intro = "off";
+  if (!("end" in j.settings)) P.end = 1;
   if (EXPORT) EXPORT.sync();
   if (j.settings.src) { const cropRef = P.src.crop, crop = { ...cropRef, ...(j.settings.src.crop || {}) }; Object.assign(P.src, j.settings.src); P.src.crop = Object.assign(cropRef, crop); }
   if (j.settings.mix) for (const l of Object.keys(j.settings.mix)) P.mix[l] = Object.assign(P.mix[l] || { vol: 1, mute: false, solo: false }, j.settings.mix[l]);
@@ -1613,7 +1630,7 @@ function syncAllControls() {
   for (const k of Object.keys(SL)) SL[k].set(P[k], false);
   for (const k of Object.keys(SRC_CTL)) if (SRC_CTL[k].el) { const [host, key] = k.split("."); SRC_CTL[k].set((host === "srcCrop" ? P.src.crop : P.src)[key], false); }
   SRC_CTL.ch.set(P.src.channels); SRC_CTL.range.set(P.src.range); $("#srcInvert").checked = P.src.invert; $("#srcMix").hidden = P.src.channels !== "mix";
-  STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); CHORD_SEG.set(String(P.chordRate ?? 1)); $("#placeSel").value = P.placement;
+  STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); CHORD_SEG.set(String(P.chordRate ?? 1)); INTRO_SEG.set(String(P.intro ?? "auto")); END_SEG.set(String(P.end ?? "auto")); $("#placeSel").value = P.placement;
   document.querySelectorAll(".lane").forEach(el => { const l = el.dataset.layer, r = el.querySelector("input[type=range]"); r.value = P.mix[l].vol; r.style.setProperty("--p", ((P.mix[l].vol / 1.5) * 100).toFixed(1) + "%"); });
   syncSourceControls(); syncRules(); renderLanes(); if (SOUND) SOUND.sync();
 }
@@ -1621,7 +1638,7 @@ function closeMenus() { document.querySelectorAll(".popover").forEach(p => (p.hi
 
 /* ============ tabs ============ */
 const TABS = ["piece", "point", "sound", "export"];
-let CHORD_SEG = null, STYLE_SEG = null, DUR_SEG = null, MEL_SEG = null, CONNECT_SEG = null, GROOVE_SEG = null, ORCH_SEG = null, UI_SEG = null, SOUND = null;
+let INTRO_SEG = null, END_SEG = null, CHORD_SEG = null, STYLE_SEG = null, DUR_SEG = null, MEL_SEG = null, CONNECT_SEG = null, GROOVE_SEG = null, ORCH_SEG = null, UI_SEG = null, SOUND = null;
 function selectTab(which) {
   for (const t of TABS) {
     const on = t === which;
@@ -1753,7 +1770,8 @@ function paramsJson() {
       modulation: Object.fromEntries(DIMS.map(d => [d, r3(F.tim.m[d])])),
       timbre: { melody: timJson(F.tim.lead), harmony: timJson(F.tim.harm), bass: timJson(F.tim.bass) }
     })),
-    cadence: { start_beat: sc.cadence.t, chord_notes: sc.cadence.chord, melody: sc.cadence.lead, bass: sc.cadence.bass },
+    intro_beats: sc.intro || 0,
+    cadence: sc.cadence ? { start_beat: sc.cadence.t, chord_notes: sc.cadence.chord, melody: sc.cadence.lead, bass: sc.cadence.bass } : null,
     pad: timJson(sc.ptim),
     instruments: Object.fromEntries(["lead", "harm", "bass", "pad"].map(l => [l, { preset: (P.instruments[l] && P.instruments[l].preset) || "style", edits: (P.instruments[l] && P.instruments[l].edits) || {}, type: sc.inst[l].type, name: sc.inst[l].name }])),
     effects: P.fx
@@ -1854,7 +1872,7 @@ function doExport() {
 /* ---- video: scene, sound analysis, labels, grade, preview, exports ---- */
 // The image for the video, at most 2.5 × the frame's long side (zooming in stays sharp), graded.
 let VSRC = null, VGRADE = null;
-function videoSource(longSide) {
+function videoSource(longSide, final = false) {
   const max = Math.round(longSide * 2.5), k = Math.min(1, max / Math.max(SRC.width, SRC.height));
   let c = SRC;
   if (k < 1) {
@@ -1865,10 +1883,24 @@ function videoSource(longSide) {
       VSRC = { src: SRC, max, c };
     }
   }
-  // the image edit (levels, curves, white balance, tones) and the colour grade, once per settings
+  // the image edit (levels, curves, white balance, tones) and the colour grade, once per settings.
+  // While they are changing (a slider dragged) the preview gets a quick copy at most 900 px wide,
+  // and the full one is made when they have rested for a quarter of a second; an export (final)
+  // always gets the full one.
   const o = P.video, key = JSON.stringify([o.edit || null, o.grade, o.gradeAmt]);
-  if (VGRADE && VGRADE.from === c && VGRADE.key === key) return VGRADE.c;
-  VGRADE = { from: c, key, c: editCanvas(c, o.edit, o.grade, o.gradeAmt || 0) };
+  if (VGRADE && VGRADE.from === c && VGRADE.key === key && (VGRADE.full || !final)) return VGRADE.c;
+  const full = () => (VGRADE = { from: c, key, full: true, c: editCanvas(c, o.edit, o.grade, o.gradeAmt || 0) }).c;
+  if (final || Math.max(c.width, c.height) <= 700) return full();
+  const k2 = 700 / Math.max(c.width, c.height), small = makeCanvas(Math.round(c.width * k2), Math.round(c.height * k2));
+  small.getContext("2d").drawImage(c, 0, 0, small.width, small.height);
+  VGRADE = { from: c, key, full: false, c: editCanvas(small, o.edit, o.grade, o.gradeAmt || 0) };
+  // the full one, in slices between frames, once the settings have rested
+  clearTimeout(videoSource.t);
+  videoSource.t = setTimeout(async () => {
+    const alive = () => VGRADE && VGRADE.key === key && VGRADE.from === c && !VGRADE.full;
+    const done = await editCanvasAsync(c, o.edit, o.grade, o.gradeAmt || 0, alive);
+    if (done && alive()) { VGRADE = { from: c, key, full: true, c: done }; if (exportView()) drawStage(); }
+  }, 250);
   return VGRADE.c;
 }
 const keyName = sc => `${pcName(sc.pc)} ${sc.pent ? (sc.major ? "major pentatonic" : "minor pentatonic") : MODES[sc.modeKey].name.split(" ")[0]}`;
@@ -1989,7 +2021,7 @@ function drawVideoPreview(cv) {
 async function videoJob(say, longSide) {
   const m = await renderMaster(say), o = P.video;
   await ensureFont(o.font);
-  const S = sceneFor(SCORE, videoSource(longSide));
+  const S = sceneFor(SCORE, videoSource(longSide, true));
   S.an = AN.key === masterKey() && AN.an ? AN.an : analyzeAudio(m.chs, m.sr, 60);
   const chs = o.fadeSound && (o.fadeIn > 0 || o.fadeOut > 0) ? fadeAudio(m.chs, m.sr, o.fadeIn || 0, o.fadeOut || 0) : m.chs;
   return { S, audio: { chs, sr: m.sr, gain: m.gain } };
@@ -2063,6 +2095,9 @@ export function init() {
   placeSel.value = P.placement;
   placeSel.addEventListener("change", () => { P.placement = placeSel.value; ATTN.failed = false; invalidate(LV.SAL); });
   CONNECT_SEG = makeSeg($("#connectSeg"), Object.entries(CONNECT), P.connect, v => { P.connect = v; invalidate(LV.MUSIC); });
+  const LEN = [["off", "Off"], ["1", "1 bar"], ["2", "2 bars"], ["auto", "Auto"]], lenVal = v => (v === "1" || v === "2" ? Number(v) : v);
+  INTRO_SEG = makeSeg($("#introSeg"), LEN, String(P.intro ?? "auto"), v => { P.intro = lenVal(v); invalidate(LV.MUSIC); });
+  END_SEG = makeSeg($("#endSeg"), LEN, String(P.end ?? "auto"), v => { P.end = lenVal(v); invalidate(LV.MUSIC); });
   CHORD_SEG = makeSeg($("#chordRateSeg"), [["2", "Slower"], ["1", "Style"], ["0.5", "Faster"]], String(P.chordRate ?? 1), v => { P.chordRate = Number(v); invalidate(LV.MUSIC); });
   GROOVE_SEG = makeSeg($("#grooveSeg"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], P.groove, v => { P.groove = v; GROOVE.failed = false; invalidate(LV.MUSIC); });
   makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; drawStage(); });

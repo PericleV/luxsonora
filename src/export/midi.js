@@ -49,7 +49,8 @@ export function midiFile(sc, isOn) {
   const M = sc.modulation;
   if (M) { cond.push({ t: tick(M.t0), o: 0, b: ks(M.keyPc) }); cond.push({ t: tick(M.t1), o: 0, b: ks(sc.pc) }); }
   (sc.points || []).forEach((F, i) => cond.push({ t: tick(F.t0), o: 1, b: meta(0x06, str(`Point ${i + 1}${F.section ? " · " + (SECTION[F.section] || F.section) : ""}`)) }));
-  if (sc.body < sc.total) cond.push({ t: tick(sc.body), o: 1, b: meta(0x06, str("Cadence")) });
+  if (sc.intro > 0) cond.push({ t: 0, o: 1, b: meta(0x06, str("Intro")) });
+  if (sc.body < sc.total) cond.push({ t: tick(sc.body), o: 1, b: meta(0x06, str("Ending")) });
   const tracks = [ser(cond)];
   const c7 = v => clampInt(Math.round(v * 127), 0, 127);
   const defs = [...LAYER_DEF, ...(sc.extra || []).slice(0, EXTRA_CH.length).map((X, i) => ({ key: X.id, ch: EXTRA_CH[i], name: (ROLES[X.role] || {}).name || X.id, gm: (ROLES[X.role] || {}).gm ?? 0 }))];

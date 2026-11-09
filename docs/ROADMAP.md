@@ -148,6 +148,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Performance (dynamics from the picture, accents, phrasing, CC11 expression, CC1 vibrato, humanize), composition settings in Advanced, every track's instrument in one list, each style's band in Add layer, MIDI for a DAW
 - [x] Expert mode: user rules on the places (add an instrument, silence a track, a chord, the melody's octave, dynamics; by place, part, colour, drawn zone or time)
 - [x] Every composition rule switchable in Advanced (19 in 5 groups); New song shows the melody, the connections and the orchestration's instruments; Save project and Load project in the top bar
+- [x] A generated intro (the tonic chord growing in, a lead-in, the style's count-in or swell) and the ending's length, each Off, 1 bar, 2 bars or Auto
 - [x] Position bar under Play, a bar while an AI model loads, Help › How it works, a custom accent colour; the sound display is horizontal or vertical and dragged into place
 - [x] Video: image edit (white balance, exposure, levels, contrast, highlights and shadows, saturation, vibrance, RGB and luminance curves), a sound display placed and sized freely, a cover with just the picture
 - [ ] Optional perfect loop (reverb tail added over the start)

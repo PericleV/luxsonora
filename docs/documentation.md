@@ -245,7 +245,7 @@ When the gaze returns to a family already visited, its motif comes back varied, 
 The piece has a fixed duration T (15, 30 or 60 s; default 30 s) in 4/4.
 
 1. **Whole bars.** `bars = max(3, round(T · bpm_style / 240))`, then `bpm = bars · 240 / T`. The piece lasts exactly T seconds. The tempo correction is at most `120 / T` BPM (±4 BPM at 30 s, ±8 at 15 s, ±2 at 60 s). At T = 30 s the resulting tempo is always a multiple of 8 BPM.
-2. **Cadence.** The last bar (4 beats) is reserved for the cadence. The body has `B = 4·bars − 4` beats.
+2. **Intro and ending.** A generated intro (§7.8a) comes first and a generated ending (§7.8) last, each Off, 1 bar, 2 bars or Auto (Piece › Advanced: composition; Auto: an intro of one bar from eight bars up, none below; an ending of one bar, two from twenty bars up). The places keep at least two bars: the intro gives way first, then the ending. The places share `B = 4·bars − intro − ending` beats and start after the intro; `body` (the start of the ending) is `4·bars − ending`. Projects saved before this had no intro and a one-bar ending, and open that way.
 3. **Number of focus points.** Each one gets at least one beat, so at most B are used. If the path has more, the first B are kept and the interface says so.
 4. **Weight.** `W_i = 1 + 3·w_i`, where w_i is the point's weight (§5.3). The maximum ratio between two points is 1:4.
 5. **Ideal duration** is proportional to the weight: `d_i = B · W_i / ΣW`. Points that would get less than one beat are pinned to one beat and the rest is redistributed among the others (water-filling).
@@ -463,9 +463,22 @@ The Expert mode (Simple / Advanced / Expert at the top of the Piece tab) shows e
 
 User rules win over the style's, and stay in harmony: a chord is always a degree of the key and the melody is fitted to it by the usual rules; an added instrument plays chord tones in its role's register; a neural melody gets the rules again after it is fitted. Each rule says which places it applies to, and the line over the stage names the rules that apply to the selected point.
 
-### 7.8 Cadence
+### 7.8 Cadence (the ending)
 
-The last bar plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
+The ending (one or two bars, or none) plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
+
+With the ending Off the piece stops with its last place: nothing is generated after it and every note is cut at T (the master fade of the last 0.4 s still applies).
+
+### 7.8a Intro
+
+The intro (`src/core/intro.js`) leads into the first place, built from the whole picture like the ending. The composer writes the places from 0, then moves everything later by the intro's length and writes the intro before it:
+
+- the **pad** plays the key's tonic chord over the whole intro, growing out of silence;
+- the **harmony** (the tonic chord, swelling) and the **bass** (the tonic) come in on its last bar;
+- a **lead-in** steps from below, along the melody's scale, into the first melody note: one note on the last beat in the calm styles (Ambient, Classical, Minimal, Movie score), two eighths otherwise;
+- the **rhythm** prepares the entrance its own way: a count-in of four on the hi-hat (Rock, Metal) or the sticks (Pop, Funk), a soft ride on 2 and 4 in swung styles (Jazz, Lo-fi, Bossa nova, Blues), the style's swell (cymbal, riser or timpani) in the others that have one, nothing in the calm ones.
+
+The intro's notes are marked `intro` and belong to no place (point −3); the score starts with an intro chord slot, records `intro` and `endBeats`, and the MIDI file has an *Intro* marker (and *Ending* at the ending). In the video the eye is not yet anywhere during the intro: the whole picture shows with the title, and the path starts at the first place.
 
 ### 7.9 Background pad
 
@@ -686,6 +699,7 @@ The interface shows only the essentials by default; the rest is in collapsed "Ad
 | | Dramatic arc | 0-100% | 70% | §7.10 |
 | | Smooth transitions | 0-100% | 60% | §7.7 |
 | Advanced: music | Key, Scale | Auto, 12 keys; Auto, 6 modes, 2 pentatonics | Auto | manual key and scale |
+| Advanced: composition | Intro; Ending | Off, 1 bar, 2 bars, Auto | Auto, Auto | §7.2, §7.8, §7.8a |
 | Advanced: composition | Chord changes; Swing; Layers build up; Contrast needed for a far chord | Slower / Style / Faster; 0-200%; 0-100%; 10-100% | Style, 100%, 50%, 45% | §7.7e |
 | Advanced: performance | Dynamic range, Picture detail, Accents, Phrasing, Expression (CC11), Vibrato (CC1) | 0-100% | 50, 50, 40, 40, 60, 40% | §7.7d |
 | | Humanize timing, length, velocity | 0-30 ms, 0-30%, 0-20 | 8 ms, 10%, 6 | §7.7d |
@@ -788,7 +802,7 @@ Offline render, stereo, 44.1 kHz, 16-bit, exactly T seconds, through the same ef
 
 The video is the stage's overlay animated over the piece (`src/export/video.js`, with `paths.js`, `look.js`, `reactive.js` and `labels.js`). One function draws the frame for a time in seconds; the stage uses it as a live preview while the Export tab is open (press play to watch the video as it will be exported), and the encoders for every frame, so the preview is the file. The settings are grouped in the tab as Video, Look, Image edit, Camera, Path and places, Labels on places, Effects and sound, Text and timing.
 
-**Image edit \*** (the video's picture only; the music always reads the original image; `editCanvas` in `look.js`, applied once per image and settings, before the colour grade): white balance (temperature: red up and blue down by up to 22%; tint: green against magenta), exposure (±2 stops), levels (black and white points, midtones as a gamma), contrast round middle grey, highlights and shadows (±35% weighted by lightness squared), saturation and vibrance (vibrance mostly on the duller colours), then curves for luminance (by the difference, so colours keep their hue), red, green and blue: five points each at 0, ¼, ½, ¾ and 1, dragged up or down (or with the arrow keys), joined by a monotone cubic (Fritsch-Carlson) that never overshoots. The colour grade, vignette, tint, grain and darkening sit in the same group. *Reset the edit* restores them all.
+**Image edit \*** (the video's picture only; the music always reads the original image; `editCanvas` in `look.js`, applied once per image and settings, before the colour grade): white balance (temperature: red up and blue down by up to 22%; tint: green against magenta), exposure (±2 stops), levels (black and white points, midtones as a gamma), contrast round middle grey, highlights and shadows (±35% weighted by lightness squared), saturation and vibrance (vibrance mostly on the duller colours), then curves for luminance (by the difference, so colours keep their hue), red, green and blue: five points each at 0, ¼, ½, ¾ and 1, dragged up or down (or with the arrow keys), joined by a monotone cubic (Fritsch-Carlson) that never overshoots. The colour grade, vignette, tint, grain and darkening sit in the same group. *Reset the edit* restores them all. The per-channel steps (white balance, exposure, levels, contrast) are 256-entry tables per channel and the loop works on plain numbers; while a setting moves, the preview uses a copy at most 700 px wide, and the full-size edit is made in slices between frames once the settings rest for a quarter of a second, so the page never freezes. Exports always use the full size.
 
 **Sound display** (Effects and sound): sound bars, spectrum, waveform or a progress line, horizontal or vertical, growing in, out or both ways, with its height (30-300%), length (10-100%) and opacity. It sits along the bottom (or up the right side when vertical) until it is dragged on the preview, like the title, with the same guides; *Put it back* returns it. Text along the bottom keeps clear of it while it is in its place.
 
@@ -891,6 +905,7 @@ The app reads the picture on the device only and sends it nowhere. Objects come 
 - **Plain labels**: Placement is shown as *Where the eye looks*, the Attention view as *Eye map*, Returns as *Revisits*, Dramatic arc as *Build-up* and Smooth transitions as *Smoothness* (the documentation keeps the technical names).
 - **The Piece tab in cards**: *Music* (style with a one-line description, duration, melody, connections, orchestration, groove), *Image* (image info, where the eye looks, analysis source), *Shape* (focus points, revisits, tempo, build-up, smoothness), then the advanced groups.
 - **Why it sounds like this**: a line over the stage explains the selected focus point: its section, its chord and the two or three strongest links from its area to the sound (height → register, smoothness → legato, sharp edges → attack, texture → brightness, colour → resonance and harmonics). Hidden on phones, where the Focus point tab has the same information.
+- **Timeline**: the ruler names the places by number, and the generated *Intro* and *End* over their bars.
 - **Position bar** in the top bar, next to Play: drag it to choose where the song plays from (it keeps playing if it was), as well as clicking the timeline.
 - **Model bar**: while an AI model downloads or works, a bar under the top bar names it, with its size, and fills as it composes when the progress is known (the Story and Improvise melodies), so it is clear the app is busy, not stuck.
 - **How it works** (Help): the whole idea in plain words, every composition rule (from the rules' own descriptions, so the list stays complete), the performance, Expert rules and each AI model, what it does and its size.

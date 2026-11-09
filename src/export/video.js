@@ -47,6 +47,10 @@ export const BOTTOMS = { bars: "Sound bars", spectrum: "Spectrum", wave: "Wavefo
 // the sound display: lying along the frame or standing up its side, and which way its bars grow
 // (its place is dragged on the preview, barXY; by default along the bottom, or up the right side)
 export const BAR_ORIENT = { h: "Horizontal", v: "Vertical" };
+// the logo (src/assets/logo.svg, 102 × 90 units): its outline paths, and the six waves as x, top, length
+const LOGO_D = ["M73.329,86.912l-59.811,0c-6.085,-0 -11.018,-4.199 -11.018,-9.379l-0,-65.654c0,-5.18 4.933,-9.379 11.018,-9.379l59.811,0", "M2.5,67.693l22.983,-22.987l38.684,42.206", "M38.671,59.095l17.687,-23.877"];
+const LOGO_WAVES = [[56.384, 30.633, 28.146], [64.82, 19.25, 50.911], [73.329, 30.13, 29.151], [81.838, 34.298, 20.815], [90.346, 26.126, 37.161], [98.855, 38.6, 12.211]];
+let LOGO_PATHS = null;
 export const BAR_DIR = { up: "Grows in", down: "Grows out", mirror: "Both ways" };
 export const GIF_RANGES = { climax: "8 s around the climax", start: "First 10 s", whole: "Whole piece" };
 
@@ -66,6 +70,7 @@ export function defaultVideo() {
     placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
     spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
     titleAlign: "auto", titleXY: null, pointXY: null, pointAlign: "left", textStyle: "shadow", boxColor: "#000000", caps: false, letterSpace: 0, titleAnim: "fade",
+    logo: false, logoColor: "#FFFFFF", logoSize: 1, logoOpacity: 0.85, logoAnim: true, logoXY: null,
     barOrient: "h", barXY: null, barDir: "up", barSize: 1, barLength: 1, barOpacity: 1, coverClean: false, edit: defaultEdit(),
     bottom: "bars", bottomFill: "solid", bottomColor: VIDEO_THEMES.gold.point, bottomColor2: VIDEO_THEMES.gold.path, fadeIn: 0.6, fadeOut: 1.5, fadeSound: true, endCard: false, credit: "Made with Lux Sonora",
     gifWidth: 480, gifFps: 12, gifRange: "climax"
@@ -533,6 +538,32 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     if (!vert && !o.barXY) bottomH = thick;
   }
   const baseY = H - B;
+  // the Lux Sonora logo: its picture frame, mountains and sun, and six sound waves that move with
+  // the music (the spectrum, low to high) when animated; placed top right until it is dragged
+  S._logoHit = null;
+  if (o.logo) {
+    const s = ((o.logoSize ?? 1) * 0.09 * Math.min(W, H)) / 90, cx = o.logoXY ? o.logoXY.x * W : W - Rm - 51 * s, cy = o.logoXY ? o.logoXY.y * H : T + 45 * s;
+    S._logoHit = { x0: cx - 51 * s, x1: cx + 51 * s, y0: cy - 45 * s, y1: cy + 45 * s, ax: cx, ay: cy };
+    if (!LOGO_PATHS) LOGO_PATHS = LOGO_D.map(d => new Path2D(d));
+    const bands = o.logoAnim ? bandsAt(S.an, sec) : null, lvl = o.logoAnim ? clamp(valueAt(S.an, S.an.rms, sec)) : 0;
+    g.save(); g.globalAlpha = clamp(o.logoOpacity ?? 0.85) * (1 - endA * 0.5);
+    g.translate(cx - 51 * s, cy - 45 * s); g.scale(s, s);
+    g.strokeStyle = o.logoColor || "#FFFFFF"; g.lineWidth = 5; g.lineCap = "round"; g.lineJoin = "round";
+    for (const p of LOGO_PATHS) g.stroke(p);
+    g.beginPath(); g.arc(37.914, 24.302, 7.973, 0, Math.PI * 2); g.stroke();
+    LOGO_WAVES.forEach(([x, y0, len], i) => {
+      let k = 1;
+      if (o.logoAnim) {
+        // the band's share of the spectrum, or the loudness until the sound is analysed
+        let e = lvl;
+        if (bands) { const a = Math.floor((i / 6) ** 1.6 * BANDS), b = Math.max(a + 1, Math.floor(((i + 1) / 6) ** 1.6 * BANDS)); e = 0; for (let j = a; j < b && j < BANDS; j++) e = Math.max(e, bands[j]); }
+        k = 0.33 + 0.92 * Math.pow(clamp(e), 1.2);
+      }
+      const mid = y0 + len / 2, h = (len * k) / 2;
+      g.beginPath(); g.moveTo(x, mid - h); g.lineTo(x, mid + h); g.stroke();
+    });
+    g.restore();
+  }
   // text: the title (always, or the first seconds), the point line, the end card
   // the line under the title: the style, key and tempo, the user's own text, or nothing
   const sub = o.subtitle === "none" ? "" : o.subtitle === "custom" ? (o.subText || "").trim() : C.sub || "";
@@ -541,6 +572,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   const tSize = (Fnt.caps ? 58 : 44) * u * ts, sSize = 22 * u * ts;
   S.hit = {};
   if (S._barHit && o.bottom && o.bottom !== "none") S.hit.bar = S._barHit;
+  if (S._logoHit) S.hit.logo = S._logoHit;
   // how the title comes in: fade, rise, typed letter by letter, or at once
   const inP = clamp((sec - 0.2) / 0.9), anim = o.titleAnim || "fade";
   const shownTitle = anim === "type" ? title.slice(0, Math.ceil(title.length * clamp((sec - 0.2) / 1.4))) : title;

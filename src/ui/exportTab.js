@@ -122,6 +122,14 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xBarReset" hidden>Put it back</button></p>
         <div id="xBarOps" class="sliders sliders-2"></div></div>
       <div id="xBottomCols">${seg("xBottomFill", "Bottom colour")}<div class="vcolors">${col("xBotA", "Colour")}${col("xBotB", "Second colour")}</div></div>`)}
+    ${group("logo", "Logo", `
+      <div class="vtoggles">${tog("xLogo", "Show the Lux Sonora logo")}</div>
+      <div id="xLogoBox">
+        <div class="vtoggles">${tog("xLogoAnim", "Its waves move with the music")}</div>
+        <div class="vcolors">${col("xLogoCol", "Colour")}</div>
+        <div id="xLogoOps" class="sliders sliders-2"></div>
+        <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xLogoReset" hidden>Put it back</button></p>
+      </div>`)}
     ${group("text", "Text and timing", `
       ${seg("xCaption", "Text")}
       <div id="xTextBox">
@@ -231,6 +239,8 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xDim", { key: "dim", label: "Darken the image", min: 0, max: 0.6, step: 0.02, def: 0.1, scale: 100, unit: "%" }],
     ["#xTitleSecs", { key: "titleSecs", label: "For how long", min: 1, max: 15, step: 0.5, def: 4.5, unit: "s", dec: 1, help: "Then it fades out in a second." }],
     ["#xTextSize", { key: "textSize", label: "Text size", min: 0.6, max: 1.8, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xLogoOps", { key: "logoSize", label: "Size", min: 0.4, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xLogoOps", pct("logoOpacity", "Opacity", 0.85)],
     ["#xBarOps", { key: "barSize", label: "Height", min: 0.3, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
     ["#xBarOps", { key: "barLength", label: "Length", min: 0.1, max: 1, step: 0.01, def: 1, scale: 100, unit: "%" }],
     ["#xBarOps", pct("barOpacity", "Opacity", 1)],
@@ -283,13 +293,14 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       drawCurve(); look(); const q = $("#xCurve").querySelector(`[data-i="${i}"]`); if (q) q.focus();
     });
   }
+  $("#xLogoReset").addEventListener("click", () => { V.logoXY = null; vis(); look(); });
   $("#xBarReset").addEventListener("click", () => { V.barXY = null; vis(); look(); });
   $("#xCurveReset").addEventListener("click", () => { curveOf(curveCh).splice(0, 5, ...CURVE_X); drawCurve(); look(); });
   $("#xEditReset").addEventListener("click", () => { const D = defaultVideo(); V.edit = defaultEdit(); for (const k of ["grade", "gradeAmt", "vignette", "vigColor", "tintColor", "tintAmt", "grain", "dim"]) V[k] = D[k]; sync(); look(); });
   function syncEdit() { for (const [, d] of EDS) esl[d.key].set(ED[d.key] ?? d.def, false); curveSeg.set(curveCh); drawCurve(); }
   // ---- toggles: [id, object, key]
   const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"],
-    ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
+    ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xLogo", () => V, "logo"], ["#xLogoAnim", () => V, "logoAnim"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
   // ---- colours
   const themeBtns = [...host.querySelectorAll("#xTheme button")];
@@ -301,7 +312,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   });
   // every colour picker on P.video: [input, key, part of the theme]
   const COLS = [["#xPathCol", "pathColor", true], ["#xPointCol", "pointColor", true], ["#xTitleCol", "titleColor"], ["#xSubCol", "subColor"], ["#xEyeCol", "eyeColor"],
-    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"],
+    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"], ["#xLogoCol", "logoColor"],
     ["#xPathColA", "pathColor", true], ["#xPathCol2", "pathColor2"], ["#xClimaxCol", "climaxColor"], ["#xVigCol", "vigColor"], ["#xTintCol", "tintColor"], ["#xSpotCol", "spotColor"], ["#xBoxCol", "boxColor"]];
   const syncColors = () => { for (const [id, key] of COLS) $(id).value = V[key] || "#ffffff"; };
   for (const [id, key, theme] of COLS) $(id).addEventListener("input", e => { V[key] = e.target.value; if (theme) { V.theme = "custom"; showTheme(); } look(); });
@@ -394,6 +405,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#xClimaxCols").hidden = !V.climaxOwn;
     $("#xBoxCols").hidden = !["box", "outline"].includes(V.textStyle || "shadow");
     $("#xPosReset").hidden = !(V.titleXY || V.pointXY);
+    $("#xLogoBox").hidden = !V.logo; $("#xLogoReset").hidden = !V.logoXY;
     $("#xBarBox").hidden = V.bottom === "none"; $("#xBarReset").hidden = !V.barXY; $("#xCoverCleanBox").hidden = V.cover === "image";
     $("#xCoverBox").hidden = V.cover === "off"; sl.coverTime.el.hidden = V.cover !== "time"; $("#xCoverPickBox").hidden = V.cover !== "image";
   }

@@ -785,7 +785,9 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   if (!SCORE) return;
   stopPlayback();
   const ctx = ensureCtx(), sc = SCORE;
-  Player.G = buildGraph(ctx, P.reverb, P.mix, effFx(sc), sc.bpm, sc.extra || []); Player.G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); Player.score = sc; Player.playing = true;
+  Player.G = buildGraph(ctx, P.reverb, P.mix, effFx(sc), sc.bpm, sc.extra || []);
+  // the logo listens: an analyser on the master moves its sound waves while the song plays
+  Player.an = ctx.createAnalyser(); Player.an.fftSize = 512; Player.an.smoothingTimeConstant = 0.72; Player.G.out.connect(Player.an); Player.G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); Player.score = sc; Player.playing = true;
   // sampled instruments: route the persistent samplers into this graph
   const SG = liveSamples(); Player.G.samplers = SG.samplers; Player.G.kit = kitName();
   for (const l of Object.keys(SG.bus)) { try { SG.bus[l].disconnect(); } catch (e) { /* not connected */ } if (Player.G.bus[l]) SG.bus[l].connect(Player.G.bus[l]); }
@@ -821,7 +823,23 @@ function stopPlayback() {
     setTimeout(() => { try { G.master.disconnect(); } catch (e) { /* already disconnected */ } }, 400);
     Player.G = null;
   }
-  Player.playing = false; updatePlayBtn();
+  Player.playing = false; Player.an = null; updatePlayBtn(); logoWaves(null);
+}
+// The logo's six sound waves follow the music: each one a band of the spectrum, low to high, from
+// a third of its height when quiet to its full height and a little more when loud. Still when the
+// song is stopped, or when the system asks for less motion.
+let LOGO_BINS = null;
+function logoWaves(an) {
+  const ws = document.querySelectorAll("#brandLogo .wv"); if (!ws.length) return;
+  if (!an || reduceMotion) { ws.forEach(w => (w.style.transform = "")); return; }
+  const n = an.frequencyBinCount; if (!LOGO_BINS || LOGO_BINS.length !== n) LOGO_BINS = new Uint8Array(n);
+  an.getByteFrequencyData(LOGO_BINS);
+  const sr = an.context.sampleRate, edges = [60, 160, 400, 900, 2000, 4500, 10000];
+  ws.forEach((w, i) => {
+    const a = Math.max(1, Math.floor((edges[i] / (sr / 2)) * n)), b = Math.max(a + 1, Math.floor((edges[i + 1] / (sr / 2)) * n));
+    let m = 0; for (let k = a; k < b && k < n; k++) m = Math.max(m, LOGO_BINS[k]);
+    w.style.transform = `scaleY(${(0.33 + 0.92 * Math.pow(m / 255, 1.4)).toFixed(3)})`;
+  });
 }
 let restartT = 0;
 function scheduleRestart() {
@@ -862,6 +880,7 @@ let lastPoint = -1;
 function frame() {
   if (!Player.playing) { lastPoint = -1; drawAll(); return; }
   const beat = currentBeat(), sc = Player.score;
+  logoWaves(Player.an);
   const fi = sc.points.findIndex(F => beat >= F.t0 && beat < F.t1);
   if (fi >= 0 && fi !== lastPoint && sc === SCORE) { lastPoint = fi; SEL = fi; renderPoint(); }
   drawAll(); requestAnimationFrame(frame);
@@ -969,7 +988,14 @@ function drawTimeline() {
   g.fillStyle = line;
   for (let l = 1; l < LANE_KEYS.length; l++) g.fillRect(0, rulerH + l * laneH, w, 1);
   g.fillRect(0, rulerH, w, 1);
-  for (let b = 0; b <= sc.total + 1e-9; b += 4) { g.globalAlpha = 0.9; g.fillRect(X(b), rulerH, 1, h - rulerH); }
+  // the columns match the ruler: each place's edges run down through the lanes (as do the intro's
+  // and the ending's); the bars are faint dotted lines behind them
+  g.save(); g.globalAlpha = 0.55; g.setLineDash([2, 3]); g.strokeStyle = line; g.lineWidth = 1; g.beginPath();
+  for (let b = 0; b <= sc.total + 1e-9; b += 4) { const x = Math.round(X(b)) + 0.5; g.moveTo(x, rulerH); g.lineTo(x, h); }
+  g.stroke(); g.restore();
+  const edges = new Set([0, sc.total, ...sc.points.map(F => F.t0), ...sc.points.map(F => F.t1), ...(sc.intro ? [sc.intro] : []), ...(sc.cadence ? [sc.cadence.t] : [])].map(v => Math.round(v * 1000) / 1000));
+  g.fillStyle = hexA(text3, 0.4);
+  for (const b of edges) g.fillRect(Math.round(X(b)), rulerH, 1, h - rulerH);
   g.globalAlpha = 1;
   g.font = '500 10.5px "Geist Mono", ui-monospace, monospace'; g.textAlign = "center"; g.textBaseline = "middle";
   sc.points.forEach((F, i) => {
@@ -1972,7 +1998,7 @@ function initVideoDrag() {
   const cv = $("#stage");
   let drag = null;
   const frameAt = e => { const p = stagePos(e); return PV ? { x: (p.x * PV.W) / PV.w, y: (p.y * PV.H) / PV.h } : null; };
-  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; for (const k of ["title", "point", "bar"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
+  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; for (const k of ["title", "point", "logo", "bar"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
   cv.addEventListener("pointerdown", e => {
     if (!exportView() || !VSCENE || e.button !== 0) return;
     const f = frameAt(e), k = hitAt(f); if (!k) return;
@@ -1992,7 +2018,7 @@ function initVideoDrag() {
     for (const g of xs) if (Math.abs(x - g) < 0.015) { x = g; guides.push({ x: g }); break; }
     for (const g of ys) if (Math.abs(y - g) < 0.015) { y = g; guides.push({ y: g }); break; }
     x = clamp(x, 0.02, 0.98); y = clamp(y, 0.04, 0.98);
-    if (drag.k === "title") P.video.titleXY = { x, y }; else if (drag.k === "bar") P.video.barXY = { x, y }; else { P.video.pointXY = { x, y }; P.video.pointAlign = drag.align; }
+    if (drag.k === "title") P.video.titleXY = { x, y }; else if (drag.k === "bar") P.video.barXY = { x, y }; else if (drag.k === "logo") P.video.logoXY = { x, y }; else { P.video.pointXY = { x, y }; P.video.pointAlign = drag.align; }
     VSCENE.guides = guides; drawStage();
   }, true);
   const end = () => { if (!drag) return; drag = null; if (VSCENE) VSCENE.guides = null; drawStage(); if (EXPORT) EXPORT.sync(); };

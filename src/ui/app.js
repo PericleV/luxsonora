@@ -639,6 +639,34 @@ function showShortcuts() {
 }
 // Help › How it works: the whole idea in plain words, every rule the composer follows (from the
 // rules' own descriptions, so the list is always complete) and the AI models it can use.
+// The numbers behind the open picture's key, mode and tempo (the same formulas as the composer),
+// so the explanation can be checked against what you hear.
+function howThisPicture() {
+  if (!SCORE || !A) return "";
+  const g = A.global, sc = SCORE, st = STYLES[sc.style], val = 0.5 * g.brightness + 0.3 * g.warmth01 + 0.2 * g.sat, energy = 0.6 * g.edgeN + 0.4 * g.entropy;
+  const modes = [...st.modes].sort((a, b) => MODES[a].b - MODES[b].b), keyFrom = g.hueStr > 0.06 ? `its colour, at ${Math.round(g.hue)}° on the wheel` : `its lightness (${nf(g.brightness)}), as it has no clear colour`;
+  const mode = sc.scaleManual ? "chosen by hand" : `brightness score ${nf(val)} picks ${MODES[sc.modeKey].name.split(" ")[0]} among ${modes.map(m => MODES[m].name.split(" ")[0]).join(", ")}`;
+  return `<div class="howto-now"><b>For this picture</b> (${esc(st.name)}): the key is ${esc(pcName(sc.pc))}${sc.keyManual ? " (chosen by hand)" : `, from ${esc(keyFrom)}`}; the mood is ${esc(mode)}; the energy score ${nf(energy)} sets ${nf1(sc.bpmStyle)} BPM in the style's ${st.tempo[0]}-${st.tempo[1]}, rounded to ${nf1(sc.bpm)} BPM so ${sc.bars} bars last exactly ${sc.seconds} s; ${sc.points.length} places share ${sc.body - (sc.intro || 0)} beats.${sc.modulation ? ` The climax moves to ${esc(pcName(sc.modulation.keyPc))}.` : ""}</div>`;
+}
+// Every style's particulars, read from its settings (theory.js STYLES and RULES, patterns.js).
+function howStyles() {
+  const mname = m => MODES[m].name.split(" ")[0], every = u => (u >= 8 ? "every two bars" : u === 4 ? "every bar" : `every ${u} beats`);
+  const kinds = (list, names) => [...new Set(list)].map(k => names[k] || k).join(", then ");
+  return STYLE_GROUPS.map(([gname, keys]) => `<h4>${esc(gname)}</h4><ul class="howto-styles">${keys.filter(k => STYLES[k]).map(k => {
+    const st = STYLES[k], R = RULES[k], extra = [];
+    if (R.loop) extra.push(R.loop.major.length === 12 ? "the 12-bar blues form" : R.loop.major.length === 4 && new Set(R.loop.major).size <= 2 ? "a vamp on one or two chords" : `a ${R.loop.major.length}-chord loop`);
+    if (R.quality === "dom7") extra.push("every chord a dominant seventh");
+    if (st.melScale) extra.push("a blues melody scale"); else if (st.pent) extra.push("a five-note (pentatonic) melody");
+    if (st.swing16) extra.push("swung sixteenths"); else if (st.swing >= 0.3) extra.push("swung eighths"); else if (st.swing > 0) extra.push("a light swing");
+    extra.push(st.ext >= 9 ? "ninths in the chords" : st.ext >= 7 ? "sevenths in the chords" : "plain triads");
+    if (R.cadentialV) extra.push("the dominant before the last chord");
+    if (R.stopDown) extra.push("a break before the climax");
+    if (R.sidechain >= 0.3) extra.push("pumping on the kick (sidechain)");
+    if (R.drive) extra.push("distorted guitars");
+    if (R.swell) extra.push(`a ${R.swell === "riser" ? "riser" : R.swell === "timpani" ? "timpani roll" : "cymbal swell"} into new parts`);
+    return `<li><b>${esc(st.name)}.</b> ${esc(STYLE_DESC[k] || "")}<br><small>${st.tempo[0]}-${st.tempo[1]} BPM · ${esc(st.modes.map(mname).join(", "))} · chords change ${every(R.unit)} · harmony: ${esc(kinds(R.harm, HARM_NAME))} · bass: ${esc(kinds(R.bass, BASS_NAME))} · drums: ${esc(PERC_NAME[k] || "none")} · ${esc(extra.join(", "))}</small></li>`;
+  }).join("")}</ul>`).join("");
+}
 function showHowItWorks() {
   const rules = Object.entries(RULE_GROUPS).map(([g, gname]) => `<h4>${esc(gname)}</h4><ul>${Object.values(RULES_INFO).filter(r => r.group === g).map(r => `<li><b>${esc(r.name)}.</b> ${esc(r.desc)}</li>`).join("")}</ul>`).join("");
   const { body } = openInfo("How Lux Sonora works", `<div class="dlg-info howto">
@@ -647,21 +675,24 @@ function showHowItWorks() {
     <h3>1. Reading the picture</h3>
     <p>The app measures the light, the colours, the edges and the texture of the image and splits it into regions of similar colour. From these it builds an <b>eye map</b>: the spots that stand out, by contrast, by detail, or (with a neural model) by what people tend to look at. A simulated eye then jumps from spot to spot, the way your gaze would, sometimes going back to a place it liked. Each stop is a <b>focus point</b>, drawn as a numbered circle. You can move, add or remove them.</p>
 
-    <h3>2. From the picture to the music</h3>
-    <ul>
-      <li><b>The key</b> comes from the picture's main colour: the colour wheel is laid on the circle of fifths, so similar colours give related keys.</li>
-      <li><b>The mood</b> (major, minor or one of the modes in between) comes from how bright and warm the picture is, within the modes the style allows.</li>
-      <li><b>The tempo</b> comes from the style, nudged by how busy the picture is.</li>
-      <li><b>The melody</b> follows the eye: a place high in the picture sounds high, a low one sounds low. Each place has its own short motif, and places that look alike share one, so the song has themes that come back.</li>
-      <li><b>How long a place lasts</b> depends on how much it stands out. Important places last longer and play louder.</li>
-      <li><b>The sound</b> of each place comes from its look: sharp edges give a fast attack, smooth areas long legato notes, busy textures a brighter tone, vivid colours a more resonant one.</li>
-      <li><b>The story</b>: the song has an introduction, a build-up, a climax at the most striking place, and a resolution. Extra instruments join as it builds.</li>
-      <li><b>The start and the end</b> are written for the whole piece: a short intro where the key's chord grows out of silence and a few notes lead into the first place, and an ending on the home chord. Both can be one or two bars, or off, in Piece, Advanced, Composition.</li>
-      <li><b>Between the places</b>, a few notes can follow the path of the eye, so one part flows into the next.</li>
-    </ul>
+    <h3>2. How the notes are found</h3>
+    <ol class="howto-steps">
+      <li><b>The key.</b> The picture's main colour is an angle on the colour wheel. Every 30° step on the wheel is one step on the circle of fifths, so neighbouring colours give related keys (red C, orange G, yellow D and so on round the wheel). A picture without a clear colour takes its key from its lightness instead.</li>
+      <li><b>The mood.</b> A brightness score is made from the picture: half its lightness, three tenths its warmth and two tenths its saturation. The style's modes are lined up from the darkest (Phrygian) to the brightest (Lydian), and the score picks one: a dark, cold picture lands on the darkest mode the style allows, a bright, warm one on the brightest.</li>
+      <li><b>The tempo.</b> An energy score (six tenths edges, four tenths texture) places the tempo inside the style's range, and it is then rounded so the song fits whole bars in exactly the length you chose.</li>
+      <li><b>How long each place lasts.</b> Every place gets a share of the song from how much it draws the eye (the more it stands out, up to four times longer), on the style's grid, at least one beat.</li>
+      <li><b>The melody's height.</b> The height of a place in the picture sets the height of its notes in the scale: the top of the picture is the top of the melody's range. When the eye moves, the melody moves the same way (up when the eye goes up), by a step that grows with the distance; Fidelity chooses between following the path and following the height.</li>
+      <li><b>The tune of a place.</b> Places that look alike (similar colour and texture) belong to one family, and each family has a short motif. When the eye comes back to a family, its motif returns, repeated, upside down or backwards, so the song has themes.</li>
+      <li><b>The chord.</b> Each style has a few chords it likes for light places and a few for dark ones. The chord chosen holds the melody's first note (as its root, third or fifth) and, among those, shares the most notes with the chord before, so the harmony moves smoothly (a place very unlike the one before jumps further; with Smoothness at zero the first that fits is taken). Some styles always add the seventh or the ninth; in the others a busy texture adds them.</li>
+      <li><b>Keeping it in tune.</b> A melody note on a beat moves to the nearest note of the chord, a note that would rub a semitone against the chord moves or becomes a gentle tension, held notes resolve when the chord changes, and the melody always stays on top. All the rules are in section 4.</li>
+      <li><b>The sound.</b> Each place colours the instruments: sharp edges give a fast attack, smooth areas long legato notes, busy textures a brighter tone, vivid colour a more resonant one, warm colours richer harmonics.</li>
+      <li><b>The shape.</b> The song has an introduction, a build-up, a climax at the most striking place and a resolution. The extra instruments join as it builds, and a short intro and ending are written for the whole piece.</li>
+    </ol>
+    ${howThisPicture()}
 
-    <h3>3. The style</h3>
-    <p>Each of the 28 styles brings its own frame: how often the chords change, its drum patterns, its instruments, its swing, and its form (the twelve bars of the blues, the four-chord loop of pop, the break before the climax in metal and trailer music). The picture chooses inside that frame, never against it.</p>
+    <h3>3. The styles</h3>
+    <p>Each style brings its own frame: how often the chords change, its drum patterns, its instruments, its swing and its form. The picture chooses inside that frame, never against it. Under the style the app suggests the three that suit the picture best, from its light, colours, detail and contrast. This list is made from the same settings the composer uses, so it is always exact.</p>
+    ${howStyles()}
 
     <h3>4. The rules the composer follows</h3>
     <p>On top of the style, the composer keeps to these rules. Each one can be turned off in Piece, Advanced, Composition rules, so you can hear what it does.</p>

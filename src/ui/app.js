@@ -1266,7 +1266,7 @@ function renderLanes() {
     // lanes follow the layers of the score (extra layers come and go with the orchestration)
     host.querySelectorAll(".lane").forEach(e => e.remove());
     host.insertAdjacentHTML("beforeend", LANE_KEYS.map(l => `<div class="lane" data-layer="${l}" style="--dot:${laneColor(l)}">
-      <span class="lname">${esc(layerName(l))}<em></em></span>
+      <span class="lname"><span class="lt">${esc(layerName(l))}</span><em></em></span>
       <span class="ms"><button type="button" data-act="mute" aria-pressed="false" aria-label="Mute ${esc(layerName(l))}" title="Mute">M</button><button type="button" data-act="solo" aria-pressed="false" aria-label="Solo ${esc(layerName(l))}" title="Solo">S</button></span>
       <input type="range" min="0" max="1.5" step="0.01" value="${P.mix[l] ? P.mix[l].vol : 1}" aria-label="${esc(layerName(l))} volume" style="--p:${(((P.mix[l] ? P.mix[l].vol : 1) / 1.5) * 100).toFixed(1)}%"></div>`).join(""));
     host.dataset.keys = sig;
@@ -1385,9 +1385,9 @@ function renderExpert() {
 // bigger steps), reset by a double-click, and remembered in this browser. On phones the parts are
 // stacked and the splitters are hidden.
 const LAYOUT = {
-  insp: { css: "--insp-w", def: 360, min: 300, max: () => Math.max(320, Math.min(820, window.innerWidth * 0.6)), axis: "x", sign: -1 },
+  insp: { css: "--insp-w", def: 360, min: 340, max: () => Math.max(320, Math.min(820, window.innerWidth * 0.6)), axis: "x", sign: -1 },
   lane: { css: "--lane-h", def: 36, min: 24, max: () => 84, axis: "y", sign: -1, perLane: true },
-  head: { css: "--head-w", def: 264, min: 150, max: () => Math.max(170, Math.min(520, window.innerWidth * 0.4)), axis: "x", sign: 1 }
+  head: { css: "--head-w", def: 264, min: 230, max: () => Math.max(170, Math.min(520, window.innerWidth * 0.4)), axis: "x", sign: 1 }
 };
 function setLayout(k, v, save = true) {
   const L = LAYOUT[k], val = Math.round(clamp(v, L.min, L.max()));
@@ -1432,7 +1432,11 @@ function initLayout() {
     });
   };
   bind("#splitInsp", "insp"); bind("#splitTl", "lane"); bind("#splitHead", "head");
-  window.addEventListener("resize", () => { for (const k of Object.keys(LAYOUT)) { const L = LAYOUT[k], v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(L.css)); if (v > L.max()) setLayout(k, v); } });
+  // a smaller window, or another monitor: the saved sizes stay within what fits (without saving)
+  window.addEventListener("resize", () => { for (const k of Object.keys(LAYOUT)) { const L = LAYOUT[k], want = Number(store.get("layout." + k)) || L.def; setLayout(k, want, false); } });
+  // another monitor with another pixel density: the canvases are redrawn at the new resolution
+  const watchDpr = () => { const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`); mq.addEventListener("change", () => { drawAll(); watchDpr(); }, { once: true }); };
+  watchDpr();
 }
 
 /* ============ image info and analysis source ============ */

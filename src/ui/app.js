@@ -8,8 +8,8 @@ import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE } from "../core/timbre.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
-import { RULES_INFO, defaultRules } from "../core/rules.js";
-import { SEM_PROMPT, validateSem } from "../core/semantic.js";
+import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
+import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
 import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, scheduleExpression } from "../audio/engine.js";
@@ -30,7 +30,7 @@ import { improvMelody } from "../ml/improv.js";
 import { grooveFor, applyGroove, grooveKey } from "../ml/groove.js";
 import { prepareSamples, kitSpecs, STYLE_KIT, onSampleStatus, instrumentCatalog } from "../audio/samples.js";
 import { addToLibrary, LIBRARY } from "../core/instruments.js";
-import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument, STYLE_BAND, roleFor } from "../core/arrange.js";
+import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument, STYLE_BAND, roleFor, autoLayers, richnessOf } from "../core/arrange.js";
 import { KITS, kitCatalog } from "../audio/samples.js";
 import { defaultEq, styleFx } from "../audio/fx.js";
 import { storyMelody, applyStory, storyKey } from "../ml/story.js";
@@ -39,7 +39,7 @@ import { CONNECT } from "../core/passages.js";
 import { HARM_NAME, BASS_NAME } from "../core/patterns.js";
 import { AUDIO_FORMATS, encodeAudio, masterGain, wavEncode } from "../export/audio.js";
 import { defaultVideo, frameSize, videoScene, drawVideoFrame, encodeVideo, encodeGif, gifRange, posterPng, hasCover } from "../export/video.js";
-import { gradeCanvas, ensureFont, fadeAudio, QUALITY, safeArea } from "../export/look.js";
+import { editCanvas, ensureFont, fadeAudio, QUALITY, safeArea } from "../export/look.js";
 import { analyzeAudio } from "../export/reactive.js";
 import { autoLabels } from "../export/labels.js";
 import qrUrl from "../assets/instagram-qr.webp";
@@ -54,6 +54,7 @@ const P = {
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
   smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
+  expert: [],
   // Advanced: composition (chord changes, swing, how the layers build up, contrast) and performance (perform.js)
   chordRate: 1, swingAdj: 1, buildUp: 0.5, contrastThr: 0.45,
   ...PERFORM_DEFAULTS,
@@ -171,7 +172,7 @@ function recompute() {
   if (!IMG) return;
   if (lvl >= LV.IMAGE) {
     A = analyze(IMG); CL = clusterRegions(A, 6); MOT = buildMotifs(CL, A.regions);
-    SEM = SEM_CACHE.get(A.hash) || null; renderSem(); buildStaticOverlays();
+    SEM = null; buildStaticOverlays();
   }
   if (lvl >= LV.SAL) { SAL = attention(computeSaliency(A, { color: P.wColor, texture: P.wTex, semantic: SEM ? P.wSem : 0 }, SEM)); buildSalOverlay(); }
   if (lvl >= LV.PATH) {
@@ -184,10 +185,10 @@ function recompute() {
     COV = coverage(A, POINTS); COV.zone = backgroundZone(A, COV); buildCovOverlay();
   }
   if (lvl >= LV.MUSIC) {
-    // objects found by the Objects placement colour the timbre like Claude's objects (when there are none from Claude)
+    // objects found by the Objects placement colour the timbre of the places on them
     const semEff = SEM || (ATTN.objects && ATTN.objects.length ? { objects: ATTN.objects, valence: null, energy: null } : null);
     SCORE = compose({ A, sal: SAL, points: POINTS, cl: CL, motifs: MOT, P, sem: semEff, cov: COV, lum: LUM });
-    ensureLayerState(SCORE); renderOrch();
+    ensureLayerState(SCORE); renderOrch(); renderExpert();
     storyStep();
     grooveStep();
     // how it is played: dynamics from the image, accents, phrasing, CC curves, humanize
@@ -211,6 +212,7 @@ const UI = { mode: store.get("uiMode") || "simple", samples: 0, failed: false };
 function applyUiMode(m) {
   UI.mode = m; store.set("uiMode", m);
   document.documentElement.classList.toggle("ui-simple", m === "simple");
+  document.documentElement.classList.toggle("ui-expert", m === "expert");
   if (UI_SEG) UI_SEG.set(m);
   requestAnimationFrame(() => { drawAll(); });
 }
@@ -224,6 +226,24 @@ function refreshStatus() {
   if (ATTN.job) parts.push(P.placement === "objects" ? "the object detector" : "the saliency model");
   st.classList.toggle("busy", parts.length > 0);
   st.textContent = parts.length ? "Loading " + parts.join(", ") + "…" + (WAIT_PLAY ? " The song starts as soon as it's ready." : "") : UI.failed ? "Some instruments couldn't load, so you're hearing synthesized versions of them." : "";
+  renderModelLoad();
+}
+// The bar under the top bar while an AI model downloads or works, so it is clear the app is busy,
+// not stuck: which model, its size, and how far it has got when that is known.
+function renderModelLoad() {
+  const box = $("#modelLoad"); if (!box) return;
+  let text = "", frac = null;
+  if (STORY.job) {
+    const M = P.melody === "improv" ? ["Magenta ImprovRNN", "about 6 MB", "Improvising the melody"] : ["Magenta MusicVAE", "about 18 MB", "Composing the melody"];
+    if (STORY.phase === "run") { text = `${M[2]} with ${M[0]}`; frac = STORY.progress; } else text = `Loading the melody model (${M[0]}, ${M[1]}, only the first time)`;
+  } else if (GROOVE.job) text = GROOVE.phase === "run" ? "Playing the drums with Magenta GrooVAE" : "Loading the groove model (Magenta GrooVAE, about 15 MB, only the first time)";
+  else if (ATTN.job) text = P.placement === "objects" ? "Loading the object detector (COCO-SSD, about 5 MB, only the first time)" : "Loading the saliency model (MSI-Net, about 25 MB, only the first time)";
+  box.hidden = !text;
+  if (!text) return;
+  $("#modelLoadText").textContent = text + (WAIT_PLAY ? ". The song starts as soon as it's ready." : "…");
+  const fill = $("#modelLoadFill");
+  box.classList.toggle("indeterminate", frac === null || frac === undefined);
+  fill.style.width = frac === null || frac === undefined ? "" : Math.round(Math.max(0.04, frac) * 100) + "%";
 }
 // a line over the stage saying how the selected point's area becomes sound
 function renderWhy() {
@@ -239,6 +259,8 @@ function renderWhy() {
   // the composition rules that touched this point
   if (F.modulation) parts.unshift(`not the colour of the rest of the picture → the key moves ${F.modulation.dir > 0 ? "up" : "down"} a fifth, to ${pcName(F.modulation.keyPc)}`);
   if (SCORE.picardy && F.idx === SCORE.points.length - 1) parts.unshift("a bright last place → the minor piece ends on a major chord");
+  // the Expert rules that apply here
+  (P.expert || []).forEach((r, k) => { if (r.on !== false && r.when.type !== "time" && pointMatches(r.when, F, 60 / SCORE.bpm)) parts.unshift(`your rule ${k + 1}`); });
   if (F.passage) parts.splice(1, 0, `the path to point ${F.idx + 2} crosses ${F.passage.crossings} edge${F.passage.crossings === 1 ? "" : "s"} → a ${F.passage.notes}-note run`);
   el.innerHTML = `<b>Point ${F.idx + 1}</b> · ${esc(SECTION_NAME[F.section] || "Development")} · chord ${esc(romanOf(F.root, SCORE.modeIv))} · ${esc(parts.slice(0, 3).join("; "))}.`;
   el.hidden = false;
@@ -394,14 +416,14 @@ function attention(contrast) {
   }
   if (ATTN.failed) { placeNote("The model couldn't load, maybe you're offline. For now the spots are picked by colour and texture. Choose it again to try once more."); return contrast; }
   if (!ATTN.job) {
-    ATTN.job = key; placeNote(`Downloading the model (${m === "objects" ? "about 5 MB" : "about 25 MB"}, only the first time)…`);
+    ATTN.job = key; setTimeout(refreshStatus, 0); placeNote(`Downloading the model (${m === "objects" ? "about 5 MB" : "about 25 MB"}, only the first time)…`);
     const W = A.W, H = A.H, canvas = SRC;
     (async () => {
       try {
         const r = await (m === "objects" ? objectsMap : learnedMap)(canvas, W, H);
         ATTN.cache.set(key, { key, method: m, w: W, h: H, data: toB64(r.q), objects: r.objects });
       } catch (e) { console.warn("Placement model unavailable:", e); ATTN.failed = true; }
-      finally { ATTN.job = null; invalidate(LV.SAL); }
+      finally { ATTN.job = null; refreshStatus(); invalidate(LV.SAL); }
     })();
   }
   return contrast;
@@ -428,21 +450,52 @@ function openNewSong() {
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, P.count || sug)}">
       <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.${P.returns > 0 ? ` The eye may also look back at up to ${P.returns} of them.` : ""}</p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblMel">Melody</div><div class="seg" id="nsMel" role="radiogroup" aria-labelledby="nsLblMel"></div><p class="snote" id="nsMelNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblConn">Between the spots</div><div class="seg" id="nsConn" role="radiogroup" aria-labelledby="nsLblConn"></div><p class="snote" id="nsConnNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblOrch">Orchestration</div><div class="seg" id="nsOrch" role="radiogroup" aria-labelledby="nsLblOrch"></div><p class="snote" id="nsOrchNote"></p></div>
+    <p class="snote">Everything here can be changed later in the Piece tab. Advanced shows the rest: every instrument, the composition rules, how it is played, and more.</p>
     <div class="ns-actions">
       <button type="button" class="btn btn-primary" id="nsAuto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>Generate song</button>
       <button type="button" class="btn" id="nsManual">Place the points myself</button>
     </div>
     <p class="snote"><b>Generate song</b> picks the spots for you, and you can still move them afterwards. With <b>Place the points myself</b> you tap them in, in the order you want to hear them.</p></div>`, "dlg-newsong");
   const $b = s => body.querySelector(s);
-  const note = () => { $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || ""; $b("#nsCountVal").textContent = $b("#nsCount").value; fillRange($b("#nsCount")); };
-  let dur = P.duration;
+  let dur = P.duration, mel = P.melody || "classic", conn = P.connect || "light", orch = P.orch === "custom" ? "custom" : P.orch || "small";
+  const MEL_DESC = {
+    classic: "The tune follows the eye: high places sound high, every place has its own motif, and places that look alike share one.",
+    story: "A neural model (Magenta MusicVAE, about 18 MB, downloaded once) writes a longer, singing line that still follows the places and the chords.",
+    improv: "A neural model (Magenta ImprovRNN, about 6 MB) improvises over the chords, like a soloist reading the picture."
+  };
+  const CONN_DESC = {
+    off: "Each spot plays on its own; the music moves straight on to the next one.",
+    light: "A few notes follow the eye's path from one spot to the next, so the parts flow into each other.",
+    rich: "Longer runs that trace the path between spots, with more notes where it crosses edges."
+  };
+  // which instruments an orchestration adds, for this picture and style
+  const orchNote = () => {
+    const st = $b("#nsStyle").value, n = Number($b("#nsCount").value);
+    if (orch === "custom") return "Your own list of instruments stays as it is.";
+    if (orch === "small") return "Five tracks: melody, harmony, bass, a pad underneath and the drums (or the style's percussion).";
+    const xs = A ? autoLayers(st, orch, richnessOf(A, n), P.samples !== false) : [];
+    return `The five tracks, plus ${xs.length} more from the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds.`;
+  };
+  const note = () => {
+    $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
+    $b("#nsCountVal").textContent = $b("#nsCount").value; fillRange($b("#nsCount"));
+    $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
+  };
   makeSeg($b("#nsDur"), DURATIONS.map(d => [String(d), `${d} s`]), String(dur), v => { dur = Number(v); });
+  makeSeg($b("#nsMel"), [["classic", "Classic"], ["story", "Story (AI)"], ["improv", "Improvise (AI)"]], mel, v => { mel = v; note(); });
+  makeSeg($b("#nsConn"), Object.entries(CONNECT), conn, v => { conn = v; note(); });
+  makeSeg($b("#nsOrch"), Object.entries(ORCHESTRATION).filter(([k]) => k !== "custom" || P.orch === "custom"), orch, v => { orch = v; note(); });
   ["#nsStyle", "#nsPlace"].forEach(s => $b(s).addEventListener("change", note));
   $b("#nsCount").addEventListener("input", note);
   $b("#nsSug").addEventListener("click", () => { $b("#nsCount").value = sug; note(); });
   note();
   const apply = () => {
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value);
+    if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
+    P.connect = conn; P.orch = orch;
     SL.reverb.set(STYLES[P.style].reverb, false); ATTN.failed = false;
   };
   $b("#nsAuto").addEventListener("click", () => {
@@ -492,7 +545,7 @@ function showWelcome() {
       <li>16 styles, from ambient and classical to jazz, blues, funk, pop, rock and metal</li>
       <li>Real recorded instruments, plus optional AI models (Magenta) for melodies and grooves that feel more human</li>
       <li>It all runs in your browser, so your picture stays on your device</li>
-      <li>Same picture, same settings, same song. Share the recipe and anyone can play it back</li>
+      <li>Same picture, same settings, same song. Save the project and anyone can open it again</li>
       <li>Free and open source</li>
     </ul>
     <div class="welcome-actions">
@@ -553,10 +606,62 @@ function showShortcuts() {
     <tr><td><kbd>?</kbd></td><td>This list</td></tr>
     <tr><td><kbd>Esc</kbd></td><td>Close a dialog or menu</td></tr></table></div>`);
 }
+// Help › How it works: the whole idea in plain words, every rule the composer follows (from the
+// rules' own descriptions, so the list is always complete) and the AI models it can use.
+function showHowItWorks() {
+  const rules = Object.entries(RULE_GROUPS).map(([g, gname]) => `<h4>${esc(gname)}</h4><ul>${Object.values(RULES_INFO).filter(r => r.group === g).map(r => `<li><b>${esc(r.name)}.</b> ${esc(r.desc)}</li>`).join("")}</ul>`).join("");
+  const { body } = openInfo("How Lux Sonora works", `<div class="dlg-info howto">
+    <p>Lux Sonora looks at a picture the way a person does, one place at a time, and turns that journey into a song. Everything happens on your device: the picture is never uploaded, and there are no accounts or keys.</p>
+
+    <h3>1. Reading the picture</h3>
+    <p>The app measures the light, the colours, the edges and the texture of the image and splits it into regions of similar colour. From these it builds an <b>eye map</b>: the spots that stand out, by contrast, by detail, or (with a neural model) by what people tend to look at. A simulated eye then jumps from spot to spot, the way your gaze would, sometimes going back to a place it liked. Each stop is a <b>focus point</b>, drawn as a numbered circle. You can move, add or remove them.</p>
+
+    <h3>2. From the picture to the music</h3>
+    <ul>
+      <li><b>The key</b> comes from the picture's main colour: the colour wheel is laid on the circle of fifths, so similar colours give related keys.</li>
+      <li><b>The mood</b> (major, minor or one of the modes in between) comes from how bright and warm the picture is, within the modes the style allows.</li>
+      <li><b>The tempo</b> comes from the style, nudged by how busy the picture is.</li>
+      <li><b>The melody</b> follows the eye: a place high in the picture sounds high, a low one sounds low. Each place has its own short motif, and places that look alike share one, so the song has themes that come back.</li>
+      <li><b>How long a place lasts</b> depends on how much it stands out. Important places last longer and play louder.</li>
+      <li><b>The sound</b> of each place comes from its look: sharp edges give a fast attack, smooth areas long legato notes, busy textures a brighter tone, vivid colours a more resonant one.</li>
+      <li><b>The story</b>: the song has an introduction, a build-up, a climax at the most striking place, and a resolution. Extra instruments join as it builds.</li>
+      <li><b>Between the places</b>, a few notes can follow the path of the eye, so one part flows into the next.</li>
+    </ul>
+
+    <h3>3. The style</h3>
+    <p>Each of the 16 styles brings its own frame: how often the chords change, its drum patterns, its instruments, its swing, and its form (the twelve bars of the blues, the four-chord loop of pop, the break before the climax in metal and trailer music). The picture chooses inside that frame, never against it.</p>
+
+    <h3>4. The rules the composer follows</h3>
+    <p>On top of the style, the composer keeps to these rules. Each one can be turned off in Piece, Advanced, Composition rules, so you can hear what it does.</p>
+    ${rules}
+
+    <h3>5. How it is played</h3>
+    <p>After the notes are written, they are played with some life: each note of a place reads the picture around it and is a little louder or softer, the first beat of the bar gets an accent, phrases rise and relax, each instrument swells with the story (expression, CC11) and saturated places get more vibrato (CC1). A light humanizer moves notes by a few milliseconds and varies their length and velocity, the same way every time. All of it is in Piece, Advanced, Performance, and goes into the MIDI file.</p>
+
+    <h3>6. Your own rules (Expert)</h3>
+    <p>In Expert mode you can add rules on the places the eye finds: at one place, in a part of the song, where the picture has a colour, inside a zone you draw, or between two seconds, you can add an instrument, silence a track, choose the chord, move the melody by octaves, or play louder or softer. Your rules win over the style's, and stay in harmony: chords come from the key and the melody is fitted to them.</p>
+
+    <h3>7. The AI models</h3>
+    <p>They are optional. Each one downloads the first time you choose it (a bar at the top shows it loading), then runs on your device. Without a connection the app falls back to its own rules and still makes a complete song.</p>
+    <ul>
+      <li><b>Magenta MusicVAE</b> (about 18 MB), for the <b>Story</b> melody: a neural network trained on melodies writes a longer, singing line that still starts from your places and follows the chords.</li>
+      <li><b>Magenta ImprovRNN</b> (about 6 MB), for the <b>Improvise</b> melody: it improvises over the chords, like a soloist, starting from the places.</li>
+      <li><b>Magenta GrooVAE</b> (about 15 MB), for the <b>Human</b> groove: it plays the drums like a drummer, with small shifts in timing and dynamics. The hits stay the ones the picture chose.</li>
+      <li><b>COCO-SSD</b> (about 5 MB), for <b>Objects</b> (in Where the eye looks) and for the labels in the video: it finds people, animals and things in the picture, and the eye goes to them.</li>
+      <li><b>MSI-Net</b> (about 25 MB), for <b>Learned saliency</b> (in Where the eye looks): trained on where real people look at photos, it predicts where the eye goes.</li>
+    </ul>
+    <p>The instruments you hear are recordings of real instruments (downloaded when first used) or the app's own synthesizers.</p>
+
+    <h3>8. The same picture, the same song</h3>
+    <p>Nothing is left to chance: the same picture with the same settings always gives the same song. Save project keeps the picture and every setting, so you or anyone else can open the exact same song later. The Export tab saves the audio, the MIDI for your music software and the video.</p>
+    <div class="row" style="display:flex;justify-content:flex-end"><button type="button" class="btn btn-primary" data-close>Close</button></div></div>`, "dlg-wide");
+  // start at the top (the focus would otherwise scroll it to the Close button)
+  body.closest(".dlg").querySelector(".dlg-close").focus({ preventScroll: true }); body.scrollTop = 0;
+}
 function showAbout() {
   openInfo("About Lux Sonora", `<div class="dlg-info">
     <div class="about-logo" aria-hidden="true">${LOGO}</div>
-    <p><b>Lux Sonora ${esc(APP_VERSION)}</b> turns an image into music: a simulated gaze moves across the image, and every place it looks at becomes melody, harmony, rhythm and timbre, in the rules of the chosen style. The same image and settings always give the same piece; a recipe lets anyone make it again.</p>
+    <p><b>Lux Sonora ${esc(APP_VERSION)}</b> turns an image into music: a simulated gaze moves across the image, and every place it looks at becomes melody, harmony, rhythm and timbre, in the rules of the chosen style. The same image and settings always give the same piece; a saved project lets anyone make it again.</p>
     <p>Developed by <b>Pericle</b>. If you like it, please follow me on Instagram: <a href="${INSTAGRAM_URL}" target="_blank" rel="noopener noreferrer">@pericle_v</a>.</p>
     <h3>Licence</h3><p>Open source under the MIT License. Copyright © 2026 Pericle and the Lux Sonora contributors. Source code: <a href="https://github.com/periclev/luxsonora" target="_blank" rel="noopener noreferrer">github.com/periclev/luxsonora</a>.</p>
     <h3>Built with</h3><ul>
@@ -588,12 +693,12 @@ function storyStep() {
   const key = P.melody + "|" + storyKey(SCORE), hit = STORY.cache.get(key);
   if (hit) { applyStory(SCORE, hit); SCORE.storyRef = { key, res: hit }; melNote(`${M.name}: ${hit.segments.length} segments from ${hit.places} places, following the chords.`); return; }
   if (STORY.job) return; // the running job recomputes when it ends, then this key is composed
-  const sc = composedCopy(SCORE); STORY.job = key;
+  const sc = composedCopy(SCORE); STORY.job = key; STORY.phase = "download"; STORY.progress = null;
   melNote(`Downloading the music model (${M.size}, only the first time)…`);
   (async () => {
     try {
-      const model = await M.api(); STORY.backend = model.backend;
-      const res = await M.run(sc, model, (d, t) => melNote(`${M.verb}: ${d} of ${t}…`));
+      const model = await M.api(); STORY.backend = model.backend; STORY.phase = "run"; STORY.progress = 0; refreshStatus();
+      const res = await M.run(sc, model, (d, t) => { melNote(`${M.verb}: ${d} of ${t}…`); STORY.progress = t ? d / t : 0; refreshStatus(); });
       STORY.cache.set(key, res);
       if (STORY.cache.size > 24) STORY.cache.delete(STORY.cache.keys().next().value);
     } catch (e) {
@@ -608,11 +713,11 @@ function grooveStep() {
   const key = grooveKey(SCORE), hit = GROOVE.cache.get(key);
   if (hit) { applyGroove(SCORE, hit); SCORE.grooveRef = { key, res: hit }; grooveNote(`Played by Magenta GrooVAE: ${hit.hits.length} hits with human timing and dynamics${SCORE.style === "electronic" ? " (timing kept on the grid, as a drum machine)" : ""}.`); return; }
   if (GROOVE.job) return;
-  const sc = composedCopy(SCORE); GROOVE.job = key;
+  const sc = composedCopy(SCORE); GROOVE.job = key; GROOVE.phase = "download";
   grooveNote("Downloading the groove model (about 15 MB, only the first time)…");
   (async () => {
     try {
-      const model = await grooveApi();
+      const model = await grooveApi(); GROOVE.phase = "run"; refreshStatus();
       GROOVE.cache.set(key, await grooveFor(sc, model));
       if (GROOVE.cache.size > 24) GROOVE.cache.delete(GROOVE.cache.keys().next().value);
     } catch (e) {
@@ -677,7 +782,7 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   if (!SCORE) return;
   stopPlayback();
   const ctx = ensureCtx(), sc = SCORE;
-  Player.G = buildGraph(ctx, P.reverb, P.mix, effFx(sc), sc.bpm, sc.extra || []); Player.G.sidechain = (RULES[sc.style] || {}).sidechain || 0; Player.score = sc; Player.playing = true;
+  Player.G = buildGraph(ctx, P.reverb, P.mix, effFx(sc), sc.bpm, sc.extra || []); Player.G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); Player.score = sc; Player.playing = true;
   // sampled instruments: route the persistent samplers into this graph
   const SG = liveSamples(); Player.G.samplers = SG.samplers; Player.G.kit = kitName();
   for (const l of Object.keys(SG.bus)) { try { SG.bus[l].disconnect(); } catch (e) { /* not connected */ } if (Player.G.bus[l]) SG.bus[l].connect(Player.G.bus[l]); }
@@ -802,6 +907,7 @@ function drawStage() {
   }
   if (view === "cov" && OV.cov) { g.fillStyle = "rgba(6,10,18,0.6)"; g.fillRect(0, 0, w, h); g.drawImage(OV.cov, 0, 0, w, h); }
   if (!showPath || !SCORE) return;
+  drawZones(g, w, h);
   const fx = SCORE.points, acc = css("--accent") || "#6D5DF0", diag = Math.hypot(w, h);
   g.lineWidth = 1.6; g.strokeStyle = hexA(acc, 0.85); g.lineJoin = "round";
   g.beginPath(); fx.forEach((F, i) => (i ? g.lineTo(F.x * w, F.y * h) : g.moveTo(F.x * w, F.y * h))); g.stroke();
@@ -902,6 +1008,25 @@ function updateReadout() {
   $("#rKey").textContent = `${pcName(sc.pc)} ${sc.pent ? (sc.major ? "major pentatonic" : "minor pentatonic") : MODES[sc.modeKey].name.split(" ")[0]}`;
   $("#rMeta").textContent = `${nf1(sc.bpm)} BPM · ${sc.bars} bars · ${sc.points.length} points`;
   $("#rTime").textContent = `${ftime(Math.min(currentBeat(), sc.total) * spb)} / ${ftime(sc.total * spb)}`;
+  const sk = $("#seek"); if (!SEEK.drag) { sk.value = Math.round(clamp(currentBeat() / sc.total) * 1000); sk.style.setProperty("--p", sk.value / 10 + "%"); }
+}
+// the position bar in the top bar: drag to choose where the song plays from (it keeps playing if it was)
+const SEEK = { drag: false, wasPlaying: false };
+function initSeek() {
+  const sk = $("#seek");
+  const beatOf = () => (Number(sk.value) / 1000) * (SCORE ? SCORE.total : 0);
+  sk.addEventListener("input", () => {
+    if (!SCORE) return;
+    if (!SEEK.drag) { SEEK.drag = true; SEEK.wasPlaying = Player.playing && !Player.audition; if (Player.playing) stopPlayback(); }
+    Player.pausedBeat = Math.min(beatOf(), SCORE.total - 0.05); sk.style.setProperty("--p", sk.value / 10 + "%");
+    const i = SCORE.points.findIndex(F => Player.pausedBeat >= F.t0 && Player.pausedBeat < F.t1); if (i >= 0 && i !== SEL) { SEL = i; renderPoint(); }
+    drawAll();
+  });
+  sk.addEventListener("change", () => {
+    if (!SCORE) return;
+    const beat = Math.min(beatOf(), SCORE.total - 0.05), play = SEEK.wasPlaying; SEEK.drag = false; SEEK.wasPlaying = false;
+    if (play) startPlayback(beat); else { Player.pausedBeat = beat; drawAll(); }
+  });
 }
 function renderPieceNotes() {
   const sc = SCORE;
@@ -918,7 +1043,7 @@ function renderGlobal() {
   const sc = SCORE, g = A.global, rows = [], spb = 60 / sc.bpm;
   const hueTxt = g.hueStr > 0.06 ? `dominant hue ${Math.round(g.hue)}°, read on the circle of fifths` : "the image is nearly colourless, so the key comes from brightness";
   rows.push(["Key", pcName(sc.pc), sc.keyManual ? "chosen by hand" : hueTxt]);
-  rows.push(["Mode", sc.scaleManual ? (SCALES.find(x => x[0] === P.scale) || [0, MODES[sc.modeKey].name])[1] : MODES[sc.modeKey].name, sc.scaleManual ? "chosen by hand" : `brightness ${nf(g.brightness)}, warmth ${nf(g.warmth01)}, saturation ${nf(g.sat)}${SEM ? `, plus the valence read by Claude (${nf(SEM.valence)})` : ""}`]);
+  rows.push(["Mode", sc.scaleManual ? (SCALES.find(x => x[0] === P.scale) || [0, MODES[sc.modeKey].name])[1] : MODES[sc.modeKey].name, sc.scaleManual ? "chosen by hand" : `brightness ${nf(g.brightness)}, warmth ${nf(g.warmth01)}, saturation ${nf(g.sat)}`]);
   rows.push(["Tempo", `${nf1(sc.bpm)} BPM`, `the style asks for ${nf(sc.bpmStyle, 1)} BPM from the image energy (edges ${nf(g.edgeN)}, entropy ${nf(g.entropy)}); rounded to ${sc.bars} whole bars so the piece lasts exactly ${sc.seconds} s`]);
   rows.push(["Duration", `${sc.seconds} s`, `${sc.body} beats split between focus points by weight (${nf(sc.body * spb, 1)} s), plus one cadence bar on the tonic (${nf((sc.total - sc.body) * spb, 1)} s)`]);
   rows.push(["Timbre", "relative to the image", "each area is compared with the image mean; the contrast shifts attack, legato, brightness, resonance and colour of the instruments within fixed bounds"]);
@@ -1065,6 +1190,92 @@ function renderLanes() {
     s.querySelector('[data-act="solo"]').setAttribute("aria-pressed", String(P.mix[l].solo));
     s.classList.toggle("off", !audible(P.mix, l));
   }
+}
+
+/* ============ Expert rules (src/core/expert.js) ============ */
+// The list in Piece (Expert): each rule is a condition on the places and an action there. Zones are
+// drawn on the picture; the matching places are named under each rule.
+let ZONE = null; // { id, drawing }: the rule whose zone is being drawn
+const MAIN_LAYERS = () => [["lead", "Melody"], ["harm", "Harmony"], ["bass", "Bass"], ["pad", "Pad"], ["perc", "Rhythm"], ...((SCORE && SCORE.extra) || []).filter(L => !L.only).map(L => [L.id, ROLES[L.role].name + (L.name ? ": " + L.name : "")])];
+function drawZones(g, w, h) {
+  if (UI.mode !== "expert") return;
+  const acc = css("--accent") || "#6D5DF0";
+  (P.expert || []).forEach((r, k) => {
+    const z = r.when && r.when.type === "zone" && r.when.zone; if (!z) return;
+    const x = Math.min(z.x0, z.x1) * w, y = Math.min(z.y0, z.y1) * h, zw = Math.abs(z.x1 - z.x0) * w, zh = Math.abs(z.y1 - z.y0) * h;
+    g.save(); g.setLineDash([6, 4]); g.lineWidth = 1.6; g.strokeStyle = r.on === false ? "rgba(255,255,255,0.4)" : acc; g.fillStyle = hexA(acc, 0.1);
+    g.fillRect(x, y, zw, zh); g.strokeRect(x, y, zw, zh); g.setLineDash([]);
+    g.font = '600 12px "Geist", system-ui, sans-serif'; const label = `Rule ${k + 1}`, tw = g.measureText(label).width + 10;
+    g.fillStyle = acc; g.fillRect(x, Math.max(0, y - 18), tw, 18); g.fillStyle = "#fff"; g.fillText(label, x + 5, Math.max(13, y - 5));
+    g.restore();
+  });
+}
+function initExpert() {
+  const host = $("#expertList");
+  $("#expertAdd").addEventListener("click", () => {
+    const id = (P.expert || []).reduce((m, r) => Math.max(m, r.id), 0) + 1;
+    const r = newRule(id);
+    if (SCORE && SCORE.points.length) r.when.point = 1;
+    const band = STYLE_BAND[P.style] || []; if (band.length) { r.do.preset = band[0][0]; r.do.role = band[0][1]; }
+    P.expert = [...(P.expert || []), r]; renderExpert(); invalidate(LV.MUSIC);
+  });
+  // a field: data-f="when.point" etc.; numbers stay numbers
+  host.addEventListener("change", e => {
+    const el = e.target, li = el.closest("li[data-id]"), f = el.dataset.f; if (!li || !f) return;
+    const r = P.expert.find(q => q.id === Number(li.dataset.id)); if (!r) return;
+    if (f === "on") r.on = el.checked;
+    else { const [part, key] = f.split("."), v = el.type === "number" || /^-?\d+(\.\d+)?$/.test(el.value) ? Number(el.value) : el.value; r[part][key] = v;
+      // sensible tracks when the action changes: dynamics on every track, silence on one
+      if (f === "do.type") { if (v === "dynamics") r.do.layer = "all"; else if (v === "mute" && (!r.do.layer || r.do.layer === "all")) r.do.layer = "perc"; } }
+    renderExpert(); invalidate(LV.MUSIC);
+  });
+  host.addEventListener("click", e => {
+    const b = e.target.closest("[data-act]"), li = e.target.closest("li[data-id]"); if (!b || !li) return;
+    const id = Number(li.dataset.id), r = P.expert.find(q => q.id === id); if (!r) return;
+    if (b.dataset.act === "del") { P.expert = P.expert.filter(q => q.id !== id); if (ZONE && ZONE.id === id) ZONE = null; renderExpert(); invalidate(LV.MUSIC); }
+    else if (b.dataset.act === "zone") { ZONE = { id, drawing: false }; flash("Drag on the picture to draw the zone."); renderExpert(); }
+    else if (b.dataset.act === "inst") {
+      const bandKeys = new Set((STYLE_BAND[P.style] || []).map(([k]) => k)), bandName = `${STYLES[P.style].name} band`;
+      const items = Object.entries(LIBRARY).map(([k, v]) => ({ key: k, name: v.name, group: bandKeys.has(k) ? bandName : v.family || (v.type === "sample" ? "Recommended (sampled)" : "Synthesizers") }));
+      items.sort((a, b2) => (b2.group === bandName) - (a.group === bandName) || a.group.localeCompare(b2.group));
+      openPicker({ title: "Instrument for this rule", items, current: r.do.preset, searchLabel: "Search instruments", note: "It plays only where the rule applies, in the role you choose.",
+        onPick: key => { r.do.preset = key; const band = (STYLE_BAND[P.style] || []).find(([k]) => k === key); r.do.role = band ? band[1] : roleFor(key, LIBRARY[key]); renderExpert(); invalidate(LV.MUSIC); },
+        onPreview: key => preview(ensureCtx(), "harm", LIBRARY[key]) });
+    }
+  });
+  renderExpert();
+}
+function renderExpert() {
+  const host = $("#expertList"); if (!host) return;
+  const rules = P.expert || [], n = SCORE ? SCORE.points.length : 0, spb = SCORE ? 60 / SCORE.bpm : 1;
+  const opt = (obj, cur) => Object.entries(obj).map(([k, v]) => `<option value="${esc(String(k))}"${String(k) === String(cur) ? " selected" : ""}>${esc(v)}</option>`).join("");
+  const sel = (f, obj, cur, label) => `<span class="select"><select data-f="${f}" aria-label="${esc(label)}">${opt(obj, cur)}</select></span>`;
+  const degs = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map(d => [d, SCORE ? romanOf(d, SCORE.modeIv) : ["I", "II", "III", "IV", "V", "VI", "VII"][d]]));
+  host.innerHTML = rules.length ? rules.map((r, k) => {
+    const w = r.when, d = r.do;
+    const whenCtl = w.type === "point" ? sel("when.point", Object.fromEntries(Array.from({ length: Math.max(1, n) }, (_, i) => [i + 1, `Place ${i + 1}`])), w.point, "Which place")
+      : w.type === "section" ? sel("when.section", SECTIONS, w.section, "Which part")
+      : w.type === "colour" ? sel("when.colour", COLOURS, w.colour, "Which colour")
+      : w.type === "zone" ? `<button type="button" class="btn btn-sm" data-act="zone">${ZONE && ZONE.id === r.id ? "Drag on the picture…" : w.zone ? "Redraw the zone" : "Draw the zone on the picture"}</button>`
+      : `<input type="number" class="text-input" data-f="when.from" min="0" step="0.5" value="${w.from ?? 0}" aria-label="From second"> to <input type="number" class="text-input" data-f="when.to" min="0" step="0.5" value="${w.to ?? 5}" aria-label="To second"> s`;
+    const doCtl = d.type === "play" ? `<button type="button" class="choose" data-act="inst" aria-haspopup="dialog"><span>${esc((LIBRARY[d.preset] || {}).name || "Choose an instrument")}</span></button>${sel("do.role", Object.fromEntries(Object.entries(ROLES).map(([k2, v]) => [k2, "as " + v.name.toLowerCase()])), d.role, "Its role")}`
+      : d.type === "mute" ? sel("do.layer", Object.fromEntries(MAIN_LAYERS()), d.layer, "Which track")
+      : d.type === "chord" ? sel("do.degree", degs, d.degree, "Which chord")
+      : d.type === "octave" ? sel("do.octave", { "-2": "two octaves down", "-1": "an octave down", "1": "an octave up", "2": "two octaves up" }, d.octave, "How far")
+      : `${sel("do.db", { "-12": "−12 dB", "-6": "−6 dB", "-3": "−3 dB", "3": "+3 dB", "6": "+6 dB", "12": "+12 dB" }, d.db, "How much")}${sel("do.layer", { all: "every track", ...Object.fromEntries(MAIN_LAYERS()) }, d.layer || "all", "Which track")}`;
+    // where it applies now
+    let where = "";
+    if (SCORE) {
+      if (w.type === "time") where = `Applies from ${w.from ?? 0} s to ${w.to ?? 0} s.`;
+      else { const hits = SCORE.points.filter(F => pointMatches(w, F, spb)).map(F => F.idx + 1); where = hits.length ? `Applies at place${hits.length > 1 ? "s" : ""} ${hits.join(", ")}.` : w.type === "zone" && !w.zone ? "Draw the zone to choose the places." : "No place matches it now."; }
+    }
+    return `<li data-id="${r.id}" class="${r.on === false ? "off" : ""}"><div class="xr-head"><label class="toggle"><input type="checkbox" data-f="on"${r.on === false ? "" : " checked"}><span><b>Rule ${k + 1}</b></span></label>
+      <button type="button" class="icon-btn" data-act="del" aria-label="Delete rule ${k + 1}" title="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="xr-row"><span class="xr-k">When</span>${sel("when.type", CONDITIONS, w.type, "Condition")}${whenCtl}</div>
+      <div class="xr-row"><span class="xr-k">Do</span>${sel("do.type", ACTIONS, d.type, "Action")}${doCtl}</div>
+      <p class="snote">${esc(where)}</p></li>`;
+  }).join("") : `<li class="empty">No rules yet. Add one, for example: in the climax, add a choir; at place 3, use chord IV; where it is blue, play softer.</li>`;
+  drawStage();
 }
 
 /* ============ image info and analysis source ============ */
@@ -1218,6 +1429,11 @@ let drag = null;
 function initStageEditing() {
   const cv = $("#stage");
   cv.addEventListener("pointerdown", e => {
+    if (ZONE && SCORE && e.button === 0 && !exportView()) {
+      const p = stagePos(e), x = clamp(p.x / stageGeom.w), y = clamp(p.y / stageGeom.h), r = P.expert.find(q => q.id === ZONE.id);
+      if (r) { r.when.zone = { x0: x, y0: y, x1: x, y1: y }; ZONE.drawing = true; cv.setPointerCapture(e.pointerId); e.preventDefault(); drawStage(); }
+      return;
+    }
     if (!SCORE || !showPath || e.button !== 0 || exportView()) return;
     HIT_MIN = e.pointerType === "touch" ? 22 : 10;
     const p = stagePos(e), touch = e.pointerType === "touch" || e.pointerType === "pen";
@@ -1232,6 +1448,11 @@ function initStageEditing() {
   });
   cv.addEventListener("pointermove", e => {
     const p = stagePos(e);
+    if (ZONE) {
+      cv.style.cursor = "crosshair";
+      if (ZONE.drawing) { const r = P.expert.find(q => q.id === ZONE.id); if (r && r.when.zone) { r.when.zone.x1 = clamp(p.x / stageGeom.w); r.when.zone.y1 = clamp(p.y / stageGeom.h); drawStage(); } }
+      return;
+    }
     if (!drag) { cv.style.cursor = !SCORE ? "default" : hitHandle(p) ? "nwse-resize" : hitPoint(p) >= 0 ? "grab" : tool === "add" ? "crosshair" : "default"; return; }
     if (!drag.started) {
       if (Math.hypot(p.x - drag.p0.x, p.y - drag.p0.y) < 3) return;
@@ -1244,6 +1465,7 @@ function initStageEditing() {
     invalidate(LV.PATH);
   });
   const end = () => {
+    if (ZONE && ZONE.drawing) { ZONE = null; cv.style.cursor = "default"; renderExpert(); invalidate(LV.MUSIC); return; }
     if (!drag) return;
     const d = drag; drag = null;
     if (!d.started && d.kind === "move") { selectTab("point"); audition(d.i); }
@@ -1317,6 +1539,7 @@ function applySettings(j) {
   if (j.settings.out) Object.assign(P.out, j.settings.out);
   // recipes from before the composition rules play with them all on
   P.rules = { ...defaultRules(), ...(j.settings.rules || {}) };
+  P.expert = Array.isArray(j.settings.expert) ? j.settings.expert : [];
   if (EXPORT) EXPORT.sync();
   if (j.settings.src) { const cropRef = P.src.crop, crop = { ...cropRef, ...(j.settings.src.crop || {}) }; Object.assign(P.src, j.settings.src); P.src.crop = Object.assign(cropRef, crop); }
   if (j.settings.mix) for (const l of Object.keys(j.settings.mix)) P.mix[l] = Object.assign(P.mix[l] || { vol: 1, mute: false, solo: false }, j.settings.mix[l]);
@@ -1329,7 +1552,7 @@ async function openProject(file) {
   let j;
   try { j = JSON.parse(await file.text()); } catch (e) { j = null; }
   // recipes made before the app was called Lux Sonora say "Sonification"
-  if (!j || !APP_NAMES.includes(j.app) || (j.kind !== "project" && j.kind !== "recipe")) { flash("That file isn't a Lux Sonora recipe or project."); return; }
+  if (!j || !APP_NAMES.includes(j.app) || (j.kind !== "project" && j.kind !== "recipe")) { flash("That file isn't a Lux Sonora project."); return; }
   try {
     const img = j.image || null;
     if (img && img.data) {
@@ -1347,15 +1570,15 @@ async function openProject(file) {
     syncAllControls(); applySource();
     RECIPE_CHECK = j.kind === "recipe" && j.check ? { ...j.check, version: j.version } : null;
     if (img && INFO && img.hash !== INFO.hash && !img.data && !img.demo) flash(`This file was made for “${img.name}”. Its focus points were placed by position on the current image.`);
-  } catch (e) { flash("The recipe couldn't be opened: " + (e.message || e)); }
+  } catch (e) { flash("The project couldn't be opened: " + (e.message || e)); }
 }
 // After a rebuild settles (no neural job running), compare with the recipe's score.
 function checkRecipe() {
   if (!RECIPE_CHECK || !SCORE || STORY.job || GROOVE.job || ATTN.job) return;
   const want = RECIPE_CHECK; RECIPE_CHECK = null;
   const got = scoreHash(SCORE);
-  if (got === want.score) flash(`Rebuilt from the recipe: identical (${SCORE.notes.length} notes, ${pcName(SCORE.pc)} ${SCORE.modeKey}, ${nf1(SCORE.bpm)} BPM).`);
-  else flash(`Rebuilt from the recipe, but the score differs (${SCORE.notes.length} notes here, ${want.notes} in the recipe${want.version && want.version !== APP_VERSION ? `; it was made with version ${want.version}` : ""}).`);
+  if (got === want.score) flash(`Project loaded: identical (${SCORE.notes.length} notes, ${pcName(SCORE.pc)} ${SCORE.modeKey}, ${nf1(SCORE.bpm)} BPM).`);
+  else flash(`Project loaded, but the score differs (${SCORE.notes.length} notes here, ${want.notes} when it was saved${want.version && want.version !== APP_VERSION ? `; it was made with version ${want.version}` : ""}).`);
 }
 
 function projectJson() {
@@ -1379,7 +1602,7 @@ function initKeyControls() {
 // Composition rules (core/rules.js): one switch each, all on by default
 function initRulesControls() {
   const host = $("#sRules");
-  host.innerHTML = Object.entries(RULES_INFO).map(([k, r]) => `<div class="rule"><label class="toggle"><input type="checkbox" data-rule="${k}"><span>${esc(r.name)}</span></label><p class="sub">${esc(r.desc)}</p></div>`).join("");
+  host.innerHTML = Object.entries(RULE_GROUPS).map(([g, gname]) => `<div class="rule-group"><div class="flabel">${esc(gname)}</div>${Object.entries(RULES_INFO).filter(([, r]) => r.group === g).map(([k, r]) => `<div class="rule"><label class="toggle"><input type="checkbox" data-rule="${k}"><span>${esc(r.name)}</span></label><p class="sub">${esc(r.desc)}</p></div>`).join("")}</div>`).join("");
   host.addEventListener("change", e => { const k = e.target.dataset.rule; if (!k) return; P.rules = { ...defaultRules(), ...P.rules, [k]: e.target.checked }; invalidate(LV.MUSIC); });
   $("#rulesAll").addEventListener("click", () => { P.rules = defaultRules(); syncRules(); invalidate(LV.MUSIC); });
   syncRules();
@@ -1429,8 +1652,7 @@ const SLIDERS = {
   ],
   sSal: [
     { key: "wColor", label: "Colour", min: 0, max: 1, step: 0.01, def: 0.7, scale: 100, unit: "%", level: LV.SAL },
-    { key: "wTex", label: "Texture", min: 0, max: 1, step: 0.01, def: 0.5, scale: 100, unit: "%", level: LV.SAL },
-    { key: "wSem", label: "Semantic", min: 0, max: 1, step: 0.01, def: 0.6, scale: 100, unit: "%", level: LV.SAL }
+    { key: "wTex", label: "Texture", min: 0, max: 1, step: 0.01, def: 0.5, scale: 100, unit: "%", level: LV.SAL }
   ],
   sMusic: [
     { key: "fidelity", label: "Fidelity", min: 0, max: 1, step: 0.01, def: 0.6, scale: 100, unit: "%", level: LV.MUSIC, help: "High values make the melody follow the picture closely. Low values let it move more smoothly." },
@@ -1469,61 +1691,42 @@ function applyTheme(t) {
   if (t === "light" || t === "dark") root.dataset.theme = t; else delete root.dataset.theme;
   store.set("theme", t); requestAnimationFrame(drawAll);
 }
-function applyAccent(a) { document.documentElement.dataset.accent = a; store.set("accent", a); requestAnimationFrame(drawAll); }
+// a preset accent, or "custom" with the user's own colour (its soft and line tints, and black or
+// white text on it, whichever reads better)
+function applyAccent(a, color) {
+  const root = document.documentElement, st = root.style;
+  root.dataset.accent = a; store.set("accent", a);
+  if (a === "custom") {
+    const c = color || store.get("accentColor") || "#6D5DF0"; store.set("accentColor", c);
+    const n = parseInt(c.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const lin = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }, L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    st.setProperty("--accent", c); st.setProperty("--accent-soft", `rgba(${r},${g},${b},.14)`); st.setProperty("--accent-line", `rgba(${r},${g},${b},.5)`);
+    st.setProperty("--accent-ink", L > 0.36 ? "#0B0D11" : "#FFFFFF");
+  } else for (const k of ["--accent", "--accent-soft", "--accent-line", "--accent-ink"]) st.removeProperty(k);
+  requestAnimationFrame(drawAll);
+}
 function initAppearance() {
   const theme = store.get("theme") || "system", accent = store.get("accent") || "violet";
   makeSeg($("#themeSeg"), [["system", "System"], ["light", "Light"], ["dark", "Dark"]], theme, applyTheme);
   const sw = $("#accentSw");
-  sw.innerHTML = ACCENTS.map(([k, c]) => `<button type="button" role="radio" aria-checked="${k === accent}" aria-label="${k[0].toUpperCase() + k.slice(1)}" title="${k[0].toUpperCase() + k.slice(1)}" style="--c:${c}" data-v="${k}"></button>`).join("");
+  const own = store.get("accentColor") || "#6D5DF0";
+  sw.innerHTML = ACCENTS.map(([k, c]) => `<button type="button" role="radio" aria-checked="${k === accent}" aria-label="${k[0].toUpperCase() + k.slice(1)}" title="${k[0].toUpperCase() + k.slice(1)}" style="--c:${c}" data-v="${k}"></button>`).join("")
+    + `<label class="sw-custom" role="radio" aria-checked="${accent === "custom"}" title="Your own colour" style="--c:${own}"><input type="color" id="accentCustom" value="${own}" aria-label="Your own accent colour"></label>`;
+  const mark = el => sw.querySelectorAll("[role=radio]").forEach(x => x.setAttribute("aria-checked", String(x === el)));
   sw.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    sw.querySelectorAll("button").forEach(x => x.setAttribute("aria-checked", String(x === b))); applyAccent(b.dataset.v);
+    mark(b); applyAccent(b.dataset.v);
   });
-  for (const [bid, pid] of [["#settingsBtn", "#settings"], ["#projectBtn", "#projectMenu"], ["#helpBtn", "#helpMenu"]]) {
+  const pick = $("#accentCustom");
+  pick.addEventListener("input", () => { const l = pick.closest("label"); l.style.setProperty("--c", pick.value); mark(l); applyAccent("custom", pick.value); });
+  if (accent === "custom") applyAccent("custom", own);
+  for (const [bid, pid] of [["#settingsBtn", "#settings"], ["#helpBtn", "#helpMenu"]]) {
     const btn = $(bid), pop = $(pid);
     btn.addEventListener("click", e => { e.stopPropagation(); const open = pop.hidden; closeMenus(); pop.hidden = !open; btn.setAttribute("aria-expanded", String(open)); });
     document.addEventListener("click", e => { if (!pop.hidden && !pop.contains(e.target)) { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); } });
     document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); btn.focus(); } });
   }
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => drawAll());
-}
-
-/* ============ semantic analysis (claude.ai artifact only) ============ */
-let SAMPLE = null, semCtl = null;
-function renderSem() {
-  const out = $("#semOut");
-  if (!SEM) { out.innerHTML = ""; $("#semBtn").textContent = "Analyse with Claude"; return; }
-  $("#semBtn").textContent = "Analyse again";
-  out.innerHTML = `<div class="chips">${SEM.atmosphere.map(a => `<span class="chip">${esc(a.label)}</span>`).join("")}</div>
-    <p class="note">Valence ${nf(SEM.valence)}, energy ${nf(SEM.energy)}. ${SEM.objects.length ? `${SEM.objects.length} objects: ${SEM.objects.map(o => esc(o.name)).join(", ")}.` : "No distinct objects."}</p>`;
-}
-function semStatus(t) { $("#semStatus").textContent = t; }
-function jpegBlob(src, max) {
-  const s = Math.min(1, max / Math.max(src.width, src.height)), c = makeCanvas(Math.round(src.width * s), Math.round(src.height * s));
-  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
-  return new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej({ code: "image_rejected" })), "image/jpeg", 0.86));
-}
-async function runSemantic() {
-  if (!SAMPLE || !A) return;
-  const hashAt = A.hash, btn = $("#semBtn");
-  btn.disabled = true; semStatus("Claude is analysing the image");
-  semCtl = new AbortController();
-  try {
-    const blob = await jpegBlob(SRC, 768);
-    const res = await SAMPLE.json(SEM_PROMPT, { images: [blob], signal: semCtl.signal });
-    if (!A || A.hash !== hashAt) return;
-    const sem = validateSem(res); if (!sem) throw { code: "invalid_json" };
-    SEM = sem; SEM_CACHE.set(hashAt, sem); renderSem(); semStatus(""); invalidate(LV.SAL);
-  } catch (e) {
-    const code = e && e.code;
-    if (code === "cancelled") semStatus("");
-    else if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "images_unavailable"].includes(code)) { btn.hidden = true; semStatus("Analysis with Claude isn't available here. Everything else works normally."); }
-    else if (code === "rate_limited") semStatus("Too many requests right now. Try again in a minute.");
-    else if (code === "image_rejected") semStatus("The image couldn't be sent. Try a smaller one.");
-    else if (code === "invalid_json" || code === "empty_completion") semStatus("The reply didn't have the expected format. Try again.");
-    else if (code === "session_expired") semStatus("Your session expired. Sign in to Claude again.");
-    else semStatus("The analysis was interrupted. Try again.");
-  } finally { btn.disabled = false; }
 }
 
 /* ============ export ============ */
@@ -1605,7 +1808,7 @@ let EXPORT_BUSY = false;
 async function exportJob(kind, fn) {
   if (!DL || !SCORE || EXPORT_BUSY) return;
   EXPORT_BUSY = true; EXPORT_CANCEL = false;
-  const st = $("#exportStatus"), btn = $("#export"); btn.disabled = true; st.dataset.busy = "1";
+  const st = $("#exportStatus"), btn = $("#saveProject"); btn.disabled = true; st.dataset.busy = "1";
   const say = (text, frac = null) => { st.textContent = text + (frac !== null ? ` ${Math.round(frac * 100)}%` : ""); if (EXPORT) EXPORT.status(text, frac, true, kind); };
   try {
     const done = await fn(say);
@@ -1662,10 +1865,10 @@ function videoSource(longSide) {
       VSRC = { src: SRC, max, c };
     }
   }
-  const o = P.video;
-  if (!o.grade || o.grade === "none" || !(o.gradeAmt > 0)) return c;
-  if (VGRADE && VGRADE.from === c && VGRADE.grade === o.grade && VGRADE.amt === o.gradeAmt) return VGRADE.c;
-  VGRADE = { from: c, grade: o.grade, amt: o.gradeAmt, c: gradeCanvas(c, o.grade, o.gradeAmt) };
+  // the image edit (levels, curves, white balance, tones) and the colour grade, once per settings
+  const o = P.video, key = JSON.stringify([o.edit || null, o.grade, o.gradeAmt]);
+  if (VGRADE && VGRADE.from === c && VGRADE.key === key) return VGRADE.c;
+  VGRADE = { from: c, key, c: editCanvas(c, o.edit, o.grade, o.gradeAmt || 0) };
   return VGRADE.c;
 }
 const keyName = sc => `${pcName(sc.pc)} ${sc.pent ? (sc.major ? "major pentatonic" : "minor pentatonic") : MODES[sc.modeKey].name.split(" ")[0]}`;
@@ -1676,7 +1879,7 @@ function videoCaption(sc) {
     point: i => { const F = sc.points[i]; return `Point ${i + 1} · ${SECTION_NAME[F.section] || "Development"} · chord ${romanOf(F.root, sc.modeIv)}`; }
   };
 }
-// objects for the labels: the placement's, Claude's, or a detection run from the Export tab
+// objects for the labels: the placement's, or a detection run from the Export tab
 const LABEL_OBJ = { hash: null, objects: null, job: false };
 function labelObjects() { return (ATTN.objects && ATTN.objects.length ? ATTN.objects : null) || (SEM && SEM.objects && SEM.objects.length ? SEM.objects : null) || (LABEL_OBJ.hash === (A && A.hash) ? LABEL_OBJ.objects : null); }
 const currentAutoLabels = () => (SCORE ? autoLabels(SCORE, labelObjects()) : []);
@@ -1737,7 +1940,7 @@ function initVideoDrag() {
   const cv = $("#stage");
   let drag = null;
   const frameAt = e => { const p = stagePos(e); return PV ? { x: (p.x * PV.W) / PV.w, y: (p.y * PV.H) / PV.h } : null; };
-  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; for (const k of ["title", "point"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
+  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; for (const k of ["title", "point", "bar"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
   cv.addEventListener("pointerdown", e => {
     if (!exportView() || !VSCENE || e.button !== 0) return;
     const f = frameAt(e), k = hitAt(f); if (!k) return;
@@ -1757,7 +1960,7 @@ function initVideoDrag() {
     for (const g of xs) if (Math.abs(x - g) < 0.015) { x = g; guides.push({ x: g }); break; }
     for (const g of ys) if (Math.abs(y - g) < 0.015) { y = g; guides.push({ y: g }); break; }
     x = clamp(x, 0.02, 0.98); y = clamp(y, 0.04, 0.98);
-    if (drag.k === "title") P.video.titleXY = { x, y }; else { P.video.pointXY = { x, y }; P.video.pointAlign = drag.align; }
+    if (drag.k === "title") P.video.titleXY = { x, y }; else if (drag.k === "bar") P.video.barXY = { x, y }; else { P.video.pointXY = { x, y }; P.video.pointAlign = drag.align; }
     VSCENE.guides = guides; drawStage();
   }, true);
   const end = () => { if (!drag) return; drag = null; if (VSCENE) VSCENE.guides = null; drawStage(); if (EXPORT) EXPORT.sync(); };
@@ -1840,6 +2043,8 @@ export function init() {
   }
   initKeyControls();
   initRulesControls();
+  initSeek();
+  initExpert();
   // style: a grouped dropdown with what each style is, in a line
   const styleSel = $("#styleSel");
   styleSel.innerHTML = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}">${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
@@ -1863,7 +2068,7 @@ export function init() {
   makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; drawStage(); });
   // Simple keeps the image and the eye map; the analysis views are in Advanced
   for (const k of ["edge", "reg", "cov"]) { const b = $(`#viewSeg [data-v="${k}"]`); if (b) b.classList.add("adv-only"); }
-  UI_SEG = makeSeg($("#uiModeSeg"), [["simple", "Simple"], ["advanced", "Advanced"]], UI.mode, applyUiMode);
+  UI_SEG = makeSeg($("#uiModeSeg"), [["simple", "Simple"], ["advanced", "Advanced"], ["expert", "Expert"]], UI.mode, applyUiMode);
   $("#toAdvanced").addEventListener("click", () => applyUiMode("advanced"));
   applyUiMode(UI.mode);
   initAppearance();
@@ -1933,10 +2138,9 @@ export function init() {
   $("#newSong").addEventListener("click", () => openNewSong());
   $("#shortcutsBtn").addEventListener("click", () => { closeMenus(); showShortcuts(); });
   $("#guideBtn").addEventListener("click", () => { closeMenus(); showGuide(true); });
+  $("#howBtn").addEventListener("click", () => { closeMenus(); showHowItWorks(); });
   $("#brandLogo").innerHTML = LOGO;
   if (store.get("welcomeDone")) showGuide(); else showWelcome();
-  $("#semBtn").addEventListener("click", runSemantic);
-  $("#export").addEventListener("click", () => { selectTab("export"); $("#tab-export").focus(); });
   EXPORT = initExport({ P, onLook: () => { if (exportView()) { drawStage(); scheduleAnalysis(); } }, onAudio: exportAudio, onMidi: exportMidi, onZip: doExport,
     onVideo: () => exportVideo("mp4"), onWebm: () => exportVideo("webm"), onGif: exportGif, onPoster: exportPoster, onDetect: detectObjects,
     onFont: k => ensureFont(k).then(() => { if (exportView()) drawStage(); }), onCancel: () => { EXPORT_CANCEL = true; }, onCoverFile: loadCover });
@@ -1952,19 +2156,11 @@ export function init() {
     getExtra: () => ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, name: ROLES[L.role].name, inst: SCORE.inst[L.id] })), onPickExtra: id => pickLayerInstrument(id) });
   loadDemo("lac");
 
-  if (window.claude && typeof window.claude.use === "function") {
-    window.claude.use("sample").then(async s => {
-      if (!s) return;
-      const lim = await s.limits().catch(() => null);
-      if (lim && lim.images && (lim.images.mediaTypes || []).includes("image/jpeg")) { SAMPLE = s; $("#semBox").hidden = false; }
-    }).catch(() => {});
-    window.claude.use("downloads").then(d => { if (d) { DL = d; $("#export").hidden = false; } }).catch(() => {});
-  } else {
-    DL = { save: async ({ filename, data }) => {
-      const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
-      const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000); return { status: "saved" };
-    } };
-    $("#export").hidden = false;
-  }
+  // downloads: a link the browser saves
+  DL = { save: async ({ filename, data }) => {
+    const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+    const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000); return { status: "saved" };
+  } };
+  $("#saveProject").hidden = false;
 }

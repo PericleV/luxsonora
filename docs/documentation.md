@@ -2,7 +2,7 @@
 
 Lux Sonora (formerly Sonification) turns a photograph into a piece of music, deterministically: the same image with the same settings always produces the same music. Unlike model-based music generators, every note, chord and timbre parameter can be traced back to a concrete area of the image.
 
-The app runs entirely in the browser, with no server. The sources are ES modules in `src/`, and the build produces a single static file, `dist/index.html`, which runs on GitHub Pages, as a claude.ai artifact or straight from disk. The original prototype is kept in `legacy/sonificare.html`.
+The app runs entirely in the browser, with no server. The sources are ES modules in `src/`, and the build produces a single static file, `dist/index.html`, which runs on GitHub Pages or straight from disk. The pure code of the original prototype is kept in `legacy/prototype-core.js`, as the reference for the equivalence test.
 
 Terminology: a **focus point** is a place where the simulated eye stops (called a fixation in eye-tracking literature). The sequence of focus points is the **gaze path**.
 
@@ -193,7 +193,7 @@ Saving waits until running models have finished, so the recipe describes the fin
 | Details | difference-of-Gaussians blobs at three scales plus Harris corners, no centre prior and a light border fade: particles and structures in SEM, TEM and microscopy |
 | Composition | rule-of-thirds intersections and the horizon (the row with the strongest horizontal edges in the middle 70%), weighted by region contrast so the points land on something |
 | Scan | not a map: one point per column band, left to right, at the height where region contrast is highest (The vOICe-style sweep) |
-| Objects (neural) | COCO-SSD (SSDLite MobileNet v2, 80 classes, about 5 MB): a Gaussian over each detection (score ≥ 0.35, non-maximum suppression), people centred toward the head; 75% objects plus 25% region contrast. Detected objects colour the timbre by category (living, natural, artificial, §8.4) when Claude's analysis is not used |
+| Objects (neural) | COCO-SSD (SSDLite MobileNet v2, 80 classes, about 5 MB): a Gaussian over each detection (score ≥ 0.35, non-maximum suppression), people centred toward the head; 75% objects plus 25% region contrast. Detected objects colour the timbre by category (living, natural, artificial, §8.4) |
 | Learned saliency (neural) | MSI-Net (Kroner et al. 2020, MIT), trained on eye-tracking data, at 160×120 input (about 25 MB) |
 
 Neural maps are downloaded when first chosen (region contrast is used until they are ready), computed once per analysed image, quantized to 8 bits and stored in the recipe.
@@ -239,7 +239,6 @@ When the gaze returns to a family already visited, its motif comes back varied, 
 | Key | dominant hue read on the circle of fifths: `((round(hue/30) mod 12)·7) mod 12`. If the image is nearly colourless, the key comes from brightness. Can be set by hand |
 | Style tempo | interpolation within the style's range by energy, multiplied by `1 + tempo adjustment` |
 
-With semantic analysis, the valence and energy read by Claude are blended in at `0.6 · Semantic control`.
 
 ### 7.2 Fixed duration and time split
 
@@ -396,7 +395,17 @@ Accompaniment notes outside the chord, restrikes and notes outside the scale are
 
 ### 7.7c Composition rules
 
-On top of the genre rules, seven habits from classical composition (`src/core/rules.js`). Each one reads the picture where it can, and each one can be turned off in Piece › Advanced: composition rules (`P.rules`, all on by default; recipes keep the choice, older recipes play with all of them on).
+Piece › Advanced: composition rules lists every rule the composer follows that can be turned off (`RULES_INFO` in `src/core/rules.js`, `P.rules`, all on by default; projects keep the choice, older ones play with all of them on), in five groups. The frame always applies: the key, the mode, the tempo, the style's chord grid and drum patterns and the final cadence.
+
+| Group | Rules |
+|---|---|
+| Harmony | Smooth chord changes (common tones, §7.4), Contrast moves the chords, Dominant before the end (classical) |
+| Melody | Melody on the chord (and avoid notes, §7.7b), Suspensions resolve, Leaps folded into range (§7.3), Pickup notes |
+| Voices | Melody on top, No restrikes, No stale notes (§7.7b), Bass approach notes |
+| Genre | Break before the climax (stop-down), Pumping (sidechain) |
+| Classical craft | the seven below |
+
+The seven classical-craft rules read the picture where they can:
 
 | Rule | What it does | Where it reads the image |
 |---|---|---|
@@ -431,6 +440,28 @@ A varied note never runs into the next one in single-line layers (melody, bass, 
 ### 7.7e Composition settings
 
 Piece › Advanced: composition exposes more of the algorithm: **Chord changes** (Slower, Style, Faster: the style's chord grid doubled or halved), **Swing** (0-200% of the style's own swing; straight styles stay straight), **Layers build up** (when the extra layers come in, §7.11) and **Contrast needed for a far chord** (the threshold of the Contrast rule, §7.7c, 45% by default). With the gaze, saliency, music, rules and performance groups, every stage of the pipeline has its controls in Advanced.
+
+### 7.7f Expert rules
+
+The Expert mode (Simple / Advanced / Expert at the top of the Piece tab) shows everything Advanced does, plus **Expert rules**: the user's own rules on the places the eye finds (`src/core/expert.js`, `P.expert`, saved in projects). A rule is *when* a condition, *do* an action, and can be switched off or deleted.
+
+| When | Matches |
+|---|---|
+| At place | one focus point |
+| In the part | the introduction, development, climax or resolution |
+| Where the colour is | the place's colour family on the hue circle (red, orange, yellow, green, cyan, blue, purple, magenta; grey when its hue strength is under 0.08), or bright (L > 0.62) or dark (L < 0.32) |
+| Inside a zone I draw | the places inside a rectangle dragged on the picture (shown dashed, labelled with the rule's number, in Expert mode) |
+| Between seconds | a stretch of time |
+
+| Do | What happens there |
+|---|---|
+| Add an instrument | a layer with that instrument (the style's band first) in a role (guessed from the instrument, changeable); it plays wherever the rule applies, whatever the tension, and nowhere else |
+| Silence a track | removes the notes of that track (melody, harmony, bass, pad, rhythm or an extra layer) |
+| Use the chord | the chord slots under those places (at least half inside) take that degree of the key, after the style's own choice and loop |
+| Move the melody | one or two octaves up or down, kept between MIDI 36 and 100 |
+| Play louder or softer | ±3, 6 or 12 dB on every track or one |
+
+User rules win over the style's, and stay in harmony: a chord is always a degree of the key and the melody is fitted to it by the usual rules; an added instrument plays chord tones in its role's register; a neural melody gets the rules again after it is fitted. Each rule says which places it applies to, and the line over the stage names the rules that apply to the selected point.
 
 ### 7.8 Cadence
 
@@ -528,7 +559,7 @@ The **Image timbre** control (0-100%) scales all depths. At 0% the instruments s
 
 ### 8.4 Semantic objects
 
-If a focus point lands on an object found by Claude, its category shifts the modulation vector by `0.5 · Semantic control` times this profile:
+If a focus point lands on an object found by the detector (COCO-SSD), its category shifts the modulation vector by `0.5 · Semantic control` times this profile:
 
 | Category | Shift |
 |---|---|
@@ -659,7 +690,8 @@ The interface shows only the essentials by default; the rest is in collapsed "Ad
 | Advanced: performance | Dynamic range, Picture detail, Accents, Phrasing, Expression (CC11), Vibrato (CC1) | 0-100% | 50, 50, 40, 40, 60, 40% | §7.7d |
 | | Humanize timing, length, velocity | 0-30 ms, 0-30%, 0-20 | 8 ms, 10%, 6 | §7.7d |
 | Orchestration (Advanced) | Instrument of every track, role of every extra layer | library, 8 roles | style | §7.11 |
-| Advanced: composition rules | Modulate at the climax, Contrast moves the chords, Question and answer, A bright minor ending, Leaps turn back, No parallel fifths, The peak at the climax | on / off | all on | §7.7c |
+| Advanced: composition rules | 19 rules in 5 groups | on / off | all on | §7.7c |
+| Expert rules | when (place, part, colour, zone, time) → do (add an instrument, silence, chord, octave, louder or softer) | any number | none | §7.7f |
 | | Fidelity | 0-100% | 60% | literal (high) or smoothed (low) melody |
 | | Melody octave | −2…+2 | 0 | shifts the melody by octaves |
 | | Melodic range | 1-3 octaves | 2 | span of the image height in the melody |
@@ -754,7 +786,11 @@ Offline render, stereo, 44.1 kHz, 16-bit, exactly T seconds, through the same ef
 
 ### 12.1 Video
 
-The video is the stage's overlay animated over the piece (`src/export/video.js`, with `paths.js`, `look.js`, `reactive.js` and `labels.js`). One function draws the frame for a time in seconds; the stage uses it as a live preview while the Export tab is open (press play to watch the video as it will be exported), and the encoders for every frame, so the preview is the file. The settings are grouped in the tab as Video, Look, Camera, Path and places, Labels on places, Effects and sound, Text and timing.
+The video is the stage's overlay animated over the piece (`src/export/video.js`, with `paths.js`, `look.js`, `reactive.js` and `labels.js`). One function draws the frame for a time in seconds; the stage uses it as a live preview while the Export tab is open (press play to watch the video as it will be exported), and the encoders for every frame, so the preview is the file. The settings are grouped in the tab as Video, Look, Image edit, Camera, Path and places, Labels on places, Effects and sound, Text and timing.
+
+**Image edit \*** (the video's picture only; the music always reads the original image; `editCanvas` in `look.js`, applied once per image and settings, before the colour grade): white balance (temperature: red up and blue down by up to 22%; tint: green against magenta), exposure (±2 stops), levels (black and white points, midtones as a gamma), contrast round middle grey, highlights and shadows (±35% weighted by lightness squared), saturation and vibrance (vibrance mostly on the duller colours), then curves for luminance (by the difference, so colours keep their hue), red, green and blue: five points each at 0, ¼, ½, ¾ and 1, dragged up or down (or with the arrow keys), joined by a monotone cubic (Fritsch-Carlson) that never overshoots. The colour grade, vignette, tint, grain and darkening sit in the same group. *Reset the edit* restores them all.
+
+**Sound display** (Effects and sound): sound bars, spectrum, waveform or a progress line, horizontal or vertical, growing in, out or both ways, with its height (30-300%), length (10-100%) and opacity. It sits along the bottom (or up the right side when vertical) until it is dragged on the preview, like the title, with the same guides; *Put it back* returns it. Text along the bottom keeps clear of it while it is in its place.
 
 **Formats**
 
@@ -763,6 +799,7 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 | MP4 | H.264 (else VP9 or AV1) and AAC 192 kbps (else Opus), mp4-muxer |
 | WebM | VP9 (else VP8 or AV1) and Opus 160 kbps (resampled to 48 kHz when the browser asks for it), webm-muxer |
 | GIF | silent, looping, 360/480/640 px wide, 10/12/15 fps, 256 colours per frame (gifenc); 8 s around the climax (from 1.5 s before it), the first 10 s, or the whole piece |
+| Cover, just the picture | an option: the cover shows only the (edited) picture, with its tint, vignette and grain, without the path, the places, the effects or the text |
 | Cover | messaging apps show a video's first frame as its preview, and the video fades in from black, so the first frame is a cover: the frame at the climax (0.45 s after the eye arrives, with the title shown even when it otherwise shows only at the start), the frame at a chosen second, or the user's own image (filling the frame; kept in memory, not in recipes). It stays 0-3 s (default 0.5 s), then blends into the video over the fade-in time, which replaces the fade from black. Stopped at the start, the preview shows the cover. MP4 and WebM |
 | Poster | a PNG of the frame at the playhead, at the video's size; at the very start, the frame 0.45 s after the eye reaches the climax |
 
@@ -791,7 +828,7 @@ The video is the stage's overlay animated over the piece (`src/export/video.js`,
 | Places | *As it plays* (they appear when the eye first arrives, growing in), *From the start*, *Current only*, or off. The current place is fully opaque; a visited place fades to the *Visited* opacity in 0.5 s after the eye leaves; with From the start, a place not reached yet has the *Still ahead* opacity and rises to full in 0.35 s on arrival. Numbers optional; revisits share a marker |
 | Connection notes | dots along the path where the passage notes come from, with the opacity of their part of the path, lit while they play |
 
-**Labels on places** (`labels.js`): *Detected* names each place after the object under it: the smallest box containing the point among the objects found by the Objects placement, by Claude, or by *Detect objects* in the tab (COCO-SSD, run once per image), else the nearest box centre within 12% of the image; a place on no object is described by its region's colour and light (hue name, bright/dark/deep, highlight/shadow/detail: "bright warm light", "deep blue shadow"). *My own* takes the user's text for each place by its number (empty: no label; *Fill in the detected names* copies the automatic ones to edit). A label is a pill above the place (below it near the top of the frame), rising in over 0.35 s when the eye arrives and fading 0.5 s after it leaves, or kept at the visited opacity.
+**Labels on places** (`labels.js`): *Detected* names each place after the object under it: the smallest box containing the point among the objects found by the Objects placement or by *Detect objects* in the tab (COCO-SSD, run once per image), else the nearest box centre within 12% of the image; a place on no object is described by its region's colour and light (hue name, bright/dark/deep, highlight/shadow/detail: "bright warm light", "deep blue shadow"). *My own* takes the user's text for each place by its number (empty: no label; *Fill in the detected names* copies the automatic ones to edit). A label is a pill above the place (below it near the top of the frame), rising in over 0.35 s when the eye arrives and fading 0.5 s after it leaves, or kept at the visited opacity.
 
 **Effects and sound**
 
@@ -839,29 +876,9 @@ Schema 2, with English field names. Everything needed to reproduce or port the r
 
 ---
 
-## 13. Semantic analysis (with Claude)
+## 13. Objects
 
-When the app is published as a claude.ai artifact, the **Atmosphere and objects** panel appears. The image, reduced to 768 px, is sent to Claude, which replies with JSON:
-
-```json
-{
-  "atmosphere": [{ "label": "calm", "score": 0.8 }],
-  "valence": 0.6,
-  "energy": 0.3,
-  "objects": [
-    { "name": "boat", "category": "artificial",
-      "x": 0.4, "y": 0.6, "w": 0.1, "h": 0.08, "importance": 0.7 }
-  ]
-}
-```
-
-The reply is validated (fields clamped to 0-1, at most 8 objects, unknown categories become "natural") and used in three places:
-
-- **valence and energy** shift the mode and tempo;
-- **objects** raise the saliency of the regions they cover, so they draw the eye;
-- **the object's category** colours the timbre of focus points that land on it.
-
-When the HTML file is opened locally or on GitHub Pages, the panel stays hidden and the rest of the app works normally.
+The app reads the picture on the device only and sends it nowhere. Objects come from COCO-SSD (the Objects placement, §5.7, or *Detect objects* in the Export tab): they raise the saliency of the regions they cover when the Objects placement is used, colour the timbre of the focus points that land on them by category (living, natural, artificial, §8.4) and name the places in the video's labels. (`src/core/semantic.js` validates a list of objects with categories; the equivalence test uses it.)
 
 ---
 
@@ -870,16 +887,19 @@ When the HTML file is opened locally or on GitHub Pages, the panel stays hidden 
 - **App layout**: a slim top bar (upload, demo, transport, appearance, export), the stage on the left, the inspector on the right, the timeline at the bottom. On desktop everything fits the window; on small screens the parts stack.
 - **Stage**: the image on a dark background. A segmented control switches the view (Image, Attention, Edges, Regions, Coverage); a switch hides the gaze path. Focus points are drawn as numbered circles sized by duration. Clicking one opens the Focus point tab and plays only that point.
 - **Loading**: a progress card over the stage while a file decodes, with Cancel. The Piece tab starts with **Image info** (name, pixel size, megapixels, format, file size, bit depth and sample type, how it is read, size of the working copy) and the collapsed **Analysis source** group (§2.3), opened automatically for measurement data.
-- **Simple and Advanced** (top of the Piece tab, remembered in the browser; Simple is the default for a first visit). Simple shows the main choices only: style, duration, melody, orchestration, where the eye looks and the number of focus points; on the stage the Image and Eye map views, the gaze path switch, Add point, undo and redo; in the Sound tab sampled instruments, image timbre, space and each layer's instrument. Advanced adds groove, revisits, tempo, build-up, smoothness, the analysis source (always shown for measurement data), the advanced groups, the Edges, Regions and Coverage views, the path modes, the equalizers, the channel and master effects and the export loudness.
+- **Simple, Advanced and Expert** (top of the Piece tab, remembered in the browser; Simple is the default for a first visit). Simple shows the main choices only: style, duration, melody, orchestration, where the eye looks and the number of focus points; on the stage the Image and Eye map views, the gaze path switch, Add point, undo and redo; in the Sound tab sampled instruments, image timbre, space and each layer's instrument. Advanced adds groove, revisits, tempo, build-up, smoothness, the analysis source (always shown for measurement data), the advanced groups, the Edges, Regions and Coverage views, the path modes, the equalizers, the channel and master effects and the export loudness.
 - **Plain labels**: Placement is shown as *Where the eye looks*, the Attention view as *Eye map*, Returns as *Revisits*, Dramatic arc as *Build-up* and Smooth transitions as *Smoothness* (the documentation keeps the technical names).
 - **The Piece tab in cards**: *Music* (style with a one-line description, duration, melody, connections, orchestration, groove), *Image* (image info, where the eye looks, analysis source), *Shape* (focus points, revisits, tempo, build-up, smoothness), then the advanced groups.
 - **Why it sounds like this**: a line over the stage explains the selected focus point: its section, its chord and the two or three strongest links from its area to the sound (height → register, smoothness → legato, sharp edges → attack, texture → brightness, colour → resonance and harmonics). Hidden on phones, where the Focus point tab has the same information.
-- **One status line** next to Export says what is downloading (instruments, the melody, groove or saliency models), with a pulsing dot.
+- **Position bar** in the top bar, next to Play: drag it to choose where the song plays from (it keeps playing if it was), as well as clicking the timeline.
+- **Model bar**: while an AI model downloads or works, a bar under the top bar names it, with its size, and fills as it composes when the progress is known (the Story and Improvise melodies), so it is clear the app is busy, not stuck.
+- **How it works** (Help): the whole idea in plain words, every composition rule (from the rules' own descriptions, so the list stays complete), the performance, Expert rules and each AI model, what it does and its size.
+- **One status line** next to Save project says what is downloading (instruments, the melody, groove or saliency models), with a pulsing dot.
 - **Phones**: a compact top bar (icon-only upload, no app name) that stays at the top while scrolling.
 - **Welcome page** (first visit; again with *Welcome* in the top bar): what the app does in a paragraph, the three steps (choose an image, generate a song, shape and share), what it offers (16 styles, sampled instruments and optional neural networks, the analysis in the browser, reproducible recipes, open source), *Upload an image* or *Try a demo*, and the credits: developed by Pericle, with a link and a QR code to the Instagram account @pericle_v. The About dialog has the same credit.
 - **First run**: after the welcome page, a short guide on the stage (upload, new song, shape it) with *Upload a photo*, *New song* and *Keyboard shortcuts*; it can be shown again from *About and licence*.
-- **New song** (top bar; opens by itself after an upload): genre, duration, the number of focus points (with a suggestion from the image, `4 + 10·(0.5·entropy + 0.5·edges)`) and where the eye looks. *Generate song* places the points with that method (press play when you like); the points can then be moved, added, removed and given a role. *Place the points myself* starts an empty manual path with the Add tool on and a short hint: click the image in the order the places should be heard, then set each point's role in the Focus point tab.
-- **Top bar**: *Welcome* opens the welcome page; *Help* has Getting started (the quick start guide, which has a close button), Keyboard shortcuts (also `?`) and About and licence (version, MIT licence, credits); the folder icon holds Save recipe and Open recipe.
+- **New song** (top bar; opens by itself after an upload): genre, duration, the number of focus points (with a suggestion from the image, `4 + 10·(0.5·entropy + 0.5·edges)`), where the eye looks, the melody (Classic, Story or Improvise, each explained), what happens between the spots (the connections) and the orchestration, which names the instruments it would add for this picture and style. *Generate song* places the points with that method (press play when you like); the points can then be moved, added, removed and given a role. *Place the points myself* starts an empty manual path with the Add tool on and a short hint: click the image in the order the places should be heard, then set each point's role in the Focus point tab.
+- **Top bar**: *Welcome* opens the welcome page; *Help* has Getting started (the quick start guide, which has a close button), Keyboard shortcuts (also `?`) and About and licence (version, MIT licence, credits); *Load project* and *Save project* open and save a project (the picture and every setting, the file called a recipe in §5.6). Audio, MIDI and video are in the Export tab.
 - **Pickers**: instruments and drum kits are chosen in a dialog with search, a family filter and a *Listen* button (an arpeggio in the layer's register, or a bar of drums); the list holds the style default, recommended sampled instruments, the synthesizers, all 128 General MIDI soundfonts by family, Mellotron, VCSL mallets and electric pianos, and 225 kits (built in, classic drum machines and 220 DrumAbuse machines).
 - **Inspector**, four tabs:
   - **Piece**: placement, style, duration, melody, groove, focus points, tempo (with the resulting BPM and bars), then the collapsed groups Advanced: gaze, what draws the eye, music, and "How the image was read". Group state is kept locally in the browser.
@@ -920,8 +940,8 @@ When the HTML file is opened locally or on GitHub Pages, the panel stays hidden 
 | Sobel, entropy, histograms | OpenCV, scikit-image |
 | Own SLIC | `skimage.segmentation.slic` or SAM for semantic regions |
 | Region-contrast saliency | spectral residual (OpenCV) or DeepGaze IIE |
-| Atmosphere via Claude | CLIP zero-shot on a list of atmosphere labels |
-| Objects via Claude | YOLO or DETR, with classes mapped to living / natural / artificial |
+| Atmosphere (not in the web app) | CLIP zero-shot on a list of atmosphere labels |
+| Objects (COCO-SSD) | YOLO or DETR, with classes mapped to living / natural / artificial |
 | Music theory | music21 |
 | MIDI writing | pretty_midi or mido |
 | Web Audio synthesis | DawDreamer with Surge XT / Vital, parameters automated from the computed timbre |

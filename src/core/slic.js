@@ -1,5 +1,5 @@
 // SLIC superpixels in Lab + spatial space.
-// Ported from legacy/sonificare.html; logic unchanged.
+// Ported from the original prototype (legacy/prototype-core.js); logic unchanged.
 import { clamp, clampInt, lerp, mulberry32, hashBytes, srgbToLin, labF, boxBlur, entropyOf } from "./util.js";
 
 export function relabel(lab, N) {

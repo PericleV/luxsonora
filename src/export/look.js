@@ -40,6 +40,87 @@ export function gradeCanvas(src, grade, amount) {
   return c;
 }
 
+// ---- image edit (the video's picture only; the music always reads the original image)
+// White balance, exposure, levels, contrast, highlights and shadows, saturation and vibrance, then
+// curves (luminance, red, green, blue: five points each, at 0, ¼, ½, ¾ and 1). Applied once per
+// image and settings, before the colour grade.
+export const CURVE_X = [0, 0.25, 0.5, 0.75, 1];
+const ID_CURVE = () => [0, 0.25, 0.5, 0.75, 1];
+export function defaultEdit() {
+  return { exposure: 0, contrast: 0, highlights: 0, shadows: 0, temp: 0, tint: 0, saturation: 0, vibrance: 0, black: 0, white: 1, gamma: 1, curves: { l: ID_CURVE(), r: ID_CURVE(), g: ID_CURVE(), b: ID_CURVE() } };
+}
+const isId = c => !c || c.every((y, i) => Math.abs(y - CURVE_X[i]) < 1e-6);
+export function editIsIdentity(e) {
+  if (!e) return true;
+  const D = defaultEdit();
+  for (const k of Object.keys(D)) if (k !== "curves" && Math.abs((e[k] ?? D[k]) - D[k]) > 1e-6) return false;
+  return !e.curves || ["l", "r", "g", "b"].every(k => isId(e.curves[k]));
+}
+// A smooth curve through the five points that never overshoots (monotone cubic, Fritsch-Carlson),
+// as a 256-entry table.
+export function curveLUT(ys) {
+  const xs = CURVE_X, n = xs.length, y = (ys || ID_CURVE()).map(v => clamp(v)), d = [], m = new Array(n);
+  for (let i = 0; i < n - 1; i++) d.push((y[i + 1] - y[i]) / (xs[i + 1] - xs[i]));
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+    if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+  }
+  const lut = new Float32Array(256);
+  for (let k = 0; k < 256; k++) {
+    const x = k / 255; let i = Math.min(n - 2, Math.floor(x / 0.25)); const hh = xs[i + 1] - xs[i], t = (x - xs[i]) / hh;
+    const h00 = 2 * t ** 3 - 3 * t ** 2 + 1, h10 = t ** 3 - 2 * t ** 2 + t, h01 = -2 * t ** 3 + 3 * t ** 2, h11 = t ** 3 - t ** 2;
+    lut[k] = clamp(h00 * y[i] + h10 * hh * m[i] + h01 * y[i + 1] + h11 * hh * m[i + 1]);
+  }
+  return lut;
+}
+const lutAt = (lut, v) => { const x = clamp(v) * 255, i = Math.min(254, Math.floor(x)), f = x - i; return lut[i] + (lut[i + 1] - lut[i]) * f; };
+// one pixel (0-1) through the edit; L: the curve tables
+export function editPixel(r, g, b, e, L) {
+  // white balance: warmer (more red, less blue) or cooler; tint toward magenta or green
+  const t = e.temp || 0, ti = e.tint || 0;
+  r *= 1 + 0.22 * t + 0.06 * ti; g *= 1 - 0.14 * ti; b *= 1 - 0.22 * t + 0.06 * ti;
+  // exposure in stops
+  const ex = Math.pow(2, e.exposure || 0); r *= ex; g *= ex; b *= ex;
+  // levels: black and white points, then the midtones (gamma)
+  const lo = e.black ?? 0, hi = Math.max(lo + 0.02, e.white ?? 1), gm = 1 / Math.max(0.1, e.gamma ?? 1);
+  const lv = v => Math.pow(clamp((v - lo) / (hi - lo)), gm);
+  r = lv(r); g = lv(g); b = lv(b);
+  // contrast round the middle grey
+  const c = e.contrast || 0; if (c) { const k = 1 + c; r = 0.5 + (r - 0.5) * k; g = 0.5 + (g - 0.5) * k; b = 0.5 + (b - 0.5) * k; }
+  // highlights and shadows: lift or pull the bright and the dark tones
+  let lum = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  const sh = (e.shadows || 0) * 0.35 * (1 - lum) ** 2, hl = (e.highlights || 0) * 0.35 * lum ** 2;
+  if (sh || hl) { r += sh + hl; g += sh + hl; b += sh + hl; lum = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b); }
+  // saturation, and vibrance (more on the dull colours)
+  const sat0 = Math.max(r, g, b) - Math.min(r, g, b), k = 1 + (e.saturation || 0) + (e.vibrance || 0) * (1 - clamp(sat0));
+  if (k !== 1) { r = lum + (r - lum) * k; g = lum + (g - lum) * k; b = lum + (b - lum) * k; }
+  // curves: luminance first (by the difference, so the colour stays), then each channel
+  if (L.l) { const l0 = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b), dl = lutAt(L.l, l0) - l0; r += dl; g += dl; b += dl; }
+  if (L.r) r = lutAt(L.r, r); if (L.g) g = lutAt(L.g, g); if (L.b) b = lutAt(L.b, b);
+  return [clamp(r), clamp(g), clamp(b)];
+}
+// An edited and graded copy of a canvas (the same canvas when there is nothing to do).
+export function editCanvas(src, e, grade = "none", amount = 0) {
+  const doEdit = !editIsIdentity(e), doGrade = grade && grade !== "none" && amount > 0;
+  if (!doEdit && !doGrade) return src;
+  const c = document.createElement("canvas"); c.width = src.width; c.height = src.height;
+  const g = c.getContext("2d"); g.drawImage(src, 0, 0);
+  const im = g.getImageData(0, 0, c.width, c.height), d = im.data;
+  const cv = (e && e.curves) || {}, L = {};
+  for (const k of ["l", "r", "g", "b"]) if (!isId(cv[k])) L[k] = curveLUT(cv[k]);
+  for (let p = 0; p < d.length; p += 4) {
+    let o = [d[p] / 255, d[p + 1] / 255, d[p + 2] / 255];
+    if (doEdit) o = editPixel(o[0], o[1], o[2], e, L);
+    if (doGrade) o = gradePixel(o[0], o[1], o[2], grade, amount);
+    d[p] = o[0] * 255; d[p + 1] = o[1] * 255; d[p + 2] = o[2] * 255;
+  }
+  g.putImageData(im, 0, 0);
+  return c;
+}
+
 // ---- vignette and grain, drawn over each frame
 export function drawVignette(g, W, H, amount, color = "#000000") {
   if (amount <= 0) return;
@@ -120,7 +201,7 @@ export function drawSafeGuides(g, W, H, shape, u) {
 
 // ---- looks: every setting of how the video looks (not its size, text or labels)
 export const LOOK_KEYS = ["camera", "zoom", "camEase", "camMove", "camSmooth", "drift", "fit", "theme", "pathColor", "pointColor", "path", "lineShape", "line", "lineWidth", "pathDone", "pathAhead",
-  "points", "placeDone", "placeAhead", "numbers", "passages", "eye", "fx", "strength", "react", "dim", "grade", "gradeAmt", "vignette", "grain", "font", "titlePos", "titleWhen", "titleSecs", "subtitle", "textSize", "bottom", "pathFill", "pathColor2", "glow", "dashLen", "dashGap", "curve", "placeStyle", "placeSize", "numberStyle", "climaxOwn", "climaxColor", "spotColor", "vigColor", "tintColor", "tintAmt", "textStyle", "boxColor", "caps", "letterSpace", "titleAnim", "bottomFill", "bottomColor", "bottomColor2", "titleColor", "subColor", "eyeColor", "labelColor", "labelBg", "fadeIn", "fadeOut", "endCard"];
+  "points", "placeDone", "placeAhead", "numbers", "passages", "eye", "fx", "strength", "react", "dim", "grade", "gradeAmt", "vignette", "grain", "font", "titlePos", "titleWhen", "titleSecs", "subtitle", "textSize", "bottom", "pathFill", "pathColor2", "glow", "dashLen", "dashGap", "curve", "placeStyle", "placeSize", "numberStyle", "climaxOwn", "climaxColor", "spotColor", "vigColor", "tintColor", "tintAmt", "textStyle", "boxColor", "caps", "letterSpace", "titleAnim", "bottomFill", "bottomColor", "bottomColor2", "titleColor", "subColor", "eyeColor", "labelColor", "labelBg", "fadeIn", "fadeOut", "endCard", "edit", "barOrient", "barXY", "barDir", "barSize", "barLength", "barOpacity", "coverClean"];
 export const LOOKS = {
   minimal: { name: "Minimal", camera: "still", drift: 0.06, theme: "white", pathColor: "#FFFFFF", pointColor: "#FFFFFF", path: "draw", lineShape: "curved", line: "solid", lineWidth: 2, points: "visited", placeDone: 0.5, numbers: false, passages: false, eye: "dot",
     fx: { pulse: true, ripple: false, spotlight: false, glow: false, flash: false }, strength: 0.4, react: 0.2, dim: 0.05, grade: "matte", gradeAmt: 0.5, vignette: 0.2, grain: 0, font: "grotesk", titlePos: "bl", titleWhen: "always", bottom: "line" },

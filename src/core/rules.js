@@ -12,14 +12,29 @@
 import { clamp } from "./util.js";
 import { degMidi } from "./theory.js";
 
+// Every rule the composer uses that can be turned off, in groups (the key, the mode, the tempo, the
+// genre's chord grid and drum patterns and the final cadence are the frame and always apply).
+export const RULE_GROUPS = { harmony: "Harmony", melody: "Melody", voices: "Voices", genre: "Genre", craft: "Classical craft" };
 export const RULES_INFO = {
-  modulate: { name: "Modulate at the climax", desc: "When the climax has another colour, the music moves one step on the circle of fifths there, and comes home before the end." },
-  contrast: { name: "Contrast moves the chords", desc: "Similar places keep chords that share notes; a strong contrast in colour or light jumps to a more distant chord." },
-  cadences: { name: "Question and answer", desc: "Every four bars a phrase ends: open on the dominant, then closed on the tonic." },
-  picardy: { name: "A bright minor ending", desc: "A minor piece ends on a major chord when its last place is bright (the Picardy third)." },
-  leap: { name: "Leaps turn back", desc: "After a leap wider than a fourth the melody turns back by step, so it stays singable." },
-  parallels: { name: "No parallel fifths", desc: "The melody and the bass never move in parallel fifths or octaves." },
-  peak: { name: "The peak at the climax", desc: "The highest note of the melody falls on the climax." }
+  voiceLeading: { group: "harmony", name: "Smooth chord changes", desc: "Among the chords that hold the melody note, the one sharing the most notes with the previous chord is chosen, so the harmony moves smoothly." },
+  contrast: { group: "harmony", name: "Contrast moves the chords", desc: "Similar places keep chords that share notes; a strong contrast in colour or light jumps to a more distant chord." },
+  cadentialV: { group: "harmony", name: "Dominant before the end", desc: "In the styles that use it (classical), the chord before the final cadence is the dominant, so the piece ends V-I." },
+  chordTones: { group: "melody", name: "Melody on the chord", desc: "A melody note on a beat moves to the nearest chord tone, and a note that rubs a semitone against the chord becomes a chord tone or a gentle tension." },
+  suspensions: { group: "melody", name: "Suspensions resolve", desc: "A long melody note held into a chord it rubs against stays until the change, then steps to the nearest tone of the new chord." },
+  leapLimit: { group: "melody", name: "Leaps folded into range", desc: "A motif that would jump too far from the last note moves by an octave toward it (Smoothness sets how far is too far)." },
+  pickups: { group: "melody", name: "Pickup notes", desc: "In the styles that use them, a passing note on the last eighth of a place leads into the next one." },
+  melodyTop: { group: "voices", name: "Melody on top", desc: "A harmony note above the melody moves down an octave, so the tune is always the highest voice." },
+  restrikes: { group: "voices", name: "No restrikes", desc: "A note that starts while the same pitch still sounds ends the earlier one; single-line parts never overlap themselves." },
+  stale: { group: "voices", name: "No stale notes", desc: "An accompaniment note held into a chord it rubs against ends at the change." },
+  approach: { group: "voices", name: "Bass approach notes", desc: "In the styles that use them, the bass walks into the next chord by a step." },
+  stopDown: { group: "genre", name: "Break before the climax", desc: "In trailer styles (epic, metal) everything stops for half a beat right before the climax." },
+  sidechain: { group: "genre", name: "Pumping (sidechain)", desc: "In electronic styles the other parts duck on every kick." },
+  modulate: { group: "craft", name: "Modulate at the climax", desc: "When the climax has another colour, the music moves one step on the circle of fifths there, and comes home before the end." },
+  cadences: { group: "craft", name: "Question and answer", desc: "Every four bars a phrase ends: open on the dominant, then closed on the tonic." },
+  picardy: { group: "craft", name: "A bright minor ending", desc: "A minor piece ends on a major chord when its last place is bright (the Picardy third)." },
+  leap: { group: "craft", name: "Leaps turn back", desc: "After a leap wider than a fourth the melody turns back by step, so it stays singable." },
+  parallels: { group: "craft", name: "No parallel fifths", desc: "The melody and the bass never move in parallel fifths or octaves." },
+  peak: { group: "craft", name: "The peak at the climax", desc: "The highest note of the melody falls on the climax." }
 };
 export const defaultRules = () => Object.fromEntries(Object.keys(RULES_INFO).map(k => [k, true]));
 export const ruleOn = (P, k) => !P.rules || P.rules[k] !== false;

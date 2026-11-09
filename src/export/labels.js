@@ -1,6 +1,6 @@
 // Labels on the places in the video: what the eye is looking at.
 //
-// Detected: the name of the object under the point (COCO-SSD or Claude's objects, the smallest
+// Detected: the name of the object under the point (COCO-SSD objects, the smallest
 // box that contains it, else the nearest box centre within 12% of the image); without one, a
 // short description of the region's colour and light ("warm highlight", "deep blue shadow").
 // Custom: the user's own text for each point (an empty text shows no label).

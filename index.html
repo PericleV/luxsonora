@@ -18,6 +18,8 @@
     var t = localStorage.getItem("sonification.theme"), a = localStorage.getItem("sonification.accent");
     if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     if (a) document.documentElement.dataset.accent = a;
+    var c = localStorage.getItem("sonification.accentColor");
+    if (a === "custom" && /^#[0-9a-f]{6}$/i.test(c || "")) document.documentElement.style.setProperty("--accent", c);
   } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,6 +29,8 @@
 <body>
 <div class="app">
   <header class="appbar">
+    <!-- an AI model loading or working: what it is, and a bar (it fills when the progress is known) -->
+    <div class="model-load" id="modelLoad" role="status" aria-live="polite" hidden><span class="ml-label" id="modelLoadText"></span><span class="ml-track"><span class="ml-fill" id="modelLoadFill"></span></span></div>
     <div class="brand">
       <span class="logo" id="brandLogo" aria-hidden="true"></span>
       <span>Lux Sonora</span>
@@ -41,6 +45,7 @@
     </div>
     <div class="transport" aria-label="Playback">
       <button type="button" class="play" id="play" aria-label="Play" aria-keyshortcuts="Space"></button>
+      <input type="range" id="seek" class="seek" min="0" max="1000" step="1" value="0" aria-label="Position in the song" title="Drag to choose where the song plays from">
       <span id="rTime" class="mono">0:00 / 0:30</span>
       <span class="readout"><strong id="rKey"></strong><span id="rMeta"></span></span>
     </div>
@@ -50,22 +55,17 @@
       <button type="button" class="tb-link" id="helpBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="helpMenu" title="Help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.1-2.4 3.6"/><path d="M12 17.2v.1"/></svg><span>Help</span></button>
       <div class="popover popover-menu" id="helpMenu" role="menu" aria-label="Help" hidden>
         <button type="button" role="menuitem" id="guideBtn">Getting started</button>
+        <button type="button" role="menuitem" id="howBtn">How it works</button>
         <button type="button" role="menuitem" id="shortcutsBtn">Keyboard shortcuts</button>
         <button type="button" role="menuitem" id="aboutBtn">About and licence</button>
-      </div>
-      <button type="button" class="icon-btn" id="projectBtn" aria-label="Recipe" aria-haspopup="menu" aria-expanded="false" aria-controls="projectMenu" title="Recipe: save or open">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l2 2h6.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/></svg>
-      </button>
-      <div class="popover popover-menu" id="projectMenu" role="menu" aria-label="Project" hidden>
-        <button type="button" role="menuitem" id="saveProject">Save recipe</button>
-        <button type="button" role="menuitem" id="openProject">Open recipe</button>
-        <p class="sub">A recipe saves the picture and all your settings, so you or anyone else can open the exact same song later.</p>
       </div>
       <input id="projectFile" class="visually-hidden" type="file" accept=".json,application/json">
       <button type="button" class="icon-btn" id="settingsBtn" aria-label="Appearance" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
       </button>
-      <button type="button" class="btn" id="export" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Export</button>
+      <!-- a project (a recipe file): the picture and every setting, to open the exact same song later -->
+      <button type="button" class="tb-link" id="openProject" title="Load a project: the picture and all its settings, exactly as they were saved"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5H10l2 2h6.5A1.5 1.5 0 0 1 20 8.5v1.5"/><path d="M4 17.5V9.5h16.5l-2.2 8.6a1.2 1.2 0 0 1-1.2.9H5.5A1.5 1.5 0 0 1 4 17.5z"/></svg><span>Load project</span></button>
+      <button type="button" class="btn" id="saveProject" hidden title="Save the picture and all your settings, so you or anyone else can open the exact same song later. Audio and video are in the Export tab."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>Save project</button>
       <div class="popover" id="settings" role="dialog" aria-label="Appearance" hidden>
         <div class="field"><div class="flabel" id="lblTheme">Theme</div><div class="seg" id="themeSeg" role="radiogroup" aria-labelledby="lblTheme"></div></div>
         <div class="field"><div class="flabel" id="lblAccent">Accent</div><div class="swatches" id="accentSw" role="radiogroup" aria-labelledby="lblAccent"></div></div>
@@ -133,6 +133,11 @@
           <section class="card" aria-labelledby="hShape"><h3 id="hShape">Shape</h3>
             <div id="sBasic" class="sliders"></div>
           </section>
+          <section class="card expert-only" aria-labelledby="hExpert"><h3 id="hExpert">Expert rules</h3>
+            <p class="sub">Your own rules on the places the eye finds: when a condition is met, the music does what you ask. Your rules win over the style's, and stay in harmony: chords come from the key and the melody is fitted to them.</p>
+            <ol class="xrules" id="expertList"></ol>
+            <button type="button" class="btn" id="expertAdd"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a rule</button>
+          </section>
           <div class="adv-only adv-group">
           <details class="adv" data-adv="gaze">
             <summary>Advanced: gaze</summary>
@@ -141,7 +146,7 @@
           </details>
           <details class="adv" data-adv="sal">
             <summary>Advanced: what draws the eye</summary>
-            <p class="sub">What catches the eye: colour contrast, busy textures and the objects Claude finds.</p>
+            <p class="sub">What catches the eye: colour contrast and busy textures.</p>
             <div id="sSal" class="sliders"></div>
           </details>
           <details class="adv" data-adv="music">
@@ -161,16 +166,9 @@
           </details>
           <details class="adv" data-adv="rules">
             <summary>Advanced: composition rules</summary>
-            <p class="sub">Classical habits laid on top of the style. Each one reads the picture where it can. Turn off any you don't want.</p>
+            <p class="sub">Every rule the composer follows, on top of the style's own frame (the key, the mode, the tempo, the chord grid, the drum patterns and the final cadence). Turn off any you don't want and hear what changes.</p>
             <div id="sRules" class="rules"></div>
             <button type="button" class="linkbtn" id="rulesAll">Turn them all on</button>
-          </details>
-          <details class="adv" id="semBox" data-adv="sem" hidden>
-            <summary>Atmosphere and objects</summary>
-            <p class="sub">Claude describes the mood and the objects in the picture. That nudges the key and the tempo, draws the eye to the objects and colours the sound.</p>
-            <button type="button" class="btn" id="semBtn">Analyse with Claude</button>
-            <p class="status" id="semStatus" role="status"></p>
-            <div id="semOut"></div>
           </details>
           <details class="adv" data-adv="explain">
             <summary>How the image was read</summary>

@@ -20,7 +20,7 @@ const stubRareTiffDecoders = {
 };
 
 // A single index.html with JS and CSS inlined: runs on GitHub Pages,
-// as a claude.ai artifact and straight from disk (file://).
+// and straight from disk (file://).
 // The decoding worker is inlined too, with geotiff's lazily loaded decoders bundled into it.
 export default defineConfig({
   base: "./",

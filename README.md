@@ -20,11 +20,12 @@ What you see becomes something you can hear. And because the same image always t
 - **Sixteen styles with their genre rules:** Ambient, Minimal, Lo-fi hip hop, Classical, Cinematic, Movie score, Orchestral epic, Jazz, Bossa nova, Electronic, Synthwave, Pop, Rock, Metal, Blues and Funk: chord grid, drum phrases, articulations, transitions.
 - **Composition rules:** the climax can move one step on the circle of fifths when its colour differs from the rest of the picture, phrases end as question and answer, a bright last place gives a minor piece a major ending, the contrast between two places sets how far the chords move, and the melody avoids parallel fifths, turns back after a leap and peaks at the climax. Each rule can be switched off.
 - **Played, not just written:** dynamics read from the picture note by note, accents and phrasing, expression and vibrato curves (CC11, CC1), and a humanizer for timing, length and velocity. Every track's instrument can be changed, and Add layer offers each style's own band.
+- **Expert mode:** your own rules on the places the eye finds: at a place, in a part, on a colour or inside a zone you draw, add an instrument, silence a track, choose the chord, move the melody or change the dynamics, always in harmony.
 - **Where the eye goes:** nine placement methods, from classic saliency (region contrast, spectral residual, frequency-tuned, Itti-Koch, details, composition, scan) to neural ones (COCO-SSD objects, MSI-Net learned saliency). Generate the points automatically, or place them yourself and give each one a role: calm, build, climax or release.
 - **A story, not a sequence:** a dramatic arc (introduction, development, climax, resolution), passages that follow the path between two places, continuous transitions between regions, an orchestration chosen from the image, and optional neural melodies (Magenta MusicVAE "Story", ImprovRNN "Improvise") and grooves (GrooVAE).
 - **Instruments:** synthesizers plus about 250 sampled instruments (General MIDI soundfonts, Steinway, electric pianos, Mellotron, mallets) and 225 drum kits, with a searchable picker that lets you listen first.
 - **Images:** PNG, JPEG, WebP, GIF, BMP, AVIF and TIFF up to 300 MP, including 16-bit and floating-point SEM and TEM data.
-- **Export:** audio as WAV (16 or 24-bit), MP3 or M4A, normalized to −14 LUFS; MIDI for your DAW (named tracks with General MIDI programs, key signature, markers at every place, performed velocities and timing, CC11, CC1 and timbre automation); all parameters; a **recipe** that lets anyone make the same piece again (the image, every setting, the neural results and a check); and a **video** (MP4, WebM, GIF or a PNG poster) at the image's own size, with the gaze path, the places, their labels and effects drawn in time with the music and reacting to the sound: a smoothed camera, 11 line styles, colour grades, fonts, an end card and saved looks, previewed live on the stage.
+- **Export:** audio as WAV (16 or 24-bit), MP3 or M4A, normalized to −14 LUFS; MIDI for your DAW (named tracks with General MIDI programs, key signature, markers at every place, performed velocities and timing, CC11, CC1 and timbre automation); all parameters; a **recipe** that lets anyone make the same piece again (the image, every setting, the neural results and a check); and a **video** (MP4, WebM, GIF or a PNG poster) at the image's own size, with the gaze path, the places, their labels and effects drawn in time with the music and reacting to the sound: a smoothed camera, 11 line styles, colour grades, fonts, an end card an image editor (levels, curves, white balance, highlights and shadows), a movable sound display and saved looks, previewed live on the stage.
 
 Runs entirely in the browser: the analysis happens on your device, and the build is a single static file.
 
@@ -38,7 +39,7 @@ npm run build    # dist/index.html: one static file
 npm run audit:music   # note-by-note harmony report for every style
 ```
 
-`dist/index.html` runs on GitHub Pages, as a claude.ai artifact or straight from disk. Sampled instruments and neural models are downloaded when first used; without a network the synthesized instruments and the classic algorithms still make the whole piece.
+`dist/index.html` runs on GitHub Pages or straight from disk. Nothing is sent anywhere: there are no accounts, servers or API keys. Sampled instruments and neural models are downloaded when first used; without a network the synthesized instruments and the classic algorithms still make the whole piece.
 
 ## Publishing
 
@@ -57,7 +58,7 @@ Every push to `main` runs the tests, builds `dist/` and publishes it with GitHub
 - `src/audio/`: Web Audio engine, synthesizers, sampled instruments
 - `src/export/`: MIDI, WAV, MP3, M4A, ZIP, video (frames, paths, look, sound analysis, labels)
 - `src/ui/`: interface
-- `legacy/sonificare.html`: the original prototype, reference for the equivalence test
+- `legacy/prototype-core.js`: the pure code of the original prototype, the reference for the equivalence test
 
 ## Contributing
 

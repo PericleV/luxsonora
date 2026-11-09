@@ -3,9 +3,9 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
-import { GRADES, FONTS, QUALITY, LOOKS, pickLook } from "../export/look.js";
+import { GRADES, FONTS, QUALITY, LOOKS, pickLook, defaultEdit, curveLUT, CURVE_X } from "../export/look.js";
 import { LABEL_MODES } from "../export/labels.js";
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -34,7 +34,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         <button type="button" class="btn" id="xMidi" title="For your DAW">MIDI for a DAW</button>
         <button type="button" class="btn" id="xZip">Everything (ZIP)</button>
       </div>
-      <p class="snote">If an AI model is still working, the export waits for it to finish. The ZIP has a WAV, the MIDI, the settings and the recipe.</p>
+      <p class="snote">If an AI model is still working, the export waits for it to finish. The ZIP has a WAV, the MIDI, the settings and the project file.</p>
       <p class="snote">The MIDI file opens in any DAW: one track per layer, named after its instrument and set to the nearest General MIDI sound, with the tempo, the key (and the modulation), a marker at every place, the performed velocities and timing, and the expression (CC11), vibrato (CC1) and timbre curves.</p>
     </section>
     <section class="card" aria-labelledby="hVideoOut"><h3 id="hVideoOut">Video</h3>
@@ -44,6 +44,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       ${seg("xCover", "Cover")}
       <div id="xCoverBox">${box("xCoverTime")}
         <div id="xCoverPickBox"><button type="button" class="btn" id="xCoverPick">Choose an image</button> <span class="snote" id="xCoverName"></span><input type="file" id="xCoverFile" class="visually-hidden" accept="image/*"></div>
+        <div class="vtoggles" id="xCoverCleanBox">${tog("xCoverClean", "Just the picture (no path, places or text)")}</div>
         ${box("xCoverHold")}</div>
       <p class="snote">Apps like WhatsApp show the first frame as the video's preview. The cover is that frame: without one it would be black, because the video fades in.</p>
       <div class="adv-only">${seg("xShape", "Shape")}<div class="vtoggles" id="xSafeBox">${tog("xSafe", "Show the safe area (preview only)")}</div>${seg("xQuality", "Quality")}${seg("xFps", "Frames per second")}</div>
@@ -67,11 +68,20 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <p class="snote" id="xLookNote">A look keeps all the style choices below, so you can reuse them on other pictures. Saved looks stay in this browser.</p>
       <div class="field"><div class="flabel" id="lblTheme2">Colours</div>
         <div class="vthemes" id="xTheme" role="radiogroup" aria-labelledby="lblTheme2">${Object.entries(VIDEO_THEMES).map(([k, t]) => `<button type="button" role="radio" aria-checked="false" data-v="${k}" title="${esc(t.name)}"><span style="background:${t.path}"></span><span style="background:${t.point}"></span><em>${esc(t.name)}</em></button>`).join("")}</div>
-        <div class="vcolors"><label><input type="color" id="xPathCol">Path</label><label><input type="color" id="xPointCol">Places and effects</label></div></div>
+        <div class="vcolors"><label><input type="color" id="xPathCol">Path</label><label><input type="color" id="xPointCol">Places and effects</label></div></div>`, true)}
+    ${group("edit", "Image edit *", `
+      <p class="snote">* Only the picture in the video changes. The music always reads the original image.</p>
+      <div class="field"><div class="flabel">Light and colour</div><div id="xEdBasic" class="sliders sliders-2"></div></div>
+      <div class="field"><div class="flabel">Levels</div><div id="xEdLevels" class="sliders sliders-2"></div></div>
+      <div class="field"><div class="srow"><div class="flabel" id="lbl_xCurveCh">Curves</div><button type="button" class="linkbtn" id="xCurveReset">Reset curve</button></div>
+        <div class="seg seg-sm" id="xCurveCh" role="radiogroup" aria-labelledby="lbl_xCurveCh"></div>
+        <svg id="xCurve" class="xcurve" viewBox="0 0 200 200" role="img" aria-label="Tone curve: drag the points up or down"></svg>
+        <p class="snote">Drag a point up to brighten that part of the tones, down to darken it. The ends set the darkest and the brightest.</p></div>
       ${sel("xGrade", "Colour grade", opts(GRADES))}
       ${box("xGradeAmt")}${box("xVignette")}
       <div class="vcolors">${col("xVigCol", "Vignette colour")}${col("xTintCol", "Tint")}</div>
-      ${box("xTint")}${box("xGrain")}${box("xDim")}`, true)}
+      ${box("xTint")}${box("xGrain")}${box("xDim")}
+      <button type="button" class="btn" id="xEditReset">Reset the edit</button>`)}
     ${group("camera", "Camera", `
       ${seg("xCamera", "Camera")}
       <div id="xCamBox">${box("xZoom")}${seg("xEase", "Motion")}${box("xCamMove")}</div>
@@ -107,7 +117,10 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div class="field"><div class="flabel">When the eye arrives</div><div class="vtoggles" id="xFx">${Object.entries(EFFECTS).map(([k, n]) => tog("xFx_" + k, n)).join("")}</div></div>
       <div class="vcolors">${col("xSpotCol", "Spotlight colour")}</div>
       ${box("xStrength")}${box("xReact")}
-      ${seg("xBottom", "Bottom")}
+      ${seg("xBottom", "Sound display")}
+      <div id="xBarBox">${seg("xBarOrient", "Orientation")}${seg("xBarDir", "Which way it grows")}
+        <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xBarReset" hidden>Put it back</button></p>
+        <div id="xBarOps" class="sliders sliders-2"></div></div>
       <div id="xBottomCols">${seg("xBottomFill", "Bottom colour")}<div class="vcolors">${col("xBotA", "Colour")}${col("xBotB", "Second colour")}</div></div>`)}
     ${group("text", "Text and timing", `
       ${seg("xCaption", "Text")}
@@ -176,6 +189,8 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xEye", "eye", Object.entries(EYES)],
     ["xLabels", "labels", Object.entries(LABEL_MODES), false, () => vis()],
     ["xBottom", "bottom", Object.entries(BOTTOMS), false, () => vis()],
+    ["xBarOrient", "barOrient", Object.entries(BAR_ORIENT), false, () => { V.barXY = null; vis(); }],
+    ["xBarDir", "barDir", Object.entries(BAR_DIR)],
     ["xBottomFill", "bottomFill", Object.entries(BOTTOM_FILLS), false, () => vis()],
     ["xCaption", "caption", Object.entries(CAPTIONS), false, () => vis()],
     ["xTitlePos", "titlePos", Object.entries(TITLE_POS), false, () => { V.titleXY = null; V.pointXY = null; vis(); }],
@@ -216,14 +231,65 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xDim", { key: "dim", label: "Darken the image", min: 0, max: 0.6, step: 0.02, def: 0.1, scale: 100, unit: "%" }],
     ["#xTitleSecs", { key: "titleSecs", label: "For how long", min: 1, max: 15, step: 0.5, def: 4.5, unit: "s", dec: 1, help: "Then it fades out in a second." }],
     ["#xTextSize", { key: "textSize", label: "Text size", min: 0.6, max: 1.8, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xBarOps", { key: "barSize", label: "Height", min: 0.3, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xBarOps", { key: "barLength", label: "Length", min: 0.1, max: 1, step: 0.01, def: 1, scale: 100, unit: "%" }],
+    ["#xBarOps", pct("barOpacity", "Opacity", 1)],
     ["#xFades", { key: "fadeIn", label: "Fade in", min: 0, max: 3, step: 0.1, def: 0.6, unit: "s", dec: 1 }],
     ["#xFades", { key: "fadeOut", label: "Fade out", min: 0, max: 4, step: 0.1, def: 1.5, unit: "s", dec: 1 }]
   ];
   const sl = {};
   for (const [hostId, d] of SLD) { const x = makeSlider(d, V, look); sl[d.key] = x; $(hostId).appendChild(x.el); }
+  // ---- image edit (P.video.edit)
+  if (!V.edit) V.edit = defaultEdit();
+  const ED = new Proxy({}, { get: (_, k) => (V.edit || (V.edit = defaultEdit()))[k], set: (_, k, v) => { (V.edit || (V.edit = defaultEdit()))[k] = v; return true; } });
+  const sgn = (key, label, help, max = 1) => ({ key, label, min: -max, max, step: 0.01, def: 0, scale: 100, unit: "%", signed: true, help });
+  const EDS = [
+    ["#xEdBasic", { key: "exposure", label: "Exposure", min: -2, max: 2, step: 0.05, def: 0, unit: "EV", dec: 2, signed: true }],
+    ["#xEdBasic", sgn("contrast", "Contrast")],
+    ["#xEdBasic", sgn("highlights", "Highlights", "Down brings back the bright areas, up makes them glow.")],
+    ["#xEdBasic", sgn("shadows", "Shadows", "Up opens the dark areas, down deepens them.")],
+    ["#xEdBasic", sgn("temp", "Temperature", "White balance: warmer (to the right) or cooler.")],
+    ["#xEdBasic", sgn("tint", "Tint", "White balance: toward magenta (right) or green.")],
+    ["#xEdBasic", sgn("saturation", "Saturation")],
+    ["#xEdBasic", sgn("vibrance", "Vibrance", "Like saturation, but mostly on the duller colours.")],
+    ["#xEdLevels", { key: "black", label: "Black point", min: 0, max: 0.5, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 }],
+    ["#xEdLevels", { key: "white", label: "White point", min: 0.5, max: 1, step: 0.005, def: 1, scale: 100, unit: "%", dec: 1 }],
+    ["#xEdLevels", { key: "gamma", label: "Midtones", min: 0.3, max: 3, step: 0.01, def: 1, dec: 2, help: "Above 1 brightens the middle tones, below 1 darkens them." }]
+  ];
+  const esl = {};
+  for (const [hostId, d] of EDS) { const x = makeSlider(d, ED, look); esl[d.key] = x; $(hostId).appendChild(x.el); }
+  let curveCh = "l";
+  const CH = { l: ["Luminance", "currentColor"], r: ["Red", "#e5484d"], g: ["Green", "#30a46c"], b: ["Blue", "#3e63dd"] };
+  const curveSeg = makeSeg($("#xCurveCh"), Object.entries(CH).map(([k, v]) => [k, v[0]]), curveCh, v => { curveCh = v; drawCurve(); });
+  const curveOf = ch => { const e = V.edit || (V.edit = defaultEdit()); e.curves = e.curves || {}; return (e.curves[ch] = e.curves[ch] || CURVE_X.slice()); };
+  function drawCurve() {
+    const svg = $("#xCurve"), ys = curveOf(curveCh), lut = curveLUT(ys), c = CH[curveCh][1];
+    const P2 = (x, y) => `${(8 + x * 184).toFixed(1)},${(192 - y * 184).toFixed(1)}`;
+    let path = ""; for (let k = 0; k < 256; k += 3) path += (k ? "L" : "M") + P2(k / 255, lut[k]);
+    path += "L" + P2(1, lut[255]);
+    svg.innerHTML = `<rect x="8" y="8" width="184" height="184" class="xc-bg"/>${[0.25, 0.5, 0.75].map(t => `<line x1="${8 + t * 184}" y1="8" x2="${8 + t * 184}" y2="192" class="xc-grid"/><line x1="8" y1="${8 + t * 184}" x2="192" y2="${8 + t * 184}" class="xc-grid"/>`).join("")}
+      <line x1="8" y1="192" x2="192" y2="8" class="xc-diag"/><path d="${path}" fill="none" stroke="${c}" stroke-width="2"/>
+      ${ys.map((y, i) => `<circle cx="${8 + CURVE_X[i] * 184}" cy="${192 - y * 184}" r="6" data-i="${i}" class="xc-pt" style="stroke:${c}" tabindex="0" role="slider" aria-label="${CH[curveCh][0]} at ${Math.round(CURVE_X[i] * 100)}%" aria-valuenow="${Math.round(y * 100)}" aria-valuemin="0" aria-valuemax="100"/>`).join("")}`;
+  }
+  {
+    const svg = $("#xCurve"); let drag = -1;
+    const yAt = e => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(1, (192 - ((e.clientY - r.top) / r.height) * 200) / 184)); };
+    svg.addEventListener("pointerdown", e => { const p = e.target.closest(".xc-pt"); if (!p) return; drag = Number(p.dataset.i); svg.setPointerCapture(e.pointerId); e.preventDefault(); });
+    svg.addEventListener("pointermove", e => { if (drag < 0) return; curveOf(curveCh)[drag] = Math.round(yAt(e) * 1000) / 1000; drawCurve(); look(); });
+    const up = () => { drag = -1; }; svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+    svg.addEventListener("keydown", e => {
+      const p = e.target.closest(".xc-pt"); if (!p || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+      const i = Number(p.dataset.i), ys = curveOf(curveCh); ys[i] = Math.max(0, Math.min(1, ys[i] + (e.key === "ArrowUp" ? 0.01 : -0.01))); e.preventDefault();
+      drawCurve(); look(); const q = $("#xCurve").querySelector(`[data-i="${i}"]`); if (q) q.focus();
+    });
+  }
+  $("#xBarReset").addEventListener("click", () => { V.barXY = null; vis(); look(); });
+  $("#xCurveReset").addEventListener("click", () => { curveOf(curveCh).splice(0, 5, ...CURVE_X); drawCurve(); look(); });
+  $("#xEditReset").addEventListener("click", () => { const D = defaultVideo(); V.edit = defaultEdit(); for (const k of ["grade", "gradeAmt", "vignette", "vigColor", "tintColor", "tintAmt", "grain", "dim"]) V[k] = D[k]; sync(); look(); });
+  function syncEdit() { for (const [, d] of EDS) esl[d.key].set(ED[d.key] ?? d.def, false); curveSeg.set(curveCh); drawCurve(); }
   // ---- toggles: [id, object, key]
   const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"],
-    ["#xEndCard", () => V, "endCard"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
+    ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
   // ---- colours
   const themeBtns = [...host.querySelectorAll("#xTheme button")];
@@ -328,6 +394,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#xClimaxCols").hidden = !V.climaxOwn;
     $("#xBoxCols").hidden = !["box", "outline"].includes(V.textStyle || "shadow");
     $("#xPosReset").hidden = !(V.titleXY || V.pointXY);
+    $("#xBarBox").hidden = V.bottom === "none"; $("#xBarReset").hidden = !V.barXY; $("#xCoverCleanBox").hidden = V.cover === "image";
     $("#xCoverBox").hidden = V.cover === "off"; sl.coverTime.el.hidden = V.cover !== "time"; $("#xCoverPickBox").hidden = V.cover !== "image";
   }
   // every control from P (after a recipe or a look)
@@ -340,7 +407,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     for (const [id, obj, key] of checks) $(id).checked = !!obj()[key];
     syncColors(); showTheme();
     $("#xTitle").value = V.title || ""; $("#xCredit").value = V.credit || ""; $("#xSubText").value = V.subText || "";
-    renderLabels(AUTO); vis();
+    renderLabels(AUTO); syncEdit(); vis();
   }
   sync();
   // busy state: which job runs, a line of text and a progress fraction (null: no bar)

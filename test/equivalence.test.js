@@ -1,5 +1,5 @@
-// Equivalence with the prototype for the stages that did not change since
-// legacy/sonificare.html: analysis, SLIC, saliency, gaze path, motifs, WAV.
+// Equivalence with the prototype for the stages that did not change since it
+// (legacy/prototype-core.js, its pure code): analysis, SLIC, saliency, gaze path, motifs, WAV.
 // Composition and MIDI changed on purpose in Phase 2a (see compose.test.js);
 // the semantic JSON moved to English field names in Phase 3a.
 import { describe, it, expect } from "vitest";
@@ -14,10 +14,9 @@ import { clusterRegions, buildMotifs } from "../src/core/motifs.js";
 import { validateSem } from "../src/core/semantic.js";
 import { wavFromChannels } from "../src/export/wavzip.js";
 
-// Loads the pure part of the legacy script (utilities up to WAV, plus semantic validation).
+// Loads the pure part of the prototype (utilities up to WAV, plus semantic validation).
 function loadLegacy() {
-  const lines = fs.readFileSync(new URL("../legacy/sonificare.html", import.meta.url), "utf8").split(/\r?\n/);
-  const src = [...lines.slice(245, 812), ...lines.slice(1351, 1368)].join("\n");
+  const src = fs.readFileSync(new URL("../legacy/prototype-core.js", import.meta.url), "utf8");
   const ctx = vm.createContext({ Math, Float32Array, Float64Array, Int32Array, Uint8Array, Uint32Array, Map, Set, TextEncoder, Blob, DataView, ArrayBuffer, String, Number, Array, Object, isFinite });
   return vm.runInContext(src + "\n;({ analyze, computeSaliency, scanpath, clusterRegions, buildMotifs, compose, midiFile, wavFromChannels, validateSem })", ctx);
 }

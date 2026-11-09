@@ -11,6 +11,7 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from "webm-muxer";
 import { GIFEncoder, quantize, applyPalette } from "gifenc";
+import { defaultEdit } from "./look.js";
 import { clamp } from "../core/util.js";
 import { pickAudioCodec, encodeAudioData, resampleChannels, tick } from "./audio.js";
 import { pathGeometry, drawPath } from "./paths.js";
@@ -43,6 +44,10 @@ export const TITLE_POS = { tl: "Top left", tc: "Top centre", bl: "Bottom left", 
 export const TITLE_WHEN = { always: "Always", intro: "First seconds" };
 export const SUBTITLES = { info: "Style, key and tempo", custom: "My own", none: "None" };
 export const BOTTOMS = { bars: "Sound bars", spectrum: "Spectrum", wave: "Waveform", line: "Progress line", none: "None" };
+// the sound display: lying along the frame or standing up its side, and which way its bars grow
+// (its place is dragged on the preview, barXY; by default along the bottom, or up the right side)
+export const BAR_ORIENT = { h: "Horizontal", v: "Vertical" };
+export const BAR_DIR = { up: "Grows in", down: "Grows out", mirror: "Both ways" };
 export const GIF_RANGES = { climax: "8 s around the climax", start: "First 10 s", whole: "Whole piece" };
 
 export function defaultVideo() {
@@ -61,6 +66,7 @@ export function defaultVideo() {
     placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
     spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
     titleAlign: "auto", titleXY: null, pointXY: null, pointAlign: "left", textStyle: "shadow", boxColor: "#000000", caps: false, letterSpace: 0, titleAnim: "fade",
+    barOrient: "h", barXY: null, barDir: "up", barSize: 1, barLength: 1, barOpacity: 1, coverClean: false, edit: defaultEdit(),
     bottom: "bars", bottomFill: "solid", bottomColor: VIDEO_THEMES.gold.point, bottomColor2: VIDEO_THEMES.gold.path, fadeIn: 0.6, fadeOut: 1.5, fadeSound: true, endCard: false, credit: "Made with Lux Sonora",
     gifWidth: 480, gifFps: 12, gifRange: "climax"
   };
@@ -266,7 +272,7 @@ function coverCanvas(S, W, H) {
     g.drawImage(im, (W - im.width * k) / 2, (H - im.height * k) / 2, im.width * k, im.height * k);
   } else {
     const keep = { hit: S.hit, pt: S._pointText };
-    drawVideoFrame(g, W, H, coverTime(S), S, { noCover: true, frame: 0 });
+    drawVideoFrame(g, W, H, coverTime(S), S, { noCover: true, frame: 0, clean: !!o.coverClean });
     S.hit = keep.hit; S._pointText = keep.pt;
   }
   S._cover = { key, c };
@@ -322,6 +328,12 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
   if (ex > sx && ey > sy) g.drawImage(src, sx, sy, ex - sx, ey - sy, (sx - v.x) * k, (sy - v.y) * k, (ex - sx) * k, (ey - sy) * k);
   if (o.dim > 0) { g.fillStyle = `rgba(0,0,0,${o.dim})`; g.fillRect(0, 0, W, H); }
+  // the picture alone (a cover without the drawings): its tint, vignette and grain, nothing over it
+  if (opt.clean) {
+    if ((o.tintAmt || 0) > 0) { g.save(); g.globalCompositeOperation = "soft-light"; g.fillStyle = hexA(o.tintColor || "#2B1B4A", Math.min(1, o.tintAmt * 1.4)); g.fillRect(0, 0, W, H); g.restore(); }
+    drawVignette(g, W, H, o.vignette || 0, o.vigColor); drawGrain(g, W, H, o.grain || 0, 0, u);
+    g.restore(); return;
+  }
   const n = tl.length, C = S.caption || {}, Fnt = FONTS[o.font] || FONTS.geist, ts = o.textSize || 1;
   const sa = safeArea(o.shape), pad = 44 * u, L = Math.max(pad, sa.left * W), T = Math.max(pad, sa.top * H), Rm = Math.max(pad, sa.right * W), B = Math.max(pad * 0.8, sa.bottom * H);
   S._pointText = null;
@@ -457,51 +469,70 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   }
   if ((o.tintAmt || 0) > 0) { g.save(); g.globalCompositeOperation = "soft-light"; g.fillStyle = hexA(o.tintColor || "#2B1B4A", Math.min(1, o.tintAmt * 1.4)); g.fillRect(0, 0, W, H); g.restore(); }
   drawVignette(g, W, H, o.vignette || 0, o.vigColor);
-  // bottom: overview bars, live spectrum, live waveform or a progress line
-  const prog = clamp(sec / S.total), base = H - B, hMax = 60 * u, x0 = L, x1 = W - Rm, bw0 = x1 - x0;
+  // the sound display (overview bars, live spectrum, live waveform or a progress line), drawn in its
+  // own frame: along the bottom, the top, through the centre or up a side, its length, height,
+  // opacity, distance from the edge and which way it grows all chosen in the Effects and sound group
+  const prog = clamp(sec / S.total), vert = (o.barOrient || (o.barPos === "left" || o.barPos === "right" ? "v" : "h")) === "v";
+  const span = vert ? H - T - B : W - L - Rm, bw0 = span * clamp(o.barLength ?? 1, 0.1, 1), hMax = 60 * u * (o.barSize ?? 1), x0 = 0;
+  const dir = o.barDir || "up";
   // its colour: one colour, a gradient from left to right, or a colour that follows the sound
   // (from the first colour when quiet to the second when loud)
   const cA = o.bottomColor || o.pointColor, cB = o.bottomColor2 || o.pathColor, fill = o.bottomFill || "solid";
   const level = valueAt(S.an, S.an.rms, sec), punch = clamp(Math.max(level, valueAt(S.an, S.an.beat, sec)));
   let grad = null;
-  if (fill === "gradient") { grad = g.createLinearGradient(x0, 0, x1, 0); grad.addColorStop(0, hexA(cA, 0.95)); grad.addColorStop(1, hexA(cB, 0.95)); }
+  if (fill === "gradient") { grad = g.createLinearGradient(x0, 0, bw0, 0); grad.addColorStop(0, hexA(cA, 0.95)); grad.addColorStop(1, hexA(cB, 0.95)); }
   // the colour of a part whose own level is e (a bar's height; the loudness for lines)
   const paint = e => (grad ? grad : fill === "reactive" ? hexA(mixHex(cA, cB, clamp(0.55 * e + 0.45 * punch)), 0.95) : hexA(cA, 0.95));
   const glow = fill === "reactive" ? mixHex(cA, cB, punch) : cA;
-  let bottomH = 0;
-  if (o.bottom === "bars") {
-    const env = S.an && S.an.source === "audio" ? S.an.env : S.env, bw = 6 * u, gap = 4 * u, nb = Math.max(8, Math.floor((bw0 + gap) / (bw + gap)));
-    for (let b = 0; b < nb; b++) {
-      const e = env[Math.min(env.length - 1, Math.floor((b / nb) * env.length))], h = Math.max(3 * u, e * hMax);
-      // the bars already played take the colour; with "follows the sound", by their own height
-      g.fillStyle = (b + 0.5) / nb <= prog ? (fill === "reactive" ? hexA(mixHex(cA, cB, e), 0.95) : paint(e)) : "rgba(255,255,255,0.32)";
-      g.fillRect(x0 + b * (bw + gap), base - h, bw, h);
+  // a bar of height h at x: up from the base, down from it, or centred on it
+  const bar = (x, w, h) => g.fillRect(x, dir === "mirror" ? -h / 2 : -h, w, h);
+  let bottomH = 0; S._barHit = null;
+  if (o.bottom && o.bottom !== "none") {
+    g.save(); g.globalAlpha = clamp(o.barOpacity ?? 1);
+    const thick = o.bottom === "line" ? 8 * u : o.bottom === "spectrum" ? hMax * 1.2 : hMax;
+    // its centre: where it was dragged, else along the bottom (horizontal) or up the right side
+    const cx = o.barXY ? o.barXY.x * W : vert ? W - Rm - thick / 2 : W / 2, cy = o.barXY ? o.barXY.y * H : vert ? H / 2 : H - B - thick / 2;
+    // its box on the frame, to drag it on the preview
+    S._barHit = vert ? { x0: cx - thick / 2, x1: cx + thick / 2, y0: cy - bw0 / 2, y1: cy + bw0 / 2, ax: cx, ay: cy } : { x0: cx - bw0 / 2, x1: cx + bw0 / 2, y0: cy - thick / 2, y1: cy + thick / 2, ax: cx, ay: cy };
+    // the frame: x along the display, y = 0 on its base line, the bars toward negative y
+    g.translate(cx, cy); if (vert) g.rotate(-Math.PI / 2); g.translate(-bw0 / 2, 0);
+    if (dir === "up") g.translate(0, thick / 2);
+    else if (dir === "down") { g.translate(0, -thick / 2); g.scale(1, -1); }
+    if (o.bottom === "bars") {
+      const env = S.an && S.an.source === "audio" ? S.an.env : S.env, bw = 6 * u, gap = 4 * u, nb = Math.max(8, Math.floor((bw0 + gap) / (bw + gap)));
+      for (let b = 0; b < nb; b++) {
+        const e = env[Math.min(env.length - 1, Math.floor((b / nb) * env.length))], h = Math.max(3 * u, e * hMax);
+        // the bars already played take the colour; with "follows the sound", by their own height
+        g.fillStyle = (b + 0.5) / nb <= prog ? (fill === "reactive" ? hexA(mixHex(cA, cB, e), 0.95) : paint(e)) : "rgba(255,255,255,0.32)";
+        bar(x0 + b * (bw + gap), bw, h);
+      }
+    } else if (o.bottom === "spectrum") {
+      const bands = bandsAt(S.an, sec), nb = BANDS, step = bw0 / nb, bw = step * 0.62;
+      g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 10 * u;
+      for (let b = 0; b < nb; b++) {
+        // without the rendered sound: a shape from the loudness, until the analysis is ready
+        const e = bands ? bands[b] : level * (0.55 + 0.45 * Math.sin(b * 0.9 + sec * 6)) * (1 - b / nb * 0.6);
+        g.fillStyle = paint(e); bar(x0 + b * step + (step - bw) / 2, bw, Math.max(3 * u, e * hMax * 1.2));
+      }
+    } else if (o.bottom === "wave") {
+      const wv = S.an && S.an.wave ? S.an.wave(sec, 220) : null, mid = dir === "mirror" ? 0 : -hMax / 2;
+      g.lineWidth = 2.4 * u; g.strokeStyle = paint(level); g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 8 * u; g.lineJoin = "round";
+      g.beginPath();
+      for (let i = 0; i < 220; i++) {
+        const sv = wv ? clamp(wv[i] * 2.2, -1, 1) : level * Math.sin(i * 0.35 + sec * 20) * Math.sin((i / 219) * Math.PI);
+        const x = x0 + (i / 219) * bw0, y = mid - sv * hMax / 2;
+        if (i) g.lineTo(x, y); else g.moveTo(x, y);
+      }
+      g.stroke();
+    } else if (o.bottom === "line") {
+      g.fillStyle = "rgba(255,255,255,0.3)"; bar(x0, bw0, 4 * u);
+      g.fillStyle = paint(level); bar(x0, bw0 * prog, 4 * u);
     }
-    bottomH = hMax;
-  } else if (o.bottom === "spectrum") {
-    const bands = bandsAt(S.an, sec), nb = BANDS, step = bw0 / nb, bw = step * 0.62;
-    g.save(); g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 10 * u;
-    for (let b = 0; b < nb; b++) {
-      // without the rendered sound: a shape from the loudness, until the analysis is ready
-      const e = bands ? bands[b] : level * (0.55 + 0.45 * Math.sin(b * 0.9 + sec * 6)) * (1 - b / nb * 0.6);
-      const h = Math.max(3 * u, e * hMax * 1.2);
-      g.fillStyle = paint(e); g.fillRect(x0 + b * step + (step - bw) / 2, base - h, bw, h);
-    }
-    g.restore(); bottomH = hMax * 1.2;
-  } else if (o.bottom === "wave") {
-    const wv = S.an && S.an.wave ? S.an.wave(sec, 220) : null, mid = base - hMax / 2;
-    g.save(); g.lineWidth = 2.4 * u; g.strokeStyle = paint(level); g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 8 * u; g.lineJoin = "round";
-    g.beginPath();
-    for (let i = 0; i < 220; i++) {
-      const s = wv ? clamp(wv[i] * 2.2, -1, 1) : level * Math.sin(i * 0.35 + sec * 20) * Math.sin((i / 219) * Math.PI);
-      const x = x0 + (i / 219) * bw0, y = mid - s * hMax / 2;
-      if (i) g.lineTo(x, y); else g.moveTo(x, y);
-    }
-    g.stroke(); g.restore(); bottomH = hMax;
-  } else if (o.bottom === "line") {
-    const y = base - 4 * u; g.fillStyle = "rgba(255,255,255,0.3)"; g.fillRect(x0, y, bw0, 4 * u);
-    g.fillStyle = paint(level); g.fillRect(x0, y, bw0 * prog, 4 * u); bottomH = 8 * u;
+    g.restore();
+    // the text at the bottom keeps clear of a display left along the bottom
+    if (!vert && !o.barXY) bottomH = thick;
   }
+  const baseY = H - B;
   // text: the title (always, or the first seconds), the point line, the end card
   // the line under the title: the style, key and tempo, the user's own text, or nothing
   const sub = o.subtitle === "none" ? "" : o.subtitle === "custom" ? (o.subText || "").trim() : C.sub || "";
@@ -509,6 +540,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   const tA = (o.caption === "none" ? 0 : opt.noCover ? 1 : o.titleWhen === "intro" ? ease((sec - 0.2) / 0.6) * (1 - ease((sec - (o.titleSecs ?? 4.5)) / 1)) : 1) * (1 - endA);
   const tSize = (Fnt.caps ? 58 : 44) * u * ts, sSize = 22 * u * ts;
   S.hit = {};
+  if (S._barHit && o.bottom && o.bottom !== "none") S.hit.bar = S._barHit;
   // how the title comes in: fade, rise, typed letter by letter, or at once
   const inP = clamp((sec - 0.2) / 0.9), anim = o.titleAnim || "fade";
   const shownTitle = anim === "type" ? title.slice(0, Math.ceil(title.length * clamp((sec - 0.2) / 1.4))) : title;
@@ -520,7 +552,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     if (o.titleXY) { x = o.titleXY.x * W; y = o.titleXY.y * H; align = o.titleAlign || "left"; }
     else if (o.titlePos === "tc") { x = W / 2; align = "center"; }
     else if (o.titlePos === "center") { x = W / 2; y = H / 2; align = "center"; }
-    else if (o.titlePos === "bl") y = base - bottomH - 18 * u - sSize * 1.5;
+    else if (o.titlePos === "bl") y = baseY - bottomH - 18 * u - sSize * 1.5;
     if (!o.titleXY && o.titleAlign && o.titleAlign !== "auto") { align = o.titleAlign; x = align === "center" ? W / 2 : align === "right" ? W - Rm : L; }
     const box = textBlock(g, [{ text: shownTitle, measure: title, font: `${Fnt.weight} ${tSize}px ${Fnt.css}`, size: tSize, color: o.titleColor || "#fff", dy: 0 },
       { text: sub, font: `450 ${sSize}px ${FONT_UI}`, size: sSize, color: hexA(o.subColor || "#ffffff", 0.85), dy: sSize * 1.5 }], x, y + rise, align, tA * animA, o, u, W - L - Rm);
@@ -528,7 +560,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   }
   if (S._pointText && S._pointText.a > 0.01) {
     const top = o.titlePos === "bl";
-    let x = L, y = top ? T + 26 * u * ts : base - bottomH - 16 * u, align = "left";
+    let x = L, y = top ? T + 26 * u * ts : baseY - bottomH - 16 * u, align = "left";
     if (o.pointXY) { x = o.pointXY.x * W; y = o.pointXY.y * H; align = o.pointAlign || "left"; }
     const box = textBlock(g, [{ text: S._pointText.text, font: `550 ${26 * u * ts}px ${FONT_UI}`, size: 26 * u * ts, color: o.subColor || "#fff", dy: 0 }], x, y, align, S._pointText.a, o, u, W - L - Rm);
     if (box) S.hit.point = { ...box, ax: x, ay: y, align };

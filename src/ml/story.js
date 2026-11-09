@@ -19,6 +19,7 @@ import { clamp } from "../core/util.js";
 import { degMidi } from "../core/theory.js";
 import { doubleClimax, applyContours, fitMelody, melodyRules, cleanVoices } from "../core/compose.js";
 import { doubleNotes } from "../core/arrange.js";
+import { applyExpertNotes } from "../core/expert.js";
 
 export const STEPS = 32, SPQ = 4; // 2 bars of sixteenth notes
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -173,6 +174,8 @@ export function applyStory(score, story) {
   melodyRules(score);
   doubleClimax({ notes: score.notes, points: score.points });
   doubleNotes({ notes: score.notes, points: score.points, extra: score.extra, inst: score.inst, body: score.body, buildUp: score.buildUp });
+  // the Expert rules again on the new melody (and the doublings made from it)
+  if (score.expert) applyExpertNotes(score.expert, score.notes, score.points, 60 / score.bpm, new Set(["lead", ...(score.extra || []).filter(L => L.role === "double").map(L => L.id)]));
   cleanVoices(score);
   const keep2 = score.notes;
   keep2.sort((a, b) => a.t - b.t || a.midi - b.midi); score.story = { places: story.places, segments: story.segments.length };

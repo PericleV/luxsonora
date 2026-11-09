@@ -17,6 +17,8 @@ const IMAGES = [[200, 133, 1], [180, 180, 11], [160, 120, 3]].map(([w, h, s]) =>
 });
 const BASE = { count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7, duration: 30, orch: "full", connect: "light" };
 const OFF = Object.fromEntries(Object.keys(RULES_INFO).map(k => [k, false]));
+// the classical-craft rules only (the comparison with and without them)
+const CRAFT_OFF = Object.fromEntries(Object.entries(RULES_INFO).filter(([k, r]) => r.group === "craft" || k === "contrast").map(([k]) => [k, false]));
 const run = (I, P) => {
   const pts = readPoints(I.A, I.CL, gazePath(I.A, I.SAL.map, P)), cov = coverage(I.A, pts); cov.zone = backgroundZone(I.A, cov);
   return compose({ A: I.A, sal: I.SAL, points: pts, cl: I.CL, motifs: I.MOT, P, sem: null, cov });
@@ -59,6 +61,17 @@ describe("composition rules", () => {
     }
     expect(seen).toBeGreaterThan(5);
   });
+  it("any single rule can be turned off and the piece stays well formed", () => {
+    for (const k of Object.keys(RULES_INFO)) for (const style of ["classical", "epic", "electronic", "jazz", "rock"]) {
+      const sc = run(IMAGES[0], { ...BASE, style, rules: { [k]: false } });
+      expect(sc.notes.length).toBeGreaterThan(10);
+      for (const n of sc.notes) {
+        expect(n.t).toBeGreaterThanOrEqual(0); expect(n.t + n.dur).toBeLessThanOrEqual(sc.total + 1e-6);
+        expect(n.midi).toBeGreaterThanOrEqual(0); expect(n.midi).toBeLessThanOrEqual(127); expect(n.vel).toBeGreaterThanOrEqual(1);
+      }
+      if (k === "sidechain" && style === "electronic") expect(sc.sidechain).toBe(0);
+    }
+  });
   it("phrase cadences end every fourth bar on the dominant, then on the tonic", () => {
     const sc = run(IMAGES[0], { ...BASE, style: "classical", duration: 60 });
     const cad = sc.slots.filter(S => S.cadence);
@@ -69,11 +82,11 @@ describe("composition rules", () => {
   });
   it("with the rules on there are fewer parallel fifths and octaves, and no more clashes", () => {
     const tot = { on: { parallel: 0, clash: 0 }, off: { parallel: 0, clash: 0 } };
-    for (const style of Object.keys(STYLES)) for (const I of IMAGES) for (const [k, rules] of [["on", undefined], ["off", OFF]]) {
+    for (const style of Object.keys(STYLES)) for (const I of IMAGES) for (const [k, rules] of [["on", undefined], ["off", CRAFT_OFF]]) {
       const r = auditScore(run(I, { ...BASE, style, rules }));
       tot[k].parallel += r.cnt.parallel || 0; tot[k].clash += r.cnt.clash || 0;
     }
     expect(tot.on.parallel).toBeLessThan(tot.off.parallel);
     expect(tot.on.clash).toBeLessThanOrEqual(tot.off.clash * 1.1);
-  });
+  }, 180000);
 });

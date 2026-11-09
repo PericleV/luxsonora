@@ -440,7 +440,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
   const sr = 44100, spb = 60 / sc.bpm, T = sc.total * spb, len = Math.round(T * sr);
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, sc.extra || []);
-  G.sidechain = (RULES[sc.style] || {}).sidechain || 0; G.kit = opts.kit || null;
+  G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); G.kit = opts.kit || null;
   if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
   const g0 = G.out.gain.value;
   G.out.gain.setValueAtTime(g0, Math.max(0, T - 0.4)); G.out.gain.linearRampToValueAtTime(0, T);

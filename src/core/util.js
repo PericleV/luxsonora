@@ -1,5 +1,5 @@
 // Numeric utilities, seeded PRNG, hash, box blur, entropy, colour conversions.
-// Ported from legacy/sonificare.html; logic unchanged.
+// Ported from the original prototype (legacy/prototype-core.js); logic unchanged.
 export const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 export const clampInt = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;

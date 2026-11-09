@@ -1,16 +1,8 @@
-// Prompt and validation for the semantic analysis (only available inside a claude.ai artifact).
+// Validation of a semantic answer (atmosphere, valence, energy, objects with a category). The app no
+// longer asks for one; the composer and the saliency map still accept objects, and the equivalence
+// test checks the saliency with them against the prototype.
 import { clamp } from "./util.js";
 import { CAT } from "./theory.js";
-
-export const SEM_PROMPT = `You are analysing a photograph for an application that turns it into music.
-Reply ONLY with a JSON object, no other text, exactly in this shape:
-{"atmosphere":[{"label":"calm","score":0.8}],"valence":0.6,"energy":0.3,"objects":[{"name":"boat","category":"artificial","x":0.4,"y":0.6,"w":0.1,"h":0.08,"importance":0.7}]}
-Rules:
-- "atmosphere": 2-4 short English labels (one or two words), "score" between 0 and 1.
-- "valence": 0 = gloomy or sad, 1 = bright or happy. "energy": 0 = calm and still, 1 = agitated and dynamic.
-- "objects": at most 8 visible objects with short English names. "category" is "living", "natural" or "artificial".
-- x, y = top-left corner; w, h = width and height; all as fractions between 0 and 1 of the image size.
-- "importance": between 0 and 1, how strongly the object draws the eye.`;
 
 export function validateSem(o) {
   if (!o || typeof o !== "object") return null;

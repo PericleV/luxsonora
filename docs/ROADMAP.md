@@ -15,7 +15,7 @@
 
 ## Fixed constraints
 
-- **Static page.** The build output (`dist/index.html`) must run on GitHub Pages, as a claude.ai artifact and straight from disk (`file://`). No server, no API keys. Exception: an optional music model may be downloaded at runtime (decision 22); without it the app works as before.
+- **Static page.** The build output (`dist/index.html`) must run on GitHub Pages and straight from disk (`file://`). No server, no API keys. Exception: an optional music model may be downloaded at runtime (decision 22); without it the app works as before.
 - **Determinism.** The same image and the same settings give the same piece in the same JavaScript engine. Across browsers the guarantee is limited by image decoding and `Math.*`; we handle it with our own resampling and tolerance-based tests.
 - **Traceability.** Every note can be traced back to the focus point and the area it came from.
 - **Versioned JSON contract** (`parameters.json`) between the web version and the future Python port.
@@ -27,7 +27,7 @@
 2. **Mixed mode.** The list of focus points is the source of truth. Manual anchors keep their position in the sequence; the automatic generator applies inhibition of return around them (with their radii) and fills the free slots in winner-take-all order.
 3. **Global attention.** Control 0-1: key, mode and tempo come from the whole image (0) or from the areas covered by focus points, weighted by `w·duration` (1). Default 0.
 4. **Web first**, Python later, on the same JSON contract.
-5. **Semantic analysis** (Claude) exists only when the page runs as a claude.ai artifact. On GitHub Pages the panel is hidden.
+5. **Nothing leaves the device** (2026-11-09): the online semantic analysis was removed; the app sends nothing anywhere and needs no accounts or keys. Objects come from COCO-SSD, on the device.
 6. **Timbre: per-layer instrument + relative modulation.** The image shifts instrument parameters relative to the image mean, within fixed bounds: `p = p_base · 2^(D·m)` for time and frequency, `m ∈ [−1, 1]`, `D` in octaves. One perceptual dimension per feature (edge sharpness → attack, smoothness → legato, entropy → brightness, saturation → resonance, warmth → colour). Depth: melody 100%, harmony 50%, bass brightness only, pad from the background, rhythm none.
 7. **Synthesized instruments**, deterministic, no samples: Karplus-Strong pluck, 2-operator FM, unison pad, sine + filtered saw bass.
 8. **Sliders** with an editable numeric value instead of knobs.
@@ -52,7 +52,7 @@
 ## Phases
 
 ### Phase 1: structure and static build
-- [x] Own repository, original prototype kept in `legacy/`
+- [x] Own repository, the original prototype's pure code kept in `legacy/prototype-core.js`
 - [x] Pure core in `src/core`, export in `src/export`, audio in `src/audio`, UI in `src/ui`
 - [x] Equivalence test against the prototype on synthetic images
 - [x] Vite build into a single HTML file, GitHub Pages workflow
@@ -146,7 +146,10 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Audio export as WAV 16/24-bit, MP3 and M4A (AAC); Play waits for the neural models instead of starting by itself
 - [x] Composition rules, each one switchable in Advanced: modulation at the climax on the circle of fifths (from the climax's colour), contrast-driven chord moves, question-and-answer phrase cadences, the Picardy third, leap recovery, no parallel fifths or octaves, the melody's peak at the climax
 - [x] Performance (dynamics from the picture, accents, phrasing, CC11 expression, CC1 vibrato, humanize), composition settings in Advanced, every track's instrument in one list, each style's band in Add layer, MIDI for a DAW
-- [ ] Expert mode: user rules on the places (an instrument or a chord at a given place)
+- [x] Expert mode: user rules on the places (add an instrument, silence a track, a chord, the melody's octave, dynamics; by place, part, colour, drawn zone or time)
+- [x] Every composition rule switchable in Advanced (19 in 5 groups); New song shows the melody, the connections and the orchestration's instruments; Save project and Load project in the top bar
+- [x] Position bar under Play, a bar while an AI model loads, Help › How it works, a custom accent colour; the sound display is horizontal or vertical and dragged into place
+- [x] Video: image edit (white balance, exposure, levels, contrast, highlights and shadows, saturation, vibrance, RGB and luminance curves), a sound display placed and sized freely, a cover with just the picture
 - [ ] Optional perfect loop (reverb tail added over the start)
 - [ ] Import of real eye-tracker focus points (x, y, duration)
 - [ ] Python port on the same contract

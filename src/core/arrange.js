@@ -121,7 +121,14 @@ export const ORCHESTRATION = { small: "Small", medium: "Medium", full: "Full", c
 export function autoLayers(style, level, richness, samples) {
   if (level !== "medium" && level !== "full") return [];
   const n = level === "medium" ? 2 + Math.round(clamp(richness)) : 4 + Math.round(2 * clamp(richness));
-  return (STYLE_ROLES[style] || STYLE_ROLES.ambient).slice(0, n).map((role, i) => ({ id: "x" + (i + 1), role, preset: roleInstrument(style, role, samples) }));
+  // the same instrument twice is replaced by the next one in the style's band with that role
+  const used = new Set();
+  return (STYLE_ROLES[style] || STYLE_ROLES.ambient).slice(0, n).map((role, i) => {
+    let preset = roleInstrument(style, role, samples);
+    if (used.has(preset) && samples) { const alt = (STYLE_BAND[style] || []).find(([k, r]) => r === role && !used.has(k)); if (alt) preset = alt[0]; }
+    used.add(preset);
+    return { id: "x" + (i + 1), role, preset };
+  });
 }
 export const richnessOf = (A, places) => clamp(0.4 * A.global.entropy + 0.3 * A.global.edgeN + 0.3 * Math.min(1, places / 10));
 
@@ -154,7 +161,8 @@ export function extraNotes(ctx) {
     const role = L.role, R = ROLES[role], tim = inst[L.id], thr = entryOf(k, n, ctx.buildUp ?? 0.5), add = (t, dur, midi, vel, extra = {}) =>
       notes.push({ layer: L.id, t, dur: Math.max(0.1, dur), midi, vel: clampInt(Math.round(vel), 1, 127), tim, pan: R.pan, point: pointAt(t).idx, ...extra });
     // a layer plays a slot when its point's tension has reached its entry (drone and ornaments also stay in the resolution)
-    const active = S => { const F = S.F; return F.tension >= thr - 1e-9 && !(F.section === "resolution" && role !== "drone" && role !== "ornament" && F.tension < thr + 0.1); };
+    // an instrument added by an Expert rule plays wherever its rule applies (its notes are cut to those places later)
+    const active = S => { if (L.only) return true; const F = S.F; return F.tension >= thr - 1e-9 && !(F.section === "resolution" && role !== "drone" && role !== "ornament" && F.tension < thr + 0.1); };
     if (role === "counter") {
       // the second path: the attention map where the first path did not look
       const map2 = new Float32Array(sal.map.length);
@@ -271,7 +279,7 @@ export function doubleNotes(score) {
   const k = layers.indexOf(L), thr = entryOf(k, layers.length, score.buildUp ?? 0.5);
   for (const nn of lead) {
     const F = score.points[nn.point];
-    if (!F || F.tension < thr) continue;
+    if (!F || (!L.only && F.tension < thr)) continue;
     const below = nn.midi - 12 >= 48, m = (d % 2 === 0) === below ? nn.midi - 12 : nn.midi + 12;
     notes.push({ layer: L.id, t: nn.t, dur: nn.dur, midi: m, vel: Math.max(1, Math.round(nn.vel * 0.7)), tim: (F.timX && F.timX[L.id]) || score.inst[L.id], pan: ROLES.double.pan, point: nn.point, ...(nn.chromatic ? { chromatic: true } : {}) });
   }

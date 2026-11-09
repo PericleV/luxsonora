@@ -1378,6 +1378,61 @@ function renderExpert() {
   drawStage();
 }
 
+/* ============ resizable layout: the panel, the timeline and the layer names ============ */
+// Each size is a CSS variable, set by dragging its splitter (or with the arrow keys on it, Shift for
+// bigger steps), reset by a double-click, and remembered in this browser. On phones the parts are
+// stacked and the splitters are hidden.
+const LAYOUT = {
+  insp: { css: "--insp-w", def: 360, min: 300, max: () => Math.max(320, Math.min(820, window.innerWidth * 0.6)), axis: "x", sign: -1 },
+  lane: { css: "--lane-h", def: 36, min: 24, max: () => 84, axis: "y", sign: -1, perLane: true },
+  head: { css: "--head-w", def: 264, min: 150, max: () => Math.max(170, Math.min(520, window.innerWidth * 0.4)), axis: "x", sign: 1 }
+};
+function setLayout(k, v, save = true) {
+  const L = LAYOUT[k], val = Math.round(clamp(v, L.min, L.max()));
+  document.documentElement.style.setProperty(L.css, val + "px");
+  // a taller timeline may take more of the window than its usual 46%
+  if (k === "lane") document.documentElement.style.setProperty("--tl-max", val > 40 ? "70vh" : "46vh");
+  if (save) store.set("layout." + k, String(val));
+  const el = { insp: "#splitInsp", lane: "#splitTl", head: "#splitHead" }[k];
+  const sp = $(el); if (sp) { sp.setAttribute("aria-valuenow", String(val)); sp.setAttribute("aria-valuemin", String(L.min)); sp.setAttribute("aria-valuemax", String(Math.round(L.max()))); }
+  drawTimeline();
+  return val;
+}
+function initLayout() {
+  for (const k of Object.keys(LAYOUT)) { const v = Number(store.get("layout." + k)); setLayout(k, Number.isFinite(v) && v > 0 ? v : LAYOUT[k].def, false); }
+  const bind = (id, k) => {
+    const sp = $(id), L = LAYOUT[k]; if (!sp) return;
+    const cur = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(L.css)) || L.def;
+    // the timeline's splitter moves the whole timeline: its height is shared among the lanes
+    const lanes = () => Math.max(1, laneKeys().length);
+    let drag = null;
+    sp.addEventListener("pointerdown", e => {
+      if (e.button !== 0) return;
+      drag = { p0: L.axis === "x" ? e.clientX : e.clientY, v0: cur() };
+      sp.setPointerCapture(e.pointerId); sp.classList.add("dragging"); document.body.classList.add("resizing", L.axis === "x" ? "resizing-col" : "resizing-row"); e.preventDefault();
+    });
+    sp.addEventListener("pointermove", e => {
+      if (!drag) return;
+      const d = ((L.axis === "x" ? e.clientX : e.clientY) - drag.p0) * L.sign;
+      setLayout(k, drag.v0 + (L.perLane ? d / lanes() : d), false);
+    });
+    const end = () => { if (!drag) return; drag = null; sp.classList.remove("dragging"); document.body.classList.remove("resizing", "resizing-col", "resizing-row"); setLayout(k, cur()); drawAll(); };
+    sp.addEventListener("pointerup", end); sp.addEventListener("pointercancel", end);
+    sp.addEventListener("dblclick", () => { setLayout(k, L.def); drawAll(); });
+    sp.addEventListener("keydown", e => {
+      const keys = L.axis === "x" ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: 1, ArrowDown: -1 };
+      if (!(e.key in keys) && e.key !== "Home") return;
+      e.preventDefault();
+      if (e.key === "Home") { setLayout(k, L.def); drawAll(); return; }
+      // the panel grows to the left; the timeline grows up
+      const step = (e.shiftKey ? 64 : 16) / (L.perLane ? lanes() : 1), dir = keys[e.key] * (k === "insp" ? -1 : 1);
+      setLayout(k, cur() + dir * step); drawAll();
+    });
+  };
+  bind("#splitInsp", "insp"); bind("#splitTl", "lane"); bind("#splitHead", "head");
+  window.addEventListener("resize", () => { for (const k of Object.keys(LAYOUT)) { const L = LAYOUT[k], v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(L.css)); if (v > L.max()) setLayout(k, v); } });
+}
+
 /* ============ image info and analysis source ============ */
 const fbytes = b => (b >= 1e9 ? nf(b / 1e9, 2) + " GB" : b >= 1e6 ? nf(b / 1e6, 1) + " MB" : Math.round(b / 1e3) + " kB");
 function renderImageInfo() {
@@ -2162,6 +2217,7 @@ export function init() {
   initKeyControls();
   initRulesControls();
   initSeek();
+  initLayout();
   initExpert();
   // style: a grouped dropdown with what each style is, in a line
   const styleSel = $("#styleSel");

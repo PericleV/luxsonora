@@ -93,6 +93,7 @@
     </section>
 
     <aside class="inspector" aria-label="Inspector">
+      <div class="splitter splitter-v" id="splitInsp" role="separator" aria-orientation="vertical" aria-label="Width of the panel (drag, or use the arrow keys; double-click to reset)" title="Drag to resize; double-click to reset" tabindex="0"></div>
       <div class="tabs" role="tablist" aria-label="Inspector">
         <button type="button" role="tab" id="tab-piece" aria-selected="true" aria-controls="pan-piece">Piece</button>
         <button type="button" role="tab" id="tab-point" aria-selected="false" aria-controls="pan-point" tabindex="-1">Focus point</button>
@@ -189,8 +190,9 @@
     </aside>
   </div>
 
+  <div class="split-row"><div class="splitter splitter-h" id="splitTl" role="separator" aria-orientation="horizontal" aria-label="Height of the timeline (drag, or use the arrow keys; double-click to reset)" title="Drag to resize; double-click to reset" tabindex="0"></div></div>
   <section class="timeline" aria-label="Timeline">
-    <div class="lanes-head" id="lanesHead"><div class="ruler-head"><span>Layers</span></div></div>
+    <div class="lanes-head" id="lanesHead"><div class="splitter splitter-v splitter-head" id="splitHead" role="separator" aria-orientation="vertical" aria-label="Width of the layer names (drag, or use the arrow keys; double-click to reset)" title="Drag to resize; double-click to reset" tabindex="0"></div><div class="ruler-head"><span>Layers</span></div></div>
     <div class="lanes-body" id="rollWrap"><canvas id="roll" aria-label="Timeline with the generated notes"></canvas></div>
   </section>
 </div>

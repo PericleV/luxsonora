@@ -82,6 +82,8 @@ export function resampleFloat(data, w, h, ch, dw, dh) {
 export function cropFloat(data, w, h, ch, crop) {
   const x0 = Math.round(w * crop.l), x1 = Math.max(x0 + 1, Math.round(w * (1 - crop.r)));
   const y0 = Math.round(h * crop.t), y1 = Math.max(y0 + 1, Math.round(h * (1 - crop.b)));
+  // no crop: the same pixels, without a copy (callers only read them)
+  if (x0 === 0 && y0 === 0 && x1 === w && y1 === h) return { data, w, h };
   const cw = x1 - x0, chh = y1 - y0, out = new Float32Array(cw * chh * ch);
   for (let y = 0; y < chh; y++) out.set(data.subarray(((y + y0) * w + x0) * ch, ((y + y0) * w + x1) * ch), y * cw * ch);
   return { data: out, w: cw, h: chh };

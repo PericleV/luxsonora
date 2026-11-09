@@ -23,7 +23,7 @@ export async function ingestBuffer(buf, name, limits = DEFAULT_LIMITS, onProgres
     const t = await tiffInfo(buf);
     info.mp = checkSize(t.w, t.h, limits);
     Object.assign(info, { w: t.w, h: t.h, bits: t.bits, sampleFormat: t.sampleFormat, spp: t.spp, pages: t.pages, description: tiffDescription(t) });
-    base = await fromTiff(buf, DISPLAY_MAX, onProgress, t);
+    base = await fromTiff(buf, limits.maxSide || DISPLAY_MAX, onProgress, t);
   } else {
     const hs = headerSize(head, fmt);
     if (hs) info.mp = checkSize(hs.w, hs.h, limits);
@@ -34,7 +34,7 @@ export async function ingestBuffer(buf, name, limits = DEFAULT_LIMITS, onProgres
     }
     info.mp = checkSize(bmp.width, bmp.height, limits);
     Object.assign(info, { w: bmp.width, h: bmp.height, bits: 8, sampleFormat: 1, spp: 3, description: "8-bit, decoded by the browser" });
-    base = await fromBitmap(bmp, DISPLAY_MAX, onProgress);
+    base = await fromBitmap(bmp, limits.maxSide || DISPLAY_MAX, onProgress);
     bmp.close();
   }
   info.kind = base.kind;

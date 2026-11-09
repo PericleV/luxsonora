@@ -44,6 +44,7 @@ function loaderFor(ctx) {
   if (!loaders.has(ctx.sampleRate)) loaders.set(ctx.sampleRate, SampleLoader(ctx));
   return loaders.get(ctx.sampleRate);
 }
+const LOW_MEMORY = typeof navigator !== "undefined" && ((navigator.deviceMemory && navigator.deviceMemory <= 4) || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || ""));
 const status = { loading: 0, failed: new Set(), listeners: new Set() };
 export function onSampleStatus(fn) { status.listeners.add(fn); return () => status.listeners.delete(fn); }
 const emit = () => status.listeners.forEach(fn => fn({ loading: status.loading, failed: [...status.failed] }));
@@ -52,7 +53,9 @@ function create(ctx, dest, src) {
   // level trim per source (measured RMS against the synthesized versions)
   if (src.gain && src.gain !== 1) { const g = ctx.createGain(); g.gain.value = src.gain; g.connect(dest); dest = g; }
   const common = { destination: dest, loader: loaderFor(ctx), scheduler: Scheduler(ctx, { lookaheadMs: 1e9, intervalMs: 1000 }) };
-  if (src.kind === "piano") return SplendidGrandPiano(ctx, { ...common, decayTime: 0.6 });
+  // the Steinway set is large once decoded: phones and low-memory devices play the General MIDI
+  // grand instead, so the browser does not close the page to free memory
+  if (src.kind === "piano") return LOW_MEMORY ? Soundfont(ctx, { ...common, instrument: "acoustic_grand_piano", kit: "MusyngKite" }) : SplendidGrandPiano(ctx, { ...common, decayTime: 0.6 });
   if (src.kind === "epiano") return ElectricPiano(ctx, { ...common, instrument: src.instrument });
   if (src.kind === "drums") return DrumMachine(ctx, { ...common, instrument: src.instrument });
   if (src.kind === "abuse") return DrumAbuse(ctx, { ...common, source: { kind: "machine", machine: src.instrument } });

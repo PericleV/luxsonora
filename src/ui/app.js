@@ -11,6 +11,7 @@ import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
 import { suggestStyles } from "../core/suggest.js";
+import { saveSession, loadSession } from "./session.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
 import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, scheduleExpression } from "../audio/engine.js";
@@ -205,6 +206,7 @@ function recompute() {
   drawAll();
   refreshStatus();
   checkRecipe();
+  scheduleSave();
   if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { NEW_SONG_PENDING = false; openNewSong(true); }
   // Play pressed while a neural model was still working: start now that the piece is final
   if (WAIT_PLAY && SCORE && !jobsPending() && !dirty) { WAIT_PLAY = false; startPlayback(Player.pausedBeat >= SCORE.total ? 0 : Player.pausedBeat); }
@@ -1717,19 +1719,56 @@ async function openProject(file) {
       const f = new File([fromB64(img.data)], img.file || img.name || "image", { type: img.type || "" });
       await loadFile(f);
     } else if (img && img.demo && DEMOS[img.demo]) { $("#demo").value = img.demo; loadDemo(img.demo); }
-    applySettings(j);
-    // the neural results of the recipe are used as they were, so the rebuild doesn't depend on the GPU or the network
-    if (j.neural) {
-      if (j.neural.melody) STORY.cache.set(j.neural.melody.key, j.neural.melody.res);
-      if (j.neural.groove) GROOVE.cache.set(j.neural.groove.key, j.neural.groove.res);
-      if (j.neural.attention) ATTN.cache.set(j.neural.attention.key, j.neural.attention);
-    }
-    STORY.failed = GROOVE.failed = ATTN.failed = false;
-    syncAllControls(); applySource();
+    applyProjectState(j);
     RECIPE_CHECK = j.kind === "recipe" && j.check ? { ...j.check, version: j.version } : null;
     if (img && INFO && img.hash !== INFO.hash && !img.data && !img.demo) flash(`This file was made for “${img.name}”. Its focus points were placed by position on the current image.`);
   } catch (e) { flash("The project couldn't be opened: " + (e.message || e)); }
 }
+// A project's settings, path and neural results, once its picture is loaded.
+function applyProjectState(j) {
+  applySettings(j);
+  // the neural results of the recipe are used as they were, so the rebuild doesn't depend on the GPU or the network
+  if (j.neural) {
+    if (j.neural.melody) STORY.cache.set(j.neural.melody.key, j.neural.melody.res);
+    if (j.neural.groove) GROOVE.cache.set(j.neural.groove.key, j.neural.groove.res);
+    if (j.neural.attention) ATTN.cache.set(j.neural.attention.key, j.neural.attention);
+  }
+  STORY.failed = GROOVE.failed = ATTN.failed = false;
+  syncAllControls(); applySource();
+}
+
+/* ---- the session, kept in the browser (session.js): saved after each change, restored on load ---- */
+let SAVE_T = 0, RESTORING = false;
+function sessionNow() {
+  if (!INFO || !ORIG || RESTORING) return null;
+  const sc = SCORE;
+  const image = ORIG.demo ? { hash: INFO.hash, demo: ORIG.demo } : ORIG.file ? { hash: INFO.hash, file: ORIG.file, name: ORIG.file.name || INFO.name, type: ORIG.file.type || "" } : null;
+  if (!image) return null;
+  let settings; try { settings = structuredClone(P); } catch (e) { return null; }
+  return { image, state: { settings, path: structuredClone(PATH), neural: { melody: sc && sc.storyRef ? sc.storyRef : null, groove: sc && sc.grooveRef ? sc.grooveRef : null, attention: ATTN.ref || null } } };
+}
+function scheduleSave(delay = 1200) {
+  clearTimeout(SAVE_T);
+  SAVE_T = setTimeout(() => { const s = sessionNow(); if (s) saveSession(s.image, s.state); }, delay);
+}
+// The last session comes back as it was (true), or there is none (false).
+async function restoreSession() {
+  const s = await loadSession(); if (!s) return false;
+  RESTORING = true;
+  try {
+    const img = s.image;
+    if (img.demo && DEMOS[img.demo]) { $("#demo").value = img.demo; loadDemo(img.demo); }
+    else if (img.file) await loadFile(new File([img.file], img.name || "image", { type: img.type || "" }));
+    else return false;
+    if (!INFO) return false;
+    NEW_SONG_PENDING = false;
+    applyProjectState({ settings: s.state.settings, path: s.state.path, neural: s.state.neural });
+    flash("Your last song is back, as you left it.");
+    return true;
+  } catch (e) { return false; }
+  finally { RESTORING = false; }
+}
+
 // After a rebuild settles (no neural job running), compare with the recipe's score.
 function checkRecipe() {
   if (!RECIPE_CHECK || !SCORE || STORY.job || GROOVE.job || ATTN.job) return;
@@ -2335,7 +2374,11 @@ export function init() {
   initOrch();
   SOUND = initSound({ P, onMusic: () => invalidate(LV.MUSIC), onFx: () => applyMixLive(), onPreview: (layer, tim, kit) => preview(ensureCtx(), layer, tim, kit || null),
     getExtra: () => ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, name: ROLES[L.role].name, inst: SCORE.inst[L.id] })), onPickExtra: id => pickLayerInstrument(id) });
-  loadDemo("lac");
+  // the last session (a phone may have closed the page in the background), else the first demo
+  restoreSession().then(ok => { if (!ok && !INFO) loadDemo("lac"); });
+  // save at once when the page is hidden: a phone may close it without warning
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") scheduleSave(0); });
+  window.addEventListener("pagehide", () => scheduleSave(0));
 
   // downloads: a link the browser saves
   DL = { save: async ({ filename, data }) => {

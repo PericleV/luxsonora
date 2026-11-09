@@ -8,6 +8,8 @@ export { fromRGBA8 };
 // Phones and low-memory devices get a lower pixel limit.
 export function deviceLimits() {
   const mem = navigator.deviceMemory, mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  // (the working copy stays 2048 px everywhere: a smaller one would change the analysis, and the
+  // same picture must give the same song on every device)
   return (mem && mem <= 4) || mobile ? { warnMP: 40, maxMP: 60 } : DEFAULT_LIMITS;
 }
 

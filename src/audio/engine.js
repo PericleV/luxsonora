@@ -387,6 +387,23 @@ function pump(G, t, amount) {
   for (const l of [...DUCKED, ...(G.extraIds || [])]) { const p = G.duck[l].gain; p.setValueAtTime(1 - amount, t); p.setTargetAtTime(1, t + 0.012, rec); }
 }
 
+// Expression (CC11, perform.js): each layer's level follows its curve, ramping between the places.
+export function ccValueAt(curve, b) {
+  if (!curve || !curve.length) return 1;
+  if (b <= curve[0][0]) return curve[0][1];
+  for (let i = 0; i + 1 < curve.length; i++) { const [b0, v0] = curve[i], [b1, v1] = curve[i + 1]; if (b < b1) return v0 + ((v1 - v0) * (b - b0)) / Math.max(1e-9, b1 - b0); }
+  return curve[curve.length - 1][1];
+}
+export function scheduleExpression(G, sc, fromBeat = 0, t0 = G.ctx.currentTime) {
+  if (!sc.cc) return;
+  const spb = 60 / sc.bpm;
+  for (const [l, c] of Object.entries(sc.cc)) {
+    const p = G.bus[l] && G.bus[l].gain; if (!p || !c.expr || !c.expr.length) continue;
+    p.cancelScheduledValues(0); p.setValueAtTime(ccValueAt(c.expr, fromBeat), t0);
+    for (const [b, v] of c.expr) if (b > fromBeat) p.linearRampToValueAtTime(v, t0 + (b - fromBeat) * spb);
+  }
+}
+
 // from: the beat at which playback of this note starts (later than n.t when seeking into a held note)
 export function playNote(G, n, t0, durSec, from = n.t) {
   const ctx = G.ctx;
@@ -427,6 +444,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
   if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
   const g0 = G.out.gain.value;
   G.out.gain.setValueAtTime(g0, Math.max(0, T - 0.4)); G.out.gain.linearRampToValueAtTime(0, T);
+  scheduleExpression(G, sc, 0, 0);
   for (const n of sc.notes) if (audible(mix, n.layer)) playNote(G, n, n.t * spb, n.dur * spb);
   return await ctx.startRendering();
 }

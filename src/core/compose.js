@@ -28,7 +28,10 @@ function gridSplit(dur, w) {
 
 // lum: optional luminance image { w, h, data } for texture wavetables (defaults to the analysed image)
 export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = null }) {
-  const st = STYLES[P.style], R = RULES[P.style] || RULES.ambient, g = A.global, ws = sem ? P.wSem : 0;
+  const st = STYLES[P.style], g = A.global, ws = sem ? P.wSem : 0;
+  // Advanced: composition can make the chords change faster or slower than the style's grid
+  const R0 = RULES[P.style] || RULES.ambient, cr = P.chordRate ?? 1;
+  const R = cr === 1 || !R0.unit ? R0 : { ...R0, unit: Math.max(1, Math.min(16, Math.round(R0.unit * cr))) };
   let val = 0.5 * g.brightness + 0.3 * g.warmth01 + 0.2 * g.sat;
   let energy = 0.6 * g.edgeN + 0.4 * g.entropy;
   if (sem && sem.valence != null) { val = lerp(val, clamp(sem.valence), 0.6 * ws); energy = lerp(energy, clamp(sem.energy), 0.6 * ws); }
@@ -140,7 +143,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
       const common = rt => tones.reduce((c, o) => c + (prevPcs.has(((degMidi(rt + o, modeIv, 0) % 12) + 12) % 12) ? 1 : 0), 0);
       // contrast rule: a place very unlike the previous one takes the candidate sharing the fewest
       // notes with the previous chord (a further move), a similar place the most (a smooth one)
-      const far = ruleOn(P, "contrast") && prevReg && contrastOf(r, prevReg) > 0.45;
+      const far = ruleOn(P, "contrast") && prevReg && contrastOf(r, prevReg) > (P.contrastThr ?? 0.45);
       root = pool.reduce((best, rt) => (far ? common(rt) < common(best) : common(rt) > common(best)) ? rt : best, pool[0]);
     } else root = fits.length ? fits[0] : cands[ci % 3];
     prevReg = r;
@@ -290,9 +293,10 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
       F.hits = mine.length; F.drums = [...new Set(mine.map(nn => DRUM_NAME[nn.midi]))];
     }
   }
-  if (st.swing > 0) for (const nn of notes) if ((nn.layer === "lead" || nn.layer === "perc") && Math.abs((nn.t % 1) - 0.5) < 1e-6) nn.t += st.swing * 0.17;
+  const swK = P.swingAdj ?? 1;
+  if (st.swing > 0 && swK > 0) for (const nn of notes) if ((nn.layer === "lead" || nn.layer === "perc") && Math.abs((nn.t % 1) - 0.5) < 1e-6) nn.t += Math.min(0.24, st.swing * 0.17 * swK);
   // sixteenth swing (lo-fi): the off sixteenths come late, behind the beat
-  if (st.swing16 > 0) for (const nn of notes) if ((nn.layer === "lead" || nn.layer === "perc") && Math.abs((nn.t % 0.5) - 0.25) < 1e-6) nn.t += st.swing16 * 0.09;
+  if (st.swing16 > 0 && swK > 0) for (const nn of notes) if ((nn.layer === "lead" || nn.layer === "perc") && Math.abs((nn.t % 0.5) - 0.25) < 1e-6) nn.t += Math.min(0.12, st.swing16 * 0.09 * swK);
 
   // ---- orchestration: extra layers (arrange.js); Small adds none ----
   const places = new Set(used.map(f => f.revisitOf ?? f.index)).size;
@@ -303,7 +307,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     for (const F of out) { F.timX = F.timX || {}; F.timX[L.id] = modulate(inst[L.id], F.tim.m, LAYER_DEPTH.harm, P.timbre); }
   }
   if (extra.length) {
-    const xs = extraNotes({ layers: extra, A, sal, cov, points: out, slots, body: plan.body, baseLead, inst, modeIv, pcOff, style: P.style, modePcs: new Set(modeIv.map(v => (((v + pcOff) % 12) + 12) % 12)), leadNotes: notes.filter(nn => nn.layer === "lead" && nn.point >= 0 && !nn.dbl) });
+    const xs = extraNotes({ layers: extra, A, sal, cov, points: out, slots, body: plan.body, baseLead, inst, modeIv, pcOff, style: P.style, buildUp: P.buildUp ?? 0.5, modePcs: new Set(modeIv.map(v => (((v + pcOff) % 12) + 12) % 12)), leadNotes: notes.filter(nn => nn.layer === "lead" && nn.point >= 0 && !nn.dbl) });
     for (const nn of xs) { const F = out[nn.point]; if (F && F.timX) nn.tim = F.timX[nn.layer]; notes.push(nn); }
   }
 
@@ -449,7 +453,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   }
   const score = { notes, points: out };
   doubleClimax(score);
-  doubleNotes({ notes, points: out, extra, inst, body: plan.body });
+  doubleNotes({ notes, points: out, extra, inst, body: plan.body, buildUp: P.buildUp ?? 0.5 });
   keepMelodyOnTop(notes, extra);
   trimRestrikes(notes, extra);
   clipAtChanges(notes, slots, extra, plan.body);
@@ -462,7 +466,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
     extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name })), orch: P.orch === "custom" ? "custom" : (P.orch || "small"),
     slots: slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null })),
-    modulation: mod ? { t0: mod.t0, t1: mod.t1, shift: mod.shift, dir: mod.dir, keyPc: mod.keyPc } : null, picardy: !!picardyOn, rules: P.rules || null
+    modulation: mod ? { t0: mod.t0, t1: mod.t1, shift: mod.shift, dir: mod.dir, keyPc: mod.keyPc } : null, picardy: !!picardyOn, rules: P.rules || null, buildUp: P.buildUp ?? 0.5
   };
 }
 

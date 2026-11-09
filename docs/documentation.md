@@ -410,6 +410,28 @@ On top of the genre rules, seven habits from classical composition (`src/core/ru
 
 The score records the modulation (`modulation: { t0, t1, shift, dir, keyPc }`), each chord slot's key shift and cadence, the Picardy third and the rules used; the point line under the stage says when a point is in the new key. The Story and Improvise melodies get the same melody rules after they are fitted to the chords. The audit (§7.7b) reads the key at each moment and counts parallel fifths and octaves between the melody and the bass; `--rules-off` composes with every rule off, to compare. Measured in November 2026 (per minute, 25 pieces per style): parallel fifths and octaves fell from 0.2-1.6 to 0-0.3 in every style, and exposed clashes stayed between 0 and 1.4, lower than without the rules in most styles.
 
+### 7.7d Performance: dynamics, CC curves and humanize
+
+After the composition (and after a neural melody or groove) `src/core/perform.js` decides how the notes are played. It is deterministic, and every setting is in Piece › Advanced: performance:
+
+| Setting | Default | What it does |
+|---|---|---|
+| Dynamic range | 50% | spreads the velocities around their mean by `0.4 + 1.2·range` (50% keeps them as composed) |
+| Picture detail in the dynamics | 50% | each note of a place reads the picture on a small circle round its focus point (the k-th note at the golden angle `k·137.5°`, 70% of the radius): `0.65·lightness + 0.35·edges`, ±14 velocity at 100% |
+| Accents | 40% | +10 on the downbeat, +5 on beat 3, −5 off the beat (pitched layers; the drums keep their own accents) |
+| Phrasing | 40% | ±10 over each four-bar phrase, rising to its third bar and relaxing at the end |
+| Expression (CC11) | 60% | a curve per layer: at each place `0.6 + 0.4·tension + 0.2·(lightness − 0.5)`, scaled toward 1 by the setting; sustained layers swell to the middle of long places. It drives each layer's level in the app (linear ramps between places) and is written as CC11 |
+| Vibrato (CC1) | 40% | at each place `0.25 + 0.75·saturation`, scaled by the setting; it adds up to 16 cents of vibrato to the synthesizers' held notes and is written as CC1 (sampled instruments get it only in the MIDI file) |
+| Humanize timing | 8 ms | a stable pseudo-random offset per note; notes of one chord share 80% of it. Styles scale it (`LOOSENESS`: Electronic 0.15, Synthwave 0.3, Metal 0.5, Funk 0.6, Pop 0.7, Rock 0.8, Lo-fi 1.4, Jazz 1.3, Blues 1.2); electronic drums stay on the grid, the downbeat kick moves least, drums already played by GrooVAE are left alone |
+| Humanize length | 10% | each note's length varies by up to `0.6·setting` |
+| Humanize velocity | 6 | each note's velocity varies by up to that much |
+
+A varied note never runs into the next one in single-line layers (melody, bass, counter-melody, doubling, runs, ostinato, pulse, ornaments) or into the same pitch anywhere, and nothing passes the end of the piece.
+
+### 7.7e Composition settings
+
+Piece › Advanced: composition exposes more of the algorithm: **Chord changes** (Slower, Style, Faster: the style's chord grid doubled or halved), **Swing** (0-200% of the style's own swing; straight styles stay straight), **Layers build up** (when the extra layers come in, §7.11) and **Contrast needed for a far chord** (the threshold of the Contrast rule, §7.7c, 45% by default). With the gaze, saliency, music, rules and performance groups, every stage of the pipeline has its controls in Advanced.
+
 ### 7.8 Cadence
 
 The last bar plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
@@ -445,7 +467,7 @@ The timeline shows the tension as a band along the top of the ruler; the Focus p
 
 ### 7.11 Orchestration: extra layers
 
-**Orchestration** (Piece tab) adds layers beyond melody, harmony, bass, pad and rhythm (`src/core/arrange.js`). **Small** adds none (the piece is exactly the five-layer one); **Medium** adds 2-3 and **Full** 4-6, more for richer images (`richness = 0.4·entropy + 0.3·edges + 0.3·min(1, places / 10)`), in the style's order of roles, each on the style's instrument for that role (sampled, or a synthesizer when sampled instruments are off). **Add layer** picks a role, a layer's instrument can be changed, and a layer can be removed; any change copies the list into **Custom**, which the user owns. Every role reads its own part of the image:
+**Orchestration** (Piece tab) adds layers beyond melody, harmony, bass, pad and rhythm (`src/core/arrange.js`). **Small** adds none (the piece is exactly the five-layer one); **Medium** adds 2-3 and **Full** 4-6, more for richer images (`richness = 0.4·entropy + 0.3·edges + 0.3·min(1, places / 10)`), in the style's order of roles, each on the style's instrument for that role (sampled, or a synthesizer when sampled instruments are off). **Add layer** offers the style's band first (`STYLE_BAND`: 8 to 12 instruments per style, each with the role it plays, for example in Rock a lead guitar as counter-melody, a distorted guitar doubling the melody, a clean guitar ostinato, a Hammond organ section and a picked bass pulse), then every other instrument in the library, its role guessed from its name and family (`roleFor`: drums and timpani pulse, pads, choirs and strings sustain, bells ornament, pianos and harps runs, guitars ostinato, the rest counter-melody). In Advanced each layer's role can be changed from a list, its instrument changed and the layer removed; any change copies the list into **Custom**, which the user owns. In Advanced the list also shows the five main tracks (melody, harmony, bass, pad, rhythm), each with its instrument (the drum kit for the rhythm), so every track's sound is chosen in one place. Every role reads its own part of the image:
 
 | Role | Reads | Plays |
 |---|---|---|
@@ -458,7 +480,9 @@ The timeline shows the tension as a band along the top of the ruler; the Focus p
 | Pulse | the edges | low pitched percussion (timpani, taiko) on a euclidean figure, root on the downbeat, the chord tone nearest a fifth above otherwise |
 | Runs | the path between points (§7.7a) | a Rich passage in its own register (base to +19) at the end of each point, a scalar run that links the places |
 
-Arrangement rules: notes come from the sounding chord (or the melody), so every layer stays in the scale; each role has its own register; with n extra layers each plays `1 / (1 + 0.22·(n − 1))` as densely; the k-th layer enters when the tension reaches `0.42 + 0.38·k / n`, so they join one by one toward the climax and leave in the resolution (the drone and the ornaments stay). In the cadence the sustained roles play the tonic chord. Extra layers take their timbre from the image like the harmony (50% depth, blended between regions), have their own channel (level per role, mute, solo, volume, EQ, drive, sends; sidechained in Electronic), their own MIDI track (channels 5-9 and 11-16, General MIDI program per role) and are saved in recipes.
+Two layers with the same role play it differently: the second counter-melody follows another gaze path (seed 1) an octave lower, a second ostinato turns its figure around, a second pulse rotates its euclidean figure, ornaments come a sixteenth later, sections and runs an octave lower, drones an octave higher, and a second doubling sits on the other side of the melody.
+
+Arrangement rules: notes come from the sounding chord (or the melody), so every layer stays in the scale; each role has its own register; with n extra layers each plays `1 / (1 + 0.22·(n − 1))` as densely; the k-th layer enters when the tension reaches `0.84·b + 0.76·b·k / n`, with b the **Layers build up** setting (0.5 by default, giving `0.42 + 0.38·k / n`), so they join one by one toward the climax and leave in the resolution (the drone and the ornaments stay). In the cadence the sustained roles play the tonic chord. Extra layers take their timbre from the image like the harmony (50% depth, blended between regions), have their own channel (level per role, mute, solo, volume, EQ, drive, sends; sidechained in Electronic), their own MIDI track (channels 5-9 and 11-16, General MIDI program per role) and are saved in recipes.
 
 ---
 
@@ -631,6 +655,10 @@ The interface shows only the essentials by default; the rest is in collapsed "Ad
 | | Dramatic arc | 0-100% | 70% | §7.10 |
 | | Smooth transitions | 0-100% | 60% | §7.7 |
 | Advanced: music | Key, Scale | Auto, 12 keys; Auto, 6 modes, 2 pentatonics | Auto | manual key and scale |
+| Advanced: composition | Chord changes; Swing; Layers build up; Contrast needed for a far chord | Slower / Style / Faster; 0-200%; 0-100%; 10-100% | Style, 100%, 50%, 45% | §7.7e |
+| Advanced: performance | Dynamic range, Picture detail, Accents, Phrasing, Expression (CC11), Vibrato (CC1) | 0-100% | 50, 50, 40, 40, 60, 40% | §7.7d |
+| | Humanize timing, length, velocity | 0-30 ms, 0-30%, 0-20 | 8 ms, 10%, 6 | §7.7d |
+| Orchestration (Advanced) | Instrument of every track, role of every extra layer | library, 8 roles | style | §7.11 |
 | Advanced: composition rules | Modulate at the climax, Contrast moves the chords, Question and answer, A bright minor ending, Leaps turn back, No parallel fifths, The peak at the climax | on / off | all on | §7.7c |
 | | Fidelity | 0-100% | 60% | literal (high) or smoothed (low) melody |
 | | Melody octave | −2…+2 | 0 | shifts the melody by octaves |
@@ -697,7 +725,7 @@ All the audio formats start from the same master (the offline render below, with
 
 ### `sonification.mid`
 
-Type 1 MIDI, 480 PPQ, with a tempo track and one track per audible layer. Every track ends exactly at the end of the piece.
+Type 1 MIDI, 480 PPQ, made to open in a DAW. The first track holds the title, the tempo, the 4/4 metre, the key signature (and its change at the modulation and back) and a marker at every focus point ("Point 3 · Climax") and at the cadence. Then one track per audible layer, named after the layer and its instrument ("Melody: Grand piano (Steinway)"), with the General MIDI program nearest that instrument (`src/core/gm.js`: the soundfont's own program, or one found from the instrument's name), the performed notes (velocities and humanized timing, §7.7d), the expression curve as CC11 (a value every eighth note while it moves) and the vibrato curve as CC1. Every track ends exactly at the end of the piece.
 
 | Track | Channel |
 |---|---|
@@ -707,7 +735,7 @@ Type 1 MIDI, 480 PPQ, with a tempo track and one track per audible layer. Every 
 | Pad | 4 |
 | Rhythm | 10 (GM percussion) |
 
-Each style sets General MIDI programs matching its instruments. The timbre of each focus point (and of the cadence) is written as **Control Change** messages at its start, on melody and harmony, with that layer's parameters:
+The timbre of each focus point (and of the cadence) is written as **Control Change** messages at its start, on melody and harmony, with that layer's parameters:
 
 | CC | Parameter | Encoding |
 |---|---|---|

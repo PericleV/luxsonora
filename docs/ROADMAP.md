@@ -145,6 +145,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Pop, Rock, Metal, Blues and Funk with their genre rules (four-chord loop, power chords, palm-muted riffs, double bass drum, the 12-bar form with dominant sevenths and a boogie bass, a funk vamp with scratch guitar and ghost notes)
 - [x] Audio export as WAV 16/24-bit, MP3 and M4A (AAC); Play waits for the neural models instead of starting by itself
 - [x] Composition rules, each one switchable in Advanced: modulation at the climax on the circle of fifths (from the climax's colour), contrast-driven chord moves, question-and-answer phrase cadences, the Picardy third, leap recovery, no parallel fifths or octaves, the melody's peak at the climax
+- [x] Performance (dynamics from the picture, accents, phrasing, CC11 expression, CC1 vibrato, humanize), composition settings in Advanced, every track's instrument in one list, each style's band in Add layer, MIDI for a DAW
 - [ ] Expert mode: user rules on the places (an instrument or a chord at a given place)
 - [ ] Optional perfect loop (reverb tail added over the start)
 - [ ] Import of real eye-tracker focus points (x, y, duration)

@@ -12,7 +12,8 @@ import { RULES_INFO, defaultRules } from "../core/rules.js";
 import { SEM_PROMPT, validateSem } from "../core/semantic.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
-import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview } from "../audio/engine.js";
+import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, scheduleExpression } from "../audio/engine.js";
+import { perform, PERFORM_DEFAULTS } from "../core/perform.js";
 import { initSound } from "./sound.js";
 import { drawDemo } from "./demo.js";
 import { ingestFile, cancelIngest, fromRGBA8 } from "../ingest/index.js";
@@ -29,7 +30,8 @@ import { improvMelody } from "../ml/improv.js";
 import { grooveFor, applyGroove, grooveKey } from "../ml/groove.js";
 import { prepareSamples, kitSpecs, STYLE_KIT, onSampleStatus, instrumentCatalog } from "../audio/samples.js";
 import { addToLibrary, LIBRARY } from "../core/instruments.js";
-import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument } from "../core/arrange.js";
+import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument, STYLE_BAND, roleFor } from "../core/arrange.js";
+import { KITS, kitCatalog } from "../audio/samples.js";
 import { defaultEq, styleFx } from "../audio/fx.js";
 import { storyMelody, applyStory, storyKey } from "../ml/story.js";
 import { SECTION_NAME } from "../core/arc.js";
@@ -52,6 +54,9 @@ const P = {
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
   smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
+  // Advanced: composition (chord changes, swing, how the layers build up, contrast) and performance (perform.js)
+  chordRate: 1, swingAdj: 1, buildUp: 0.5, contrastThr: 0.45,
+  ...PERFORM_DEFAULTS,
   mix: defaultMix(),
   instruments: {},
   fx: defaultFx(),
@@ -185,6 +190,8 @@ function recompute() {
     ensureLayerState(SCORE); renderOrch();
     storyStep();
     grooveStep();
+    // how it is played: dynamics from the image, accents, phrasing, CC curves, humanize
+    perform(SCORE, P, A);
     preloadSamples();
     setSpelling(SCORE.pc);
     if (SEL >= SCORE.points.length) SEL = 0;
@@ -277,40 +284,63 @@ function customize() {
   if (P.orch !== "custom") { P.layers = ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, role: L.role, preset: L.preset })); P.orch = "custom"; }
 }
 function nextLayerId() { const used = new Set([...(P.layers || []).map(L => L.id)]); let i = 1; while (used.has("x" + i)) i++; return "x" + i; }
+// the five main tracks (Advanced shows them above the extra layers, each with its instrument)
+const MAIN_DESC = { lead: "the gaze path, from the height of each place", harm: "the chords, on the style's grid", bass: "the chord roots and the style's bass line", pad: "the background, held under everything", perc: "the style's drum patterns, driven by the edges" };
 function renderOrch() {
   if (ORCH_SEG) ORCH_SEG.set(P.orch || "small");
   const host = $("#orchList"); if (!host || !SCORE) return;
   const xs = SCORE.extra || [];
-  host.innerHTML = xs.length ? xs.map(L => `<li data-id="${L.id}" style="--dot:${ROLE_COLOR[L.role]}"><span class="odot" aria-hidden="true"></span>
-      <span class="oname"><b>${esc(ROLES[L.role].name)}</b><small>${esc(ROLES[L.role].desc)}</small></span>
+  const kitLabel = () => { const k = P.kit && P.kit !== "style" ? P.kit : null; return k ? (kitCatalog()[k] || {}).name || k : "Style kit: " + ((KITS[STYLE_KIT[P.style]] || KITS.synth).name); };
+  const main = LAYERS.map(l => `<li class="adv-only main" data-main="${l}" style="--dot:${css("--lane-" + l) || "#888"}"><span class="odot" aria-hidden="true"></span>
+      <span class="oname"><b>${esc(LAYER_NAME[l])}</b><small>${esc(MAIN_DESC[l])}</small></span>
+      <button type="button" class="choose ochoose" data-act="${l === "perc" ? "kit" : "minst"}" aria-haspopup="dialog" title="${l === "perc" ? "Change drum kit" : "Change instrument"}"><span>${esc(l === "perc" ? kitLabel() : (SCORE.inst[l] || {}).name || "")}</span></button><span aria-hidden="true"></span></li>`).join("");
+  const roleSel = L => `<span class="select select-sm adv-only"><select data-act="role" aria-label="What the ${esc(L.name)} plays">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}"${k === L.role ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></span>`;
+  host.innerHTML = main + (xs.length ? xs.map(L => `<li data-id="${L.id}" style="--dot:${ROLE_COLOR[L.role]}"><span class="odot" aria-hidden="true"></span>
+      <span class="oname"><b class="simple-only">${esc(ROLES[L.role].name)}</b>${roleSel(L)}<small>${esc(ROLES[L.role].desc)}</small></span>
       <button type="button" class="choose ochoose" data-act="inst" aria-haspopup="dialog" title="Change instrument"><span>${esc(L.name)}</span></button>
       <button type="button" class="icon-btn" data-act="remove" aria-label="Remove ${esc(ROLES[L.role].name)}" title="Remove"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></li>`).join("")
-    : `<li class="empty">Five layers: melody, harmony, bass, pad and rhythm. Medium and Full add layers chosen from the image; Add layer picks one yourself.</li>`;
+    : `<li class="empty">Five layers: melody, harmony, bass, pad and rhythm. Medium and Full add layers chosen from the image; Add layer picks one yourself.</li>`);
 }
 function initOrch() {
   ORCH_SEG = makeSeg($("#orchSeg"), Object.entries(ORCHESTRATION), P.orch || "small", v => {
     if (v === "custom") customize(); else P.orch = v;
     invalidate(LV.MUSIC);
   });
+  $("#orchList").addEventListener("change", e => {
+    if (e.target.dataset.act !== "role") return;
+    const id = e.target.closest("li[data-id]").dataset.id; customize();
+    const C = P.layers.find(x => x.id === id); if (C) C.role = e.target.value; invalidate(LV.MUSIC);
+  });
   $("#orchList").addEventListener("click", e => {
+    const mb = e.target.closest("li[data-main] [data-act]");
+    if (mb && SOUND) { const l = mb.closest("li").dataset.main; if (mb.dataset.act === "kit") SOUND.pickKit(); else SOUND.pickInstrument(l); return; }
+    if (e.target.closest("select")) return;
     const li = e.target.closest("li[data-id]"), b = e.target.closest("[data-act]"); if (!li || !b) return;
     const id = li.dataset.id;
     if (b.dataset.act === "remove") { customize(); P.layers = P.layers.filter(L => L.id !== id); invalidate(LV.MUSIC); return; }
     pickLayerInstrument(id);
   });
+  // Add layer: the style's band first (each instrument with the role it plays), then every other
+  // instrument (its role guessed from its name, changeable afterwards in the list)
   $("#addLayer").addEventListener("click", () => {
+    const band = STYLE_BAND[P.style] || [], styleName = STYLES[P.style].name, inBand = new Set(band.map(([k]) => k)), items = [];
+    band.forEach(([k, role], i) => { if (LIBRARY[k]) items.push({ key: `b${i}`, name: LIBRARY[k].name, group: `${styleName} band`, sub: `${ROLES[role].name}: ${ROLES[role].desc}`, preset: k, role }); });
+    for (const [k, v] of Object.entries(LIBRARY)) if (!inBand.has(k)) { const role = roleFor(k, v); items.push({ key: "o:" + k, name: v.name, group: "Other instruments", sub: `${ROLES[role].name}: ${ROLES[role].desc}`, preset: k, role }); }
+    const byKey = Object.fromEntries(items.map(x => [x.key, x]));
     openPicker({
-      title: "Add a layer", searchLabel: "Search roles",
-      items: Object.entries(ROLES).map(([k, r]) => ({ key: k, name: r.name, group: "Roles", sub: r.desc })),
-      note: "Each role reads its own part of the image; its notes come from the sounding chord, in its own register.",
-      onPick: role => { customize(); P.layers.push({ id: nextLayerId(), role, preset: roleInstrument(P.style, role, P.samples !== false) }); invalidate(LV.MUSIC); }
+      title: "Add a layer", searchLabel: "Search instruments", items,
+      note: "Each instrument plays a role that reads its own part of the image; its notes come from the sounding chord, in its own register. You can change the role in the list afterwards.",
+      onPick: key => { const x = byKey[key]; if (!x) return; customize(); P.layers.push({ id: nextLayerId(), role: x.role, preset: x.preset }); invalidate(LV.MUSIC); },
+      onPreview: key => { const x = byKey[key]; if (x) preview(ensureCtx(), "harm", LIBRARY[x.preset]); }
     });
   });
 }
 function pickLayerInstrument(id) {
   const L = extraOf(id); if (!L) return;
-  const items = Object.entries(LIBRARY).map(([k, v]) => ({ key: k, name: v.name, group: v.family || (v.type === "sample" ? "Recommended (sampled)" : "Synthesizers") }));
-  items.sort((a, b) => a.group.localeCompare(b.group));
+  // the style's band first, then the whole library by family
+  const band = new Set((STYLE_BAND[P.style] || []).map(([k]) => k)), bandName = `${STYLES[P.style].name} band`;
+  const items = Object.entries(LIBRARY).map(([k, v]) => ({ key: k, name: v.name, group: band.has(k) ? bandName : v.family || (v.type === "sample" ? "Recommended (sampled)" : "Synthesizers") }));
+  items.sort((a, b) => (b.group === bandName) - (a.group === bandName) || a.group.localeCompare(b.group));
   openPicker({
     title: `${ROLES[L.role].name} instrument`, items, current: L.preset || "", searchLabel: "Search instruments",
     note: "Sampled instruments download when first used.",
@@ -558,7 +588,7 @@ function storyStep() {
   const key = P.melody + "|" + storyKey(SCORE), hit = STORY.cache.get(key);
   if (hit) { applyStory(SCORE, hit); SCORE.storyRef = { key, res: hit }; melNote(`${M.name}: ${hit.segments.length} segments from ${hit.places} places, following the chords.`); return; }
   if (STORY.job) return; // the running job recomputes when it ends, then this key is composed
-  const sc = SCORE; STORY.job = key;
+  const sc = composedCopy(SCORE); STORY.job = key;
   melNote(`Downloading the music model (${M.size}, only the first time)…`);
   (async () => {
     try {
@@ -578,7 +608,7 @@ function grooveStep() {
   const key = grooveKey(SCORE), hit = GROOVE.cache.get(key);
   if (hit) { applyGroove(SCORE, hit); SCORE.grooveRef = { key, res: hit }; grooveNote(`Played by Magenta GrooVAE: ${hit.hits.length} hits with human timing and dynamics${SCORE.style === "electronic" ? " (timing kept on the grid, as a drum machine)" : ""}.`); return; }
   if (GROOVE.job) return;
-  const sc = SCORE; GROOVE.job = key;
+  const sc = composedCopy(SCORE); GROOVE.job = key;
   grooveNote("Downloading the groove model (about 15 MB, only the first time)…");
   (async () => {
     try {
@@ -590,6 +620,8 @@ function grooveStep() {
     } finally { GROOVE.job = null; invalidate(LV.MUSIC); }
   })();
 }
+// the score as composed (the performance changes timing and velocities in place afterwards)
+function composedCopy(sc) { return { ...sc, notes: sc.notes.map(n => ({ ...n })) }; }
 function makeCanvas(W, H) { const c = document.createElement("canvas"); c.width = W; c.height = H; return c; }
 function buildStaticOverlays() {
   const { W, H, N, mag, p95, labels } = A;
@@ -655,6 +687,7 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   Player.notes = sc.notes
     .filter(n => (n.t >= fromBeat - 1e-6 && n.t < until) || (n.layer === "pad" && n.t < fromBeat && n.t + n.dur > fromBeat))
     .map(n => ({ n, s: Math.max(n.t, fromBeat) })).sort((a, b) => a.s - b.s);
+  scheduleExpression(Player.G, sc, fromBeat, Player.startTime);
   Player.idx = 0; schedTick(); Player.timer = setInterval(schedTick, 40);
   updatePlayBtn(); requestAnimationFrame(frame);
 }
@@ -1357,7 +1390,7 @@ function syncAllControls() {
   for (const k of Object.keys(SL)) SL[k].set(P[k], false);
   for (const k of Object.keys(SRC_CTL)) if (SRC_CTL[k].el) { const [host, key] = k.split("."); SRC_CTL[k].set((host === "srcCrop" ? P.src.crop : P.src)[key], false); }
   SRC_CTL.ch.set(P.src.channels); SRC_CTL.range.set(P.src.range); $("#srcInvert").checked = P.src.invert; $("#srcMix").hidden = P.src.channels !== "mix";
-  STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); $("#placeSel").value = P.placement;
+  STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); CHORD_SEG.set(String(P.chordRate ?? 1)); $("#placeSel").value = P.placement;
   document.querySelectorAll(".lane").forEach(el => { const l = el.dataset.layer, r = el.querySelector("input[type=range]"); r.value = P.mix[l].vol; r.style.setProperty("--p", ((P.mix[l].vol / 1.5) * 100).toFixed(1) + "%"); });
   syncSourceControls(); syncRules(); renderLanes(); if (SOUND) SOUND.sync();
 }
@@ -1365,7 +1398,7 @@ function closeMenus() { document.querySelectorAll(".popover").forEach(p => (p.hi
 
 /* ============ tabs ============ */
 const TABS = ["piece", "point", "sound", "export"];
-let STYLE_SEG = null, DUR_SEG = null, MEL_SEG = null, CONNECT_SEG = null, GROOVE_SEG = null, ORCH_SEG = null, UI_SEG = null, SOUND = null;
+let CHORD_SEG = null, STYLE_SEG = null, DUR_SEG = null, MEL_SEG = null, CONNECT_SEG = null, GROOVE_SEG = null, ORCH_SEG = null, UI_SEG = null, SOUND = null;
 function selectTab(which) {
   for (const t of TABS) {
     const on = t === which;
@@ -1403,6 +1436,22 @@ const SLIDERS = {
     { key: "fidelity", label: "Fidelity", min: 0, max: 1, step: 0.01, def: 0.6, scale: 100, unit: "%", level: LV.MUSIC, help: "High values make the melody follow the picture closely. Low values let it move more smoothly." },
     { key: "octave", label: "Melody octave", min: -2, max: 2, step: 1, def: 0, signed: true, level: LV.MUSIC },
     { key: "range", label: "Melodic range", min: 1, max: 3, step: 0.5, def: 2, unit: "oct.", dec: 1, level: LV.MUSIC, help: "How many octaves the picture covers, from bottom to top." }
+  ],
+  sCompose: [
+    { key: "swingAdj", label: "Swing", min: 0, max: 2, step: 0.05, def: 1, scale: 100, unit: "%", level: LV.MUSIC, help: "How far the off-beats lean back, as a share of the style's own swing. Styles without swing stay straight." },
+    { key: "buildUp", label: "Layers build up", min: 0, max: 1, step: 0.01, def: 0.5, scale: 100, unit: "%", level: LV.MUSIC, help: "When the extra layers come in. At 0% they all play from the start, at 100% they wait for the climax." },
+    { key: "contrastThr", label: "Contrast needed for a far chord", min: 0.1, max: 1, step: 0.01, def: 0.45, scale: 100, unit: "%", level: LV.MUSIC, help: "How different two places must be before the chord jumps further (the Contrast rule). Lower jumps more often." }
+  ],
+  sPerform: [
+    { key: "dynRange", label: "Dynamic range", min: 0, max: 1, step: 0.01, def: PERFORM_DEFAULTS.dynRange, scale: 100, unit: "%", level: LV.MUSIC, help: "How far apart the quiet and the loud places are. At 50% they are as composed." },
+    { key: "velDetail", label: "Picture detail in the dynamics", min: 0, max: 1, step: 0.01, def: PERFORM_DEFAULTS.velDetail, scale: 100, unit: "%", level: LV.MUSIC, help: "Each note of a place reads the picture around it: lighter or busier spots are played a little louder." },
+    { key: "accent", label: "Accents", min: 0, max: 1, step: 0.01, def: PERFORM_DEFAULTS.accent, scale: 100, unit: "%", level: LV.MUSIC, help: "Louder on the first beat of the bar, a little on the third, softer off the beat." },
+    { key: "phrasing", label: "Phrasing", min: 0, max: 1, step: 0.01, def: PERFORM_DEFAULTS.phrasing, scale: 100, unit: "%", level: LV.MUSIC, help: "Every four bars the music rises a little and then relaxes." },
+    { key: "ccExpr", label: "Expression (CC11)", min: 0, max: 1, step: 0.01, def: PERFORM_DEFAULTS.ccExpr, scale: 100, unit: "%", level: LV.MUSIC, help: "Each layer swells with the tension of the story and the light of each place. Written to the MIDI file as CC11." },
+    { key: "ccMod", label: "Vibrato (CC1)", min: 0, max: 1, step: 0.01, def: PERFORM_DEFAULTS.ccMod, scale: 100, unit: "%", level: LV.MUSIC, help: "Saturated places make held notes sing with more vibrato (on the synthesizers; in the MIDI file as CC1)." },
+    { key: "humTime", label: "Humanize timing", min: 0, max: 30, step: 1, def: PERFORM_DEFAULTS.humTime, unit: "ms", level: LV.MUSIC, help: "How far notes drift from the grid, in milliseconds. Notes of one chord move together; drum-machine styles stay tighter." },
+    { key: "humLen", label: "Humanize length", min: 0, max: 0.3, step: 0.01, def: PERFORM_DEFAULTS.humLen, scale: 100, unit: "%", level: LV.MUSIC, help: "How much each note's length varies." },
+    { key: "humVel", label: "Humanize velocity", min: 0, max: 20, step: 1, def: PERFORM_DEFAULTS.humVel, level: LV.MUSIC, help: "How much each note's velocity varies, out of 127." }
   ],
   sSound: [
     { key: "timbre", label: "Image timbre", min: 0, max: 1, step: 0.01, def: 1, scale: 100, unit: "%", level: LV.MUSIC, help: "How much the picture colours the sound. At 0% you hear the instruments as they are." },
@@ -1809,6 +1858,7 @@ export function init() {
   placeSel.value = P.placement;
   placeSel.addEventListener("change", () => { P.placement = placeSel.value; ATTN.failed = false; invalidate(LV.SAL); });
   CONNECT_SEG = makeSeg($("#connectSeg"), Object.entries(CONNECT), P.connect, v => { P.connect = v; invalidate(LV.MUSIC); });
+  CHORD_SEG = makeSeg($("#chordRateSeg"), [["2", "Slower"], ["1", "Style"], ["0.5", "Faster"]], String(P.chordRate ?? 1), v => { P.chordRate = Number(v); invalidate(LV.MUSIC); });
   GROOVE_SEG = makeSeg($("#grooveSeg"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], P.groove, v => { P.groove = v; GROOVE.failed = false; invalidate(LV.MUSIC); });
   makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; drawStage(); });
   // Simple keeps the image and the eye map; the analysis views are in Advanced

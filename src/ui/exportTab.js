@@ -31,10 +31,11 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div id="xRateBox">${seg("xRate", "Bit rate")}</div>
       <div class="xrow">
         <button type="button" class="btn btn-primary" id="xAudio">${ICON_DL}Download audio</button>
-        <button type="button" class="btn" id="xMidi">MIDI</button>
+        <button type="button" class="btn" id="xMidi" title="For your DAW">MIDI for a DAW</button>
         <button type="button" class="btn" id="xZip">Everything (ZIP)</button>
       </div>
       <p class="snote">If an AI model is still working, the export waits for it to finish. The ZIP has a WAV, the MIDI, the settings and the recipe.</p>
+      <p class="snote">The MIDI file opens in any DAW: one track per layer, named after its instrument and set to the nearest General MIDI sound, with the tempo, the key (and the modulation), a marker at every place, the performed velocities and timing, and the expression (CC11), vibrato (CC1) and timbre curves.</p>
     </section>
     <section class="card" aria-labelledby="hVideoOut"><h3 id="hVideoOut">Video</h3>
       <p class="snote">While you're on this tab, the picture shows the video. Press play to see exactly what you'll get.</p>

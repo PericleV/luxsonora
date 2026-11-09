@@ -76,6 +76,37 @@ const SAMPLED = {
 // synthesizer styles take their own sounds for some roles
 const STYLE_SYNTH = { electronic: { ostinato: "electronic.lead", sustain: "electronic.pad", pulse: "electronic.bass" }, synthwave: { ostinato: "synthwave.harm", sustain: "synthwave.pad", pulse: "synthwave.bass", counter: "x.synthlead" } };
 const SYNTH = { runs: "x.glass", counter: "x.softlead", ornament: "x.glass", ostinato: "x.keys", sustain: "x.brass", double: "x.warmlead", drone: "x.sine", pulse: "x.keys" };
+// Each style's band: the instruments Add layer offers first, each with the role it plays (what it
+// reads in the image and how). Synthesizer styles list their own sounds.
+export const STYLE_BAND = {
+  ambient: [["s.harp", "runs"], ["s.flute", "counter"], ["s.glock", "ornament"], ["s.celesta", "ornament"], ["s.vibes", "ostinato"], ["s.synthstrings", "sustain"], ["s.choir", "sustain"], ["s.warmpad", "drone"], ["x.wavepad", "sustain"], ["x.glass", "ornament"]],
+  cinematic: [["s.strings", "sustain"], ["s.cello", "counter"], ["s.violin", "counter"], ["s.harp", "runs"], ["s.pizz", "ostinato"], ["s.tremolo", "ostinato"], ["s.horn", "double"], ["s.celesta", "ornament"], ["s.choir", "sustain"], ["s.timpani", "pulse"], ["s.contrabass", "drone"]],
+  minimal: [["s.marimba", "ostinato"], ["s.vibes", "ostinato"], ["s.clarinet", "counter"], ["s.flute", "counter"], ["s.piano", "runs"], ["s.glock", "ornament"], ["s.celesta", "ornament"], ["s.strings", "sustain"], ["s.organ", "drone"]],
+  jazz: [["s.tenorsax", "counter"], ["s.trumpet", "double"], ["s.trombone", "counter"], ["s.clarinet", "counter"], ["s.flute", "double"], ["s.vibes", "ornament"], ["s.piano", "runs"], ["s.jazzgtr", "ostinato"], ["s.brass", "sustain"], ["s.organ", "drone"]],
+  electronic: [["electronic.lead", "ostinato"], ["electronic.harm", "ostinato"], ["x.synthlead", "counter"], ["electronic.pad", "sustain"], ["x.wavepad", "sustain"], ["x.glass", "ornament"], ["electronic.bass", "pulse"], ["x.sine", "drone"]],
+  epic: [["s.brass", "sustain"], ["s.strings", "runs"], ["s.horn", "double"], ["s.trumpet", "double"], ["s.violin", "counter"], ["s.cello", "counter"], ["s.trombone", "counter"], ["s.tremolo", "ostinato"], ["s.choir", "sustain"], ["s.celesta", "ornament"], ["s.timpani", "pulse"], ["s.contrabass", "drone"]],
+  movie: [["s.strings", "sustain"], ["s.cello", "counter"], ["s.violin", "double"], ["s.flute", "counter"], ["s.oboe", "counter"], ["s.horn", "double"], ["s.harp", "runs"], ["s.piano", "runs"], ["s.celesta", "ornament"], ["s.timpani", "pulse"], ["s.contrabass", "drone"]],
+  lofi: [["s.tenorsax", "counter"], ["s.flute", "double"], ["s.vibes", "ornament"], ["s.wurli", "runs"], ["s.nylon", "ostinato"], ["s.jazzgtr", "ostinato"], ["s.organ", "sustain"], ["s.warmpad", "drone"]],
+  bossa: [["s.flute", "counter"], ["s.tenorsax", "counter"], ["s.trombone", "counter"], ["s.clarinet", "double"], ["s.nylon", "ostinato"], ["s.piano", "runs"], ["s.vibes", "ornament"], ["s.strings", "sustain"], ["s.marimba", "pulse"]],
+  synthwave: [["synthwave.harm", "ostinato"], ["x.synthlead", "counter"], ["synthwave.lead", "double"], ["synthwave.pad", "sustain"], ["s.synthstrings", "sustain"], ["x.brass", "sustain"], ["x.glass", "ornament"], ["synthwave.bass", "pulse"]],
+  classical: [["s.violin", "counter"], ["s.cello", "counter"], ["s.clarinet", "counter"], ["s.flute", "ornament"], ["s.oboe", "double"], ["s.horn", "double"], ["s.harp", "runs"], ["s.pizz", "ostinato"], ["s.strings", "sustain"], ["s.contrabass", "drone"], ["s.timpani", "pulse"]],
+  pop: [["s.cleangtr", "ostinato"], ["s.mutedgtr", "ostinato"], ["s.piano", "runs"], ["x.synthlead", "counter"], ["s.flute", "double"], ["s.glock", "ornament"], ["s.synthstrings", "sustain"], ["s.strings", "sustain"], ["s.fingerbass", "pulse"]],
+  rock: [["s.overdrive", "counter"], ["s.distortion", "double"], ["s.cleangtr", "ostinato"], ["s.organ", "sustain"], ["s.rockorgan", "ornament"], ["s.piano", "runs"], ["s.strings", "sustain"], ["s.pickbass", "pulse"]],
+  metal: [["s.overdrive", "counter"], ["s.distortion", "ostinato"], ["s.overdrive", "double"], ["s.choir", "sustain"], ["s.strings", "sustain"], ["s.organ", "drone"], ["s.celesta", "ornament"], ["s.timpani", "pulse"]],
+  blues: [["s.harmonica", "counter"], ["s.tenorsax", "counter"], ["s.overdrive", "counter"], ["s.trumpet", "double"], ["s.trombone", "counter"], ["s.piano", "runs"], ["s.jazzgtr", "ostinato"], ["s.organ", "sustain"], ["s.acbass", "pulse"]],
+  funk: [["s.clav", "ostinato"], ["s.mutedgtr", "ostinato"], ["s.tenorsax", "counter"], ["s.trumpet", "double"], ["s.trombone", "counter"], ["s.brass", "sustain"], ["s.organ", "sustain"], ["s.wurli", "runs"], ["s.slapbass", "pulse"]]
+};
+// The role an instrument plays when it is not in the style's band: from its name and family.
+export function roleFor(key, v = {}) {
+  const n = ((v.name || "") + " " + key).toLowerCase(), f = (v.family || v.type || "").toLowerCase();
+  if (/timpani|taiko|drum|tom|perc|woodblock|steel|agogo|bass/.test(n) && !/bassoon|clarinet/.test(n)) return "pulse";
+  if (/pad|choir|voice|strings|ensemble|organ|brass section|section|swell/.test(n) || f === "pad") return "sustain";
+  if (/glock|celesta|bell|chime|music box|tinkle|kalimba|crystal/.test(n)) return "ornament";
+  if (/harp|piano|marimba|xylo|vibra|dulcimer/.test(n)) return "runs";
+  if (/guitar|clav|koto|sitar|banjo|shamisen|pizz|pluck/.test(n) || f === "pluck") return "ostinato";
+  if (/drone|sine|pure|bagpipe|accordion|harmonium/.test(n)) return "drone";
+  return "counter";
+}
 export const roleInstrument = (style, role, samples) => (samples && SAMPLED[style] && SAMPLED[style][role]) || (STYLE_SYNTH[style] && STYLE_SYNTH[style][role]) || SYNTH[role];
 
 // Registers (MIDI) relative to the melody's base note, so the roles don't cover each other.
@@ -95,7 +126,8 @@ export function autoLayers(style, level, richness, samples) {
 export const richnessOf = (A, places) => clamp(0.4 * A.global.entropy + 0.3 * A.global.edgeN + 0.3 * Math.min(1, places / 10));
 
 // Entry threshold of the k-th extra layer (0-based) out of n: they join one by one as the tension rises.
-const entryOf = (k, n) => 0.42 + (0.38 * k) / Math.max(1, n);
+// buildUp (Advanced: composition, 0-1): 0 brings every layer in at once, 1 only at the climax
+const entryOf = (k, n, b = 0.5) => 0.84 * b + (0.76 * b * k) / Math.max(1, n);
 const PCS = m => ((m % 12) + 12) % 12;
 const nearestIn = (pcs, target, lo, hi) => {
   let best = null;
@@ -114,9 +146,12 @@ export function extraNotes(ctx) {
   const pointAt = t => points.find(F => t >= F.t0 - 1e-9 && t < F.t1 - 1e-9) || points[points.length - 1];
   const density = 1 / (1 + 0.22 * (n - 1));
   const leadAt = t => ctx.leadNotes.find(x => t >= x.t - 1e-9 && t < x.t + x.dur - 1e-9);
-  const reg = (role) => [baseLead + REGISTER[role][0], baseLead + REGISTER[role][1]];
+  const seen = {};
   layers.forEach((L, k) => {
-    const role = L.role, R = ROLES[role], tim = inst[L.id], thr = entryOf(k, n), add = (t, dur, midi, vel, extra = {}) =>
+    // a second layer with the same role plays it differently: another path, another register, off-beat
+    const dup = (seen[L.role] = (seen[L.role] ?? -1) + 1);
+    const reg = role => { const [a, b] = REGISTER[role], sh = !dup ? 0 : role === "drone" || role === "pulse" || role === "ornament" ? 12 : -12; return [baseLead + a + sh, baseLead + b + sh]; };
+    const role = L.role, R = ROLES[role], tim = inst[L.id], thr = entryOf(k, n, ctx.buildUp ?? 0.5), add = (t, dur, midi, vel, extra = {}) =>
       notes.push({ layer: L.id, t, dur: Math.max(0.1, dur), midi, vel: clampInt(Math.round(vel), 1, 127), tim, pan: R.pan, point: pointAt(t).idx, ...extra });
     // a layer plays a slot when its point's tension has reached its entry (drone and ornaments also stay in the resolution)
     const active = S => { const F = S.F; return F.tension >= thr - 1e-9 && !(F.section === "resolution" && role !== "drone" && role !== "ornament" && F.tension < thr + 0.1); };
@@ -125,7 +160,7 @@ export function extraNotes(ctx) {
       const map2 = new Float32Array(sal.map.length);
       for (let i = 0; i < map2.length; i++) map2[i] = sal.map[i] * (1 - (cov ? cov.map[i] : 0));
       const m = Math.max(3, Math.min(12, slots.length));
-      const path = gazePath(A, map2, { count: m, returns: 0, inhibition: 0.2, memory: 0, seed: 0, radius: 0.06 }, []).map(q => ({ ...q, id: undefined }));
+      const path = gazePath(A, map2, { count: m, returns: 0, inhibition: 0.2, memory: 0, seed: dup, radius: 0.06 }, []).map(q => ({ ...q, id: undefined }));
       const [lo, hi] = reg("counter");
       let prev = null;
       slots.forEach((S, si) => {
@@ -157,7 +192,7 @@ export function extraNotes(ctx) {
         let F = points[0], bd = Infinity;
         for (const G of points) { const d = Math.hypot(G.x * W - p.x, G.y * H - p.y); if (d < bd) { bd = d; F = G; } }
         const c = used.get(F.idx) || 0; if (c >= 2) continue;
-        const t = F.t0 + 0.5 + c; if (t >= F.t1 - 0.25) continue;
+        const t = F.t0 + 0.5 + c + (dup ? 0.25 : 0); if (t >= F.t1 - 0.25) continue;
         const S = slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || slots[slots.length - 1];
         if (!active(S) && F.tension < thr) continue;
         const m = nearestIn(S.pcs, lo + (1 - p.y / H) * (hi - lo), lo, hi); if (m === null) continue;
@@ -172,7 +207,9 @@ export function extraNotes(ctx) {
         const fifth = nearestIn(new Set([PCS(sorted.find(x => PCS(x - sorted[0]) === 7) ?? sorted[sorted.length - 1])]), root + 7, root, root + 12) ?? root + 7;
         const fig = [root, fifth, root + 12, fifth], rate = S.F.tension > 0.8 && density > 0.6 ? 0.25 : 0.5;
         let j = 0;
-        for (let t = S.t0; t < S.t1 - 1e-9; t += rate, j++) add(t, rate * 0.9, fig[j % 4], (j % 4 === 0 ? 70 : 54) * (0.6 + 0.4 * density));
+        // a second ostinato answers the first: the figure turned around
+        const f2 = dup % 2 ? [fig[2], fig[1], fig[0], fig[1]] : fig;
+        for (let t = S.t0; t < S.t1 - 1e-9; t += rate, j++) add(t, rate * 0.9, f2[j % 4], (j % 4 === 0 ? 70 : 54) * (0.6 + 0.4 * density));
       });
     } else if (role === "sustain") {
       const [lo, hi] = reg("sustain");
@@ -210,7 +247,7 @@ export function extraNotes(ctx) {
       const [lo, hi] = reg("pulse");
       slots.forEach(S => {
         if (!active(S) || S.F.section === "intro") return;
-        const a = areaDrive(S.F), hits = euclid(Math.round(lerp(2, 5, S.F.tension) * (0.6 + 0.4 * density)), 16, a.rot);
+        const a = areaDrive(S.F), hits = euclid(Math.round(lerp(2, 5, S.F.tension) * (0.6 + 0.4 * density)), 16, a.rot + dup * 2);
         const root = nearestIn(new Set([PCS([...S.chord].sort((x, y) => x - y)[0])]), (lo + hi) / 2, lo, hi);
         if (root === null) return;
         // the other hits take the chord tone nearest a fifth above (a diminished chord has no perfect fifth)
@@ -225,17 +262,20 @@ export function extraNotes(ctx) {
 // Doubling: the melody an octave below (above if that leaves the register) in the slots where
 // the doubling layer is active. Run after the melody is final (also after a neural melody).
 export function doubleNotes(score) {
-  const layers = score.extra || [], L = layers.find(x => x.role === "double"), notes = score.notes;
-  for (let i = notes.length - 1; i >= 0; i--) if (L && notes[i].layer === L.id) notes.splice(i, 1);
-  if (!L) return score;
-  const k = layers.indexOf(L), thr = entryOf(k, layers.length);
+  const layers = score.extra || [], DL = layers.filter(x => x.role === "double"), notes = score.notes, ids = new Set(DL.map(L => L.id));
+  for (let i = notes.length - 1; i >= 0; i--) if (ids.has(notes[i].layer)) notes.splice(i, 1);
+  if (!DL.length) return score;
   const lead = notes.filter(nn => nn.layer === "lead" && nn.point >= 0 && !nn.dbl && nn.t < score.body);
+  // the first doubling an octave below (above if that leaves the register), the next on the other side
+  DL.forEach((L, d) => {
+  const k = layers.indexOf(L), thr = entryOf(k, layers.length, score.buildUp ?? 0.5);
   for (const nn of lead) {
     const F = score.points[nn.point];
     if (!F || F.tension < thr) continue;
-    const m = nn.midi - 12 >= 48 ? nn.midi - 12 : nn.midi + 12;
+    const below = nn.midi - 12 >= 48, m = (d % 2 === 0) === below ? nn.midi - 12 : nn.midi + 12;
     notes.push({ layer: L.id, t: nn.t, dur: nn.dur, midi: m, vel: Math.max(1, Math.round(nn.vel * 0.7)), tim: (F.timX && F.timX[L.id]) || score.inst[L.id], pan: ROLES.double.pan, point: nn.point, ...(nn.chromatic ? { chromatic: true } : {}) });
   }
+  });
   notes.sort((a, b) => a.t - b.t || a.midi - b.midi);
   return score;
 }

@@ -91,21 +91,24 @@ export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExt
   // instrument and kit pickers: searchable dialogs with families and a Listen button
   const groupOf = (k, v) => v.family || (v.type === "sample" ? "Recommended (sampled)" : "Synthesizers");
   const kitGroupOf = v => v.group || "Built in";
-  $("#instChoose").addEventListener("click", () => {
-    if (isExtra(chan)) { onPickExtra(chan); return; }
-    const def = styleDefault(P.style, chan, P.melody, P.samples);
+  $("#instChoose").addEventListener("click", () => pickInstrument(chan));
+  // also opened from the track list in Piece (Advanced)
+  function pickInstrument(c) {
+    if (isExtra(c)) { onPickExtra(c); return; }
+    const def = styleDefault(P.style, c, P.melody, P.samples);
     const items = [{ key: "", name: "Style default: " + def.name, group: "Style default", sub: TYPE_NAME[def.type] }]
       .concat(Object.entries(LIBRARY).map(([k, v]) => ({ key: k, name: v.name, group: groupOf(k, v), sub: groupOf(k, v) + (v.type === "sample" ? "" : " · " + TYPE_NAME[v.type]) })));
     const order = ["Style default", "Recommended (sampled)", "Synthesizers"];
     items.sort((a, b) => ((order.indexOf(a.group) + 1 || 99) - (order.indexOf(b.group) + 1 || 99)) || a.group.localeCompare(b.group));
     openPicker({
-      title: `${CH_NAME[chan]} instrument`, items, current: (P.instruments[chan] && P.instruments[chan].preset) || "",
+      title: `${CH_NAME[c]} instrument`, items, current: (P.instruments[c] && P.instruments[c].preset) || "",
       searchLabel: "Search instruments", note: `${items.length - 1} instruments. Sampled ones download when first used; their synthesized version plays until then.`,
-      onPick: key => { P.instruments[chan] = { preset: key || null, edits: {} }; renderInstrument(); onMusic(); },
-      onPreview: key => onPreview(chan, key ? LIBRARY[key] : def)
+      onPick: key => { P.instruments[c] = { preset: key || null, edits: {} }; renderInstrument(); onMusic(); },
+      onPreview: key => onPreview(c, key ? LIBRARY[key] : def)
     });
-  });
-  $("#kitChoose").addEventListener("click", () => {
+  }
+  $("#kitChoose").addEventListener("click", () => pickKit());
+  function pickKit() {
     const all = kitCatalog(), def = KITS[STYLE_KIT[P.style]] || KITS.synth;
     const items = [{ key: "style", name: "Style default: " + def.name, group: "Style default" }].concat(Object.entries(all).map(([k, v]) => ({ key: k, name: v.name, group: kitGroupOf(v) })));
     openPicker({
@@ -114,7 +117,7 @@ export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExt
       onPick: key => { P.kit = key; renderKit(); onMusic(); },
       onPreview: key => onPreview("perc", null, key === "style" ? STYLE_KIT[P.style] : key)
     });
-  });
+  }
   function renderKit() {
     $("#kitBox").hidden = chan !== "perc";
     if (chan !== "perc") return;
@@ -252,5 +255,5 @@ export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExt
   }
   render();
   new ResizeObserver(() => drawEq()).observe(svg);
-  return { render, sync, get channel() { return chan; } };
+  return { render, sync, pickInstrument, pickKit, get channel() { return chan; } };
 }

@@ -172,7 +172,7 @@ export function applyStory(score, story) {
   fitMelody(score);
   melodyRules(score);
   doubleClimax({ notes: score.notes, points: score.points });
-  doubleNotes({ notes: score.notes, points: score.points, extra: score.extra, inst: score.inst, body: score.body });
+  doubleNotes({ notes: score.notes, points: score.points, extra: score.extra, inst: score.inst, body: score.body, buildUp: score.buildUp });
   cleanVoices(score);
   const keep2 = score.notes;
   keep2.sort((a, b) => a.t - b.t || a.midi - b.midi); score.story = { places: story.places, segments: story.segments.length };

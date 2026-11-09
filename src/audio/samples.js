@@ -25,7 +25,7 @@ export const KITS = {
   orchestral: { name: "Orchestral (taiko, timpani, cymbals)", orchestral: true, group: "Built in" }
 };
 // Default kit per style: the genre's sound (electronic on an 808; orchestral styles on taiko and timpani).
-export const STYLE_KIT = { blues: "abuse:linn-9000", funk: "LM-2", pop: "LM-2", rock: "abuse:linn-9000", metal: "abuse:oberheim-dmx", ambient: "synth", cinematic: "orchestral", minimal: "synth", jazz: "synth", electronic: "TR-808", epic: "orchestral", movie: "orchestral", lofi: "LM-2", bossa: "synth", synthwave: "LM-2", classical: "synth" };
+export const STYLE_KIT = { lofinature: "synth", neoclassical: "synth", folk: "synth", meditation: "synth", postrock: "abuse:linn-9000", chiptune: "Casio-RZ1", triphop: "LM-2", reggae: "LM-2", baroque: "synth", eastasian: "orchestral", dnb: "abuse:linn-9000", techno: "TR-808", blues: "abuse:linn-9000", funk: "LM-2", pop: "LM-2", rock: "abuse:linn-9000", metal: "abuse:oberheim-dmx", ambient: "synth", cinematic: "orchestral", minimal: "synth", jazz: "synth", electronic: "TR-808", epic: "orchestral", movie: "orchestral", lofi: "LM-2", bossa: "synth", synthwave: "LM-2", classical: "synth" };
 
 // General MIDI drum note → candidate group names in a drum machine (first match wins).
 const DM_GROUPS = {

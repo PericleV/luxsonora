@@ -602,8 +602,24 @@ If a focus point lands on an object found by the detector (COCO-SSD), its catego
 | Metal | 120-168 | Phrygian, Aeolian | 1 bar | 2 bars | Oberheim DMX: double bass drum, snare, crashes |
 | Blues | 72-104 | Mixolydian, with a blues melody scale (1 2 ♭3 3 5 6 ♭7) | 1 bar, the 12-bar form | 4 bars | Linn 9000: shuffle on the ride |
 | Funk | 92-116 | Dorian, Mixolydian | 1 bar (a vamp) | 2 bars | LinnDrum LM-2: syncopated kick, ghost notes, sixteenth hats |
+| Lo-fi chill (nature) | 58-72 | Ionian, Lydian, Mixolydian, Dorian | 2 bars | 4 bars | synthesized: a soft kick, a rim, a shaker when busier |
+| Neoclassical piano | 60-84 | Aeolian, Ionian, Dorian, Lydian | 2 bars | 4 bars | none |
+| Acoustic folk | 84-112 | Ionian, Mixolydian, Dorian, Aeolian | 1 bar | 4 bars | synthesized: light kick, rim (snare at the peak), shaker |
+| Meditation | 50-64 | Ionian, Lydian, Aeolian, Dorian (pentatonic) | 2 bars | 4 bars | none |
+| Post-rock | 76-110 | Ionian, Lydian, Aeolian, Mixolydian | 2 bars | 4 bars | Linn 9000: quiet ride, floor-tom build, the full kit at the peak |
+| Chiptune (8-bit) | 120-150 | Ionian, Aeolian, Dorian, Mixolydian | 1 bar | 4 bars | Casio RZ-1: kick, snare, eighth hats |
+| Trip-hop | 70-92 | Aeolian, Dorian, Phrygian | 2 bars | 2 bars | LinnDrum LM-2: slow half-time break |
+| Reggae | 70-88 | Ionian, Mixolydian, Dorian, Aeolian | 1 bar (a loop) | 4 bars | LinnDrum LM-2: the one-drop (kick and rim on 3) |
+| Baroque | 84-116 | Ionian, Aeolian | 1 bar | 4 bars | none |
+| East Asian | 60-84 | Ionian, Aeolian (pentatonic) | 2 bars | 4 bars | orchestral: woodblock (rim) and taiko |
+| Drum and bass | 164-176 | Aeolian, Dorian, Phrygian | 2 bars | 4 bars | Linn 9000: two-step, sixteenth hats |
+| Techno | 124-134 | Aeolian, Phrygian, Dorian | 2 bars | 4 bars | Roland TR-808: four on the floor, off-beat open hats |
 
-In the Piece tab the styles are a dropdown in four groups (Calm: Ambient, Minimal, Lo-fi hip hop, Classical; Film: Cinematic, Movie score, Orchestral epic; Groove: Jazz, Bossa nova, Electronic, Synthwave; Band: Pop, Rock, Metal, Blues, Funk), with a one-line description of the chosen style.
+In the Piece tab the 28 styles are a dropdown in five groups (Calm and nature: Ambient, Lo-fi chill, Meditation, Neoclassical piano, Minimal, East Asian; Classical and film: Classical, Baroque, Movie score, Cinematic, Orchestral epic; Jazz, soul and world: Jazz, Bossa nova, Blues, Funk, Reggae, Lo-fi hip hop, Trip-hop; Band: Pop, Rock, Post-rock, Acoustic folk, Metal; Electronic: Electronic, Techno, Drum and bass, Synthwave, Chiptune), with a one-line description of the chosen style.
+
+**Suggested styles** (`src/core/suggest.js`, no model): the three styles that suit the picture best are shown under the style (and in New song, which starts on the best one after a new picture), each with a short reason. The picture is measured on five scales from 0 to 1: lightness, warmth of the colours, saturation (÷ 0.6), detail (`0.5·entropy + 0.5·edges`) and contrast (the standard deviation of lightness ÷ 0.3), plus its main colour family (§7.7f). Each style has a profile on the same scales and the families it likes; its score is `Σ w_k·(1 − min(1, 2·|picture_k − profile_k|))` with weights 1.2, 0.8, 1, 1 and 0.8, plus 0.8 when the colour family matches, divided by the maximum. The reason names the measures the picture shows clearly (more than 0.12 from the middle) that the style matches closely.
+
+New genre devices: the **skank** (Reggae: short chords on every off-beat) and the **dub bass** (root on 1, the one-drop on 3, the fifth and the root after it); **square waves** (Chiptune: the unison oscillators take a square shape, a triangle bass); a **drone** (any style's Drone layer) that rests on a chord a semitone from it, so the fifth never grinds under the sixth degree; drones stay at or above C2.
 
 ### 9.1 Genre rules
 

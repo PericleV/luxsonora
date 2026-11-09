@@ -165,6 +165,14 @@ details.adv > summary:hover,details[open].adv > summary{color:var(--text)}
 details[open].adv > summary{margin-bottom:12px}
 details.adv .sub{margin-bottom:12px}
 .rules{display:grid;gap:16px;margin-bottom:10px}
+.sugg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 4px}
+.sugg:empty{display:none}
+.sugg .sugg-k{font-size:12px;color:var(--text-3);width:100%}
+.chip-btn{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:5px 10px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;cursor:pointer;text-align:left;max-width:100%}
+.chip-btn b{font-size:12.5px;font-weight:600}
+.chip-btn small{font-size:11px;color:var(--text-3)}
+.chip-btn:hover{border-color:var(--accent-line)}
+.chip-btn.on{border-color:var(--accent);background:var(--accent-soft)}
 .rule-group{display:grid;gap:10px}
 .rule .toggle{color:var(--text)}
 details.adv .rule .sub{margin:3px 0 0 35px;font-size:12px}

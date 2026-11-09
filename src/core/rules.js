@@ -108,7 +108,7 @@ export function transposeWindow(notes, slots, mod, melScale) {
       let c = 0;
       if (before) c += Math.abs(ins[0].midi + sh - before.midi);
       if (after) c += Math.abs(ins[ins.length - 1].midi + sh - after.midi);
-      for (const n of ins) if (n.midi + sh < (lo[layer] ?? 24) || n.midi + sh > (hi[layer] ?? 100)) c += 50;
+      for (const n of ins) if (n.midi + sh < (lo[layer] ?? 36) || n.midi + sh > (hi[layer] ?? 100)) c += 50;
       return c;
     };
     shiftOf.set(layer, cost(alt) < cost(mod.shift) ? alt : mod.shift);

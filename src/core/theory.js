@@ -188,6 +188,126 @@ export const STYLES = {
       pad: I("pad", "Organ", { a: 0.03, d: 0.8, s: 0.85, r: 0.3, cut: 2200, q: 0.8, col: 0.3, det: 4 })
     },
     gm: { lead: 61, harm: 28, bass: 36, pad: 16 }
+  },
+  lofinature: {
+    name: "Lo-fi chill (nature)", modes: ["ionian", "lydian", "mixolydian", "dorian"], tempo: [58, 72], pent: false, ext: 9, swing: 0.2, perc: "soft", bass: "hold", reverb: 0.55,
+    inst: {
+      lead: I("fm", "Felt piano", { a: 0.006, d: 2.2, s: 0.18, r: 0.9, cut: 2000, q: 0.6, col: 0.1, ratio: 1 }),
+      harm: I("pluck", "Soft guitar", { a: 0.006, d: 2.2, r: 0.6, cut: 1900, q: 0.7, col: 0.3 }),
+      bass: I("bass", "Warm bass", { a: 0.02, d: 0.7, s: 0.75, r: 0.4, cut: 420, q: 0.8, col: 0.12 }),
+      pad: I("pad", "Tape pad", { a: 1.6, d: 1.2, s: 0.8, r: 2.4, cut: 1000, q: 0.7, col: 0.28, det: 14 })
+    },
+    gm: { lead: 0, harm: 24, bass: 32, pad: 89 }
+  },
+  neoclassical: {
+    name: "Neoclassical piano", modes: ["aeolian", "ionian", "dorian", "lydian"], tempo: [60, 84], pent: false, ext: 9, swing: 0, perc: "none", bass: "hold", reverb: 0.6,
+    inst: {
+      lead: I("fm", "Felt piano", { a: 0.006, d: 2.6, s: 0.15, r: 1.0, cut: 2400, q: 0.6, col: 0.1, ratio: 1 }),
+      harm: I("fm", "Felt piano (left hand)", { a: 0.006, d: 2.4, s: 0.15, r: 1.0, cut: 1800, q: 0.6, col: 0.1, ratio: 1 }),
+      bass: I("bass", "Cello", { a: 0.12, d: 0.8, s: 0.85, r: 0.7, cut: 900, q: 0.7, col: 0.4 }),
+      pad: I("pad", "Soft strings", { a: 1.2, d: 1.0, s: 0.85, r: 2.0, cut: 1800, q: 0.7, col: 0.45, det: 8 })
+    },
+    gm: { lead: 0, harm: 0, bass: 42, pad: 48 }
+  },
+  folk: {
+    name: "Acoustic folk", modes: ["ionian", "mixolydian", "dorian", "aeolian"], tempo: [84, 112], pent: false, ext: 5, swing: 0.15, perc: "folk", bass: "rootfifth", reverb: 0.4,
+    inst: {
+      lead: I("pad", "Fiddle", { a: 0.05, d: 0.6, s: 0.8, r: 0.35, cut: 3200, q: 1.0, col: 0.6, det: 4, vib: 14, lvl: 0.5 }),
+      harm: I("pluck", "Acoustic guitar", { a: 0.004, d: 1.8, r: 0.4, cut: 3200, q: 0.7, col: 0.45 }),
+      bass: I("bass", "Upright bass", { a: 0.01, d: 0.5, s: 0.6, r: 0.2, cut: 700, q: 0.9, col: 0.25 }),
+      pad: I("pad", "Accordion", { a: 0.08, d: 0.6, s: 0.85, r: 0.4, cut: 2400, q: 0.8, col: 0.5, det: 10 })
+    },
+    gm: { lead: 110, harm: 25, bass: 32, pad: 21 }
+  },
+  meditation: {
+    name: "Meditation", modes: ["ionian", "lydian", "aeolian", "dorian"], tempo: [50, 64], pent: true, ext: 7, swing: 0, perc: "none", bass: "pedal", reverb: 0.8,
+    inst: {
+      lead: I("fm", "Singing bowl", { a: 0.02, d: 4.0, s: 0.3, r: 3.0, cut: 5000, q: 0.6, col: 0.4, ratio: 2.76 }),
+      harm: I("pad", "Breath pad", { a: 2.0, d: 1.5, s: 0.85, r: 3.0, cut: 1200, q: 0.6, col: 0.2, det: 6 }),
+      bass: I("bass", "Drone", { a: 1.0, d: 1.0, s: 0.9, r: 2.0, cut: 300, q: 0.7, col: 0.1 }),
+      pad: I("pad", "Deep pad", { a: 2.4, d: 1.5, s: 0.85, r: 3.0, cut: 900, q: 0.6, col: 0.25, det: 10 })
+    },
+    gm: { lead: 14, harm: 89, bass: 32, pad: 94 }
+  },
+  postrock: {
+    name: "Post-rock", modes: ["ionian", "lydian", "aeolian", "mixolydian"], tempo: [76, 110], pent: false, ext: 9, swing: 0, perc: "postrock", bass: "hold", reverb: 0.6,
+    inst: {
+      lead: I("pluck", "Echo guitar", { a: 0.004, d: 2.0, r: 0.8, cut: 3400, q: 0.8, col: 0.55 }),
+      harm: I("pluck", "Tremolo guitar", { a: 0.004, d: 1.2, r: 0.4, cut: 2800, q: 0.8, col: 0.6 }),
+      bass: I("bass", "Picked bass", { a: 0.006, d: 0.4, s: 0.7, r: 0.2, cut: 1100, q: 1.1, col: 0.5 }),
+      pad: I("pad", "Wide strings", { a: 1.0, d: 1.0, s: 0.85, r: 2.0, cut: 2200, q: 0.7, col: 0.5, det: 12 })
+    },
+    gm: { lead: 27, harm: 27, bass: 34, pad: 48 }
+  },
+  chiptune: {
+    name: "Chiptune (8-bit)", modes: ["ionian", "aeolian", "dorian", "mixolydian"], tempo: [120, 150], pent: false, ext: 5, swing: 0, perc: "chip", bass: "octave8", reverb: 0.12,
+    inst: {
+      lead: I("pad", "Square lead", { a: 0.005, d: 0.3, s: 0.8, r: 0.08, cut: 7000, q: 0.5, col: 1, det: 0, vib: 8, lvl: 0.45, osc: "square" }),
+      harm: I("pad", "Pulse arpeggio", { a: 0.003, d: 0.2, s: 0.6, r: 0.05, cut: 6000, q: 0.5, col: 1, det: 0, lvl: 0.4, osc: "square" }),
+      bass: I("pad", "Triangle bass", { a: 0.004, d: 0.3, s: 0.9, r: 0.05, cut: 4000, q: 0.5, col: 0, det: 0, lvl: 1.1 }),
+      pad: I("pad", "Soft square", { a: 0.2, d: 0.5, s: 0.7, r: 0.4, cut: 2500, q: 0.5, col: 1, det: 0, lvl: 0.3, osc: "square" })
+    },
+    gm: { lead: 80, harm: 80, bass: 38, pad: 80 }
+  },
+  triphop: {
+    name: "Trip-hop", modes: ["aeolian", "dorian", "phrygian"], tempo: [70, 92], pent: false, ext: 9, swing: 0.1, swing16: 0.3, perc: "triphop", bass: "hold", reverb: 0.45,
+    inst: {
+      lead: I("pad", "Haunted lead", { a: 0.04, d: 0.6, s: 0.8, r: 0.6, cut: 2000, q: 1.2, col: 0.4, det: 5, vib: 12, lvl: 0.5 }),
+      harm: I("fm", "Rhodes", { a: 0.006, d: 1.8, s: 0.3, r: 0.8, cut: 1800, q: 0.7, col: 0.3, ratio: 1 }),
+      bass: I("bass", "Deep sub", { a: 0.01, d: 0.8, s: 0.85, r: 0.4, cut: 320, q: 0.9, col: 0.1 }),
+      pad: I("pad", "Dark strings", { a: 1.0, d: 1.0, s: 0.85, r: 1.8, cut: 1200, q: 0.8, col: 0.45, det: 10 })
+    },
+    gm: { lead: 59, harm: 4, bass: 38, pad: 49 }
+  },
+  reggae: {
+    name: "Reggae", modes: ["ionian", "mixolydian", "dorian", "aeolian"], tempo: [70, 88], pent: false, ext: 5, swing: 0.25, perc: "reggae", bass: "dub", reverb: 0.35,
+    inst: {
+      lead: I("pad", "Melodica", { a: 0.03, d: 0.5, s: 0.8, r: 0.25, cut: 2600, q: 0.9, col: 0.45, det: 3, vib: 8, lvl: 0.5 }),
+      harm: I("pluck", "Skank guitar", { a: 0.003, d: 0.3, r: 0.06, cut: 3000, q: 0.8, col: 0.5 }),
+      bass: I("bass", "Dub bass", { a: 0.01, d: 0.5, s: 0.8, r: 0.15, cut: 520, q: 0.9, col: 0.15 }),
+      pad: I("pad", "Bubble organ", { a: 0.02, d: 0.3, s: 0.7, r: 0.15, cut: 2200, q: 0.8, col: 0.35, det: 6 })
+    },
+    gm: { lead: 22, harm: 27, bass: 33, pad: 16 }
+  },
+  baroque: {
+    name: "Baroque", modes: ["ionian", "aeolian"], tempo: [84, 116], pent: false, ext: 5, swing: 0, perc: "none", bass: "pulse", reverb: 0.45,
+    inst: {
+      lead: I("pad", "Baroque violin", { a: 0.04, d: 0.5, s: 0.8, r: 0.3, cut: 3400, q: 0.9, col: 0.55, det: 3, vib: 8, lvl: 0.5 }),
+      harm: I("pluck", "Harpsichord", { a: 0.002, d: 1.4, r: 0.3, cut: 5200, q: 0.8, col: 0.75 }),
+      bass: I("bass", "Continuo cello", { a: 0.05, d: 0.6, s: 0.7, r: 0.3, cut: 900, q: 0.8, col: 0.4 }),
+      pad: I("pad", "Chamber strings", { a: 0.4, d: 0.8, s: 0.8, r: 0.9, cut: 2200, q: 0.7, col: 0.45, det: 6 })
+    },
+    gm: { lead: 40, harm: 6, bass: 42, pad: 48 }
+  },
+  eastasian: {
+    name: "East Asian", modes: ["ionian", "aeolian"], tempo: [60, 84], pent: true, ext: 5, swing: 0, perc: "asian", bass: "pedal", reverb: 0.55,
+    inst: {
+      lead: I("pad", "Bamboo flute", { a: 0.06, d: 0.6, s: 0.75, r: 0.5, cut: 2600, q: 0.8, col: 0.15, det: 2, vib: 16, lvl: 0.5 }),
+      harm: I("pluck", "Koto", { a: 0.003, d: 2.0, r: 0.5, cut: 3600, q: 0.9, col: 0.55 }),
+      bass: I("bass", "Low drone", { a: 0.4, d: 1.0, s: 0.85, r: 1.2, cut: 400, q: 0.7, col: 0.12 }),
+      pad: I("pad", "Soft strings", { a: 1.2, d: 1.0, s: 0.85, r: 2.0, cut: 1600, q: 0.7, col: 0.4, det: 8 })
+    },
+    gm: { lead: 77, harm: 107, bass: 32, pad: 48 }
+  },
+  dnb: {
+    name: "Drum and bass", modes: ["aeolian", "dorian", "phrygian"], tempo: [164, 176], pent: false, ext: 9, swing: 0, perc: "dnb", bass: "hold", reverb: 0.4,
+    inst: {
+      lead: I("pad", "Neuro lead", { a: 0.01, d: 0.4, s: 0.75, r: 0.25, cut: 3000, q: 3, col: 0.8, det: 8, vib: 4, lvl: 0.5 }),
+      harm: I("pad", "Liquid pad", { a: 0.3, d: 0.8, s: 0.8, r: 1.0, cut: 2000, q: 0.8, col: 0.45, det: 12, lvl: 0.7 }),
+      bass: I("bass", "Reese bass", { a: 0.01, d: 0.6, s: 0.9, r: 0.2, cut: 600, q: 1.6, col: 0.7 }),
+      pad: I("pad", "Atmosphere", { a: 1.4, d: 1.0, s: 0.85, r: 2.4, cut: 1400, q: 0.7, col: 0.35, det: 14 })
+    },
+    gm: { lead: 81, harm: 89, bass: 38, pad: 95 }
+  },
+  techno: {
+    name: "Techno", modes: ["aeolian", "phrygian", "dorian"], tempo: [124, 134], pent: false, ext: 7, swing: 0, perc: "techno", bass: "offbeat", reverb: 0.35,
+    inst: {
+      lead: I("pad", "Acid line", { a: 0.004, d: 0.3, s: 0.6, r: 0.1, cut: 1800, q: 6, col: 0.85, det: 0, lvl: 0.5 }),
+      harm: I("pad", "Dub stab", { a: 0.004, d: 0.3, s: 0.4, r: 0.4, cut: 1600, q: 1.5, col: 0.7, det: 8, lvl: 0.7 }),
+      bass: I("bass", "Rolling bass", { a: 0.004, d: 0.25, s: 0.7, r: 0.08, cut: 700, q: 1.4, col: 0.5 }),
+      pad: I("pad", "Dark drone", { a: 1.5, d: 1.0, s: 0.85, r: 2.0, cut: 900, q: 0.8, col: 0.4, det: 12 })
+    },
+    gm: { lead: 87, harm: 90, bass: 38, pad: 95 }
   }
 };
 
@@ -227,6 +347,30 @@ export const RULES = {
   blues: { grid: 1, unit: 4, phrase: 4, harm: ["block", "comp"], padLevel: 0.8, bass: ["boogie", "boogie"], cands: [[0, 3, 4], [0, 3, 4]], loop: { major: [0, 0, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4], minor: [0, 0, 0, 0, 3, 3, 0, 0, 4, 3, 0, 4] }, quality: "dom7", sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
   // funk: a vamp on one or two chords, scratch guitar and syncopated bass in sixteenths
   funk: { grid: 1, unit: 4, phrase: 2, harm: ["comp", "funk16"], padLevel: 0.6, bass: ["funk16", "funk16"], cands: [[0, 3, 4], [0, 3, 6]], loop: { major: [0, 0, 3, 0], minor: [0, 0, 3, 3] }, sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
+  // lo-fi chill: slow chords, a soft guitar picking, almost no drums; nature and quiet light
+  lofinature: { grid: 1, unit: 8, phrase: 4, harm: ["block", "arp"], padLevel: 0.9, bass: ["hold", "rootfifth"], cands: [[0, 3, 5], [5, 3, 1]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
+  // neoclassical piano: held chords and a broken left hand, cello underneath, no drums
+  neoclassical: { grid: 1, unit: 8, phrase: 4, harm: ["block", "broken", "arp"], bass: ["pedal", "hold"], cands: [[0, 3, 5], [5, 3, 1]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
+  // folk: fingerpicked guitar on the beat, root and fifth in the bass, a light kick and shaker
+  folk: { grid: 1, unit: 4, phrase: 4, harm: ["arp", "broken"], padLevel: 0.6, bass: ["rootfifth", "rootfifth"], cands: [[0, 3, 4], [5, 3, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false },
+  // meditation: drones and long tones, a pentatonic melody of bells, no drums
+  meditation: { grid: 1, unit: 8, phrase: 4, harm: ["swell", "block"], bass: ["pedal", "pedal"], cands: [[0, 3, 4], [0, 5, 3]], sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
+  // post-rock: slow chords, tremolo-picked arpeggios that build to power chords at the climax
+  postrock: { grid: 1, unit: 8, phrase: 4, harm: ["arp", "arp", "power8"], padLevel: 0.8, bass: ["hold", "pick8"], cands: [[0, 5, 3], [5, 3, 0]], sidechain: 0, pickups: false, approach: false, swell: "cymbal", stopDown: false },
+  // chiptune: square waves, fast arpeggios and an octave bass, a simple 8-bit kit
+  chiptune: { grid: 1, unit: 4, phrase: 4, harm: ["arp", "arp"], padLevel: 0.4, bass: ["octave8", "octave8"], cands: [[0, 3, 4], [5, 3, 4]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
+  // trip-hop: a slow heavy break, Rhodes chords, a deep sub bass
+  triphop: { grid: 1, unit: 8, phrase: 2, harm: ["block", "comp"], bass: ["hold", "hold"], cands: [[0, 5, 3], [5, 6, 3]], sidechain: 0.15, pickups: false, approach: false, swell: "cymbal", stopDown: false },
+  // reggae: the skank on the off-beats, a dub bass, the one-drop
+  reggae: { grid: 1, unit: 4, phrase: 4, harm: ["skank", "skank"], padLevel: 0.6, bass: ["dub", "dub"], cands: [[0, 3, 4], [0, 3, 5]], loop: { major: [0, 3, 0, 4], minor: [0, 3, 0, 6] }, sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
+  // baroque: harpsichord broken chords over a walking continuo, the dominant before the end
+  baroque: { grid: 1, unit: 4, phrase: 4, harm: ["broken", "arp"], padLevel: 0.6, bass: ["pulse", "pulse"], cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
+  // east asian: a pentatonic flute, koto arpeggios over a drone, sparse woodblock and taiko
+  eastasian: { grid: 1, unit: 8, phrase: 4, harm: ["arp", "broken"], padLevel: 0.7, bass: ["pedal", "hold"], cands: [[0, 3, 5], [5, 3, 0]], sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
+  // drum and bass: a fast two-step break, a long reese bass, liquid pads
+  dnb: { grid: 2, unit: 8, phrase: 4, harm: ["block", "block"], bass: ["hold", "hold"], cands: [[0, 5, 3], [5, 3, 6]], sidechain: 0.35, pickups: false, approach: false, swell: "riser", stopDown: false },
+  // techno: four on the floor, an off-beat rolling bass, minimal stabs
+  techno: { grid: 2, unit: 8, phrase: 4, harm: ["block", "stab"], bass: ["offbeat", "offbeat"], cands: [[0, 5, 6], [0, 3, 5]], sidechain: 0.55, pickups: false, approach: false, swell: "riser", stopDown: false },
   movie: { grid: 1, unit: 8, phrase: 2, harm: ["swell", "arp"], bass: ["pedal", "hold"], cands: [[0, 3, 4], [5, 3, 1]], sidechain: 0, pickups: true, approach: true, swell: "cymbal", stopDown: false }
 };
 
@@ -250,4 +394,4 @@ export function objectAt(sem, x, y) {
 export const LAYERS = ["lead", "harm", "bass", "pad", "perc"];
 export const LAYER_NAME = { lead: "Melody", harm: "Harmony", bass: "Bass", pad: "Pad", perc: "Rhythm" };
 // Drum kit of each style (see rhythm.js)
-export const PERC_NAME = { ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };
+export const PERC_NAME = { lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };

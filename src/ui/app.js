@@ -10,6 +10,7 @@ import { DIMS, DIM_NAME, DIM_SOURCE } from "../core/timbre.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
+import { suggestStyles } from "../core/suggest.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
 import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, scheduleExpression } from "../audio/engine.js";
@@ -190,7 +191,7 @@ function recompute() {
     // objects found by the Objects placement colour the timbre of the places on them
     const semEff = SEM || (ATTN.objects && ATTN.objects.length ? { objects: ATTN.objects, valence: null, energy: null } : null);
     SCORE = compose({ A, sal: SAL, points: POINTS, cl: CL, motifs: MOT, P, sem: semEff, cov: COV, lum: LUM });
-    ensureLayerState(SCORE); renderOrch(); renderExpert();
+    ensureLayerState(SCORE); renderOrch(); renderExpert(); renderStyleSuggest();
     storyStep();
     grooveStep();
     // how it is played: dynamics from the image, accents, phrasing, CC curves, humanize
@@ -204,7 +205,7 @@ function recompute() {
   drawAll();
   refreshStatus();
   checkRecipe();
-  if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { NEW_SONG_PENDING = false; openNewSong(); }
+  if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { NEW_SONG_PENDING = false; openNewSong(true); }
   // Play pressed while a neural model was still working: start now that the piece is final
   if (WAIT_PLAY && SCORE && !jobsPending() && !dirty) { WAIT_PLAY = false; startPlayback(Player.pausedBeat >= SCORE.total ? 0 : Player.pausedBeat); }
   updatePlayBtn();
@@ -269,7 +270,13 @@ function renderWhy() {
 }
 
 /* ============ styles: groups and one-line descriptions for the dropdown ============ */
-const STYLE_GROUPS = [["Calm", ["ambient", "minimal", "lofi", "classical"]], ["Film", ["cinematic", "movie", "epic"]], ["Groove", ["jazz", "bossa", "electronic", "synthwave"]], ["Band", ["pop", "rock", "metal", "blues", "funk"]]];
+const STYLE_GROUPS = [
+  ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
+  ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
+  ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
+  ["Band", ["pop", "rock", "postrock", "folk", "metal"]],
+  ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
+];
 const STYLE_DESC = {
   ambient: "Slow chords over a held bass note. No real drums, just soft shakers, bells and pads.",
   minimal: "A steady pulse and patterns that repeat and slowly shift, on marimba and vibraphone. Think Steve Reich.",
@@ -286,8 +293,27 @@ const STYLE_DESC = {
   rock: "Guitars and drums. Power chords, a driving bass, a big snare on 2 and 4 and a crash at every new part.",
   metal: "Heavy and fast. Palm-muted guitar riffs, double bass drum at the climax and a sudden break before it.",
   blues: "Twelve bars and a shuffle. Seventh chords, a boogie bass line, guitar, piano and harmonica.",
-  funk: "Tight and syncopated. Scratchy guitar, popping bass, ghost notes on the snare and horns."
+  funk: "Tight and syncopated. Scratchy guitar, popping bass, ghost notes on the snare and horns.",
+  lofinature: "Slow and warm, for nature and quiet light. Felt piano, a soft guitar, a tape-worn pad and almost no drums.",
+  neoclassical: "Intimate piano with a cello and soft strings. Open chords, long phrases, no drums.",
+  folk: "Fingerpicked acoustic guitar, a fiddle and an accordion, with a light kick and a shaker.",
+  meditation: "Very slow. Long drones, a singing bowl and bells on a five-note scale, no drums.",
+  postrock: "Echoing guitars that build slowly to a big climax with the whole band, then settle.",
+  chiptune: "8-bit game music. Square waves, fast arpeggios, a bouncing bass and a simple drum machine.",
+  triphop: "Slow, dark and heavy. A half-time break, Rhodes chords, a deep sub bass and a haunted lead.",
+  reggae: "The skank on the off-beats, a dub bass and the one-drop, with an organ bubbling underneath.",
+  baroque: "Harpsichord and violin over a walking cello, like the 1700s, ending on a proper cadence.",
+  eastasian: "A bamboo flute and a koto on a five-note scale, over a drone, with woodblock and taiko.",
+  dnb: "Fast and rolling. A two-step break at 170 BPM, a long reese bass and liquid pads.",
+  techno: "Four on the floor, an off-beat bass, minimal stabs and an acid line. Dark and hypnotic."
 };
+
+// The three styles that suit the picture best (core/suggest.js), as buttons: the name and why.
+function styleSuggestHtml(cur) {
+  if (!A) return "";
+  return `<span class="sugg-k">Suits this picture:</span>${suggestStyles(A).map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" data-style="${x.style}" title="${esc(x.reason)}"><b>${esc(STYLES[x.style].name)}</b><small>${esc(x.reason)}</small></button>`).join("")}`;
+}
+function renderStyleSuggest() { const el = $("#styleSuggest"); if (el) el.innerHTML = styleSuggestHtml(P.style); }
 
 /* ============ orchestration: extra layers (src/core/arrange.js) ============ */
 // Small, Medium and Full are chosen automatically from the analysis; any change to the list
@@ -441,12 +467,12 @@ function suggestedCount() {
 }
 // the orange part of a plain range input, up to its thumb (the shared sliders do this themselves)
 function fillRange(r) { const lo = Number(r.min) || 0, hi = Number(r.max) || 100; r.style.setProperty("--p", (((Number(r.value) - lo) / (hi - lo || 1)) * 100).toFixed(2) + "%"); }
-function openNewSong() {
+function openNewSong(fresh = false) {
   const name = INFO ? INFO.name : "this image", sug = suggestedCount(), data = BASE && BASE.kind === "data";
   const groups = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}"${k === P.style ? " selected" : ""}>${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
   const places = Object.entries(PLACEMENTS).map(([k, v]) => `<option value="${k}"${k === (data ? "details" : P.placement) ? " selected" : ""}>${esc(v.name)}${v.group === "Neural" ? " (neural)" : ""}</option>`).join("");
   const { body, close } = openInfo(`New song from “${name}”`, `<div class="dlg-info newsong">
-    <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><p class="snote" id="nsStyleNote"></p></div>
+    <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblDur">Duration</div><div class="seg" id="nsDur" role="radiogroup" aria-labelledby="nsLblDur"></div></div>
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, P.count || sug)}">
@@ -462,6 +488,9 @@ function openNewSong() {
     </div>
     <p class="snote"><b>Generate song</b> picks the spots for you, and you can still move them afterwards. With <b>Place the points myself</b> you tap them in, in the order you want to hear them.</p></div>`, "dlg-newsong");
   const $b = s => body.querySelector(s);
+  // a new picture starts on the style that suits it best
+  if (fresh && A) { const best = suggestStyles(A)[0]; if (best) $b("#nsStyle").value = best.style; }
+  $b("#nsSuggest").addEventListener("click", e => { const x = e.target.closest("[data-style]"); if (!x) return; $b("#nsStyle").value = x.dataset.style; note(); });
   let dur = P.duration, mel = P.melody || "classic", conn = P.connect || "light", orch = P.orch === "custom" ? "custom" : P.orch || "small";
   const MEL_DESC = {
     classic: "The tune follows the eye: high places sound high, every place has its own motif, and places that look alike share one.",
@@ -482,7 +511,7 @@ function openNewSong() {
     return `The five tracks, plus ${xs.length} more from the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds.`;
   };
   const note = () => {
-    $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
+    $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
     $b("#nsCountVal").textContent = $b("#nsCount").value; fillRange($b("#nsCount"));
     $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
   };
@@ -544,7 +573,7 @@ function showWelcome() {
       <li><b>Play with it</b><span>Drag the spots around, pick the climax, then save the song or a video of it.</span></li>
     </ol>
     <ul class="welcome-points">
-      <li>16 styles, from ambient and classical to jazz, blues, funk, pop, rock and metal</li>
+      <li>28 styles, from ambient, nature lo-fi and classical to jazz, reggae, rock, metal, techno and 8-bit</li>
       <li>Real recorded instruments, plus optional AI models (Magenta) for melodies and grooves that feel more human</li>
       <li>It all runs in your browser, so your picture stays on your device</li>
       <li>Same picture, same settings, same song. Save the project and anyone can open it again</li>
@@ -632,7 +661,7 @@ function showHowItWorks() {
     </ul>
 
     <h3>3. The style</h3>
-    <p>Each of the 16 styles brings its own frame: how often the chords change, its drum patterns, its instruments, its swing, and its form (the twelve bars of the blues, the four-chord loop of pop, the break before the climax in metal and trailer music). The picture chooses inside that frame, never against it.</p>
+    <p>Each of the 28 styles brings its own frame: how often the chords change, its drum patterns, its instruments, its swing, and its form (the twelve bars of the blues, the four-chord loop of pop, the break before the climax in metal and trailer music). The picture chooses inside that frame, never against it.</p>
 
     <h3>4. The rules the composer follows</h3>
     <p>On top of the style, the composer keeps to these rules. Each one can be turned off in Piece, Advanced, Composition rules, so you can hear what it does.</p>
@@ -2106,12 +2135,16 @@ export function init() {
   // style: a grouped dropdown with what each style is, in a line
   const styleSel = $("#styleSel");
   styleSel.innerHTML = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}">${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
-  const styleNote = () => { $("#styleNote").textContent = STYLE_DESC[P.style] || ""; };
+  const styleNote = () => { $("#styleNote").textContent = STYLE_DESC[P.style] || ""; renderStyleSuggest(); };
   STYLE_SEG = { set(v) { styleSel.value = v; styleNote(); } };
   STYLE_SEG.set(P.style);
   styleSel.addEventListener("change", () => {
     const v = styleSel.value; P.style = v; styleNote(); SL.reverb.set(STYLES[v].reverb, false); applyMixLive();
     invalidate(LV.MUSIC);
+  });
+  $("#styleSuggest").addEventListener("click", e => {
+    const b = e.target.closest("[data-style]"); if (!b) return;
+    styleSel.value = b.dataset.style; styleSel.dispatchEvent(new Event("change"));
   });
   DUR_SEG = makeSeg($("#durSeg"), DURATIONS.map(d => [String(d), `${d} s`]), String(P.duration), v => { P.duration = Number(v); invalidate(LV.MUSIC); });
   MEL_SEG = makeSeg($("#melSeg"), [["classic", "Classic"], ["story", "Story"], ["improv", "Improvise"]], P.melody, v => { P.melody = v; STORY.failed = false; invalidate(LV.MUSIC); });

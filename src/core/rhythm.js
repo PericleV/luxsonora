@@ -152,8 +152,50 @@ export function barPattern(style, D, a, section, b = 0) {
     }
     for (let q = 0; q < 16; q++) bar[q].push([DRUM.chat, q % 2 ? 0.28 : 0.5]);
     if (D > 0.6 && !intro) at([14], DRUM.ohat, 0.5);
-  } else if (style === "classical") {
-    // no drums: the orchestra keeps time
+  } else if (style === "lofinature") {
+    // almost nothing: a soft kick on 1, a rim on 3 when the music moves, a shaker when it's busier
+    if (!intro && D > 0.35) { at([0], DRUM.kick, 0.55); at([8], DRUM.rim, 0.42); }
+    if (D > 0.55) at(EIGHTHS, DRUM.shaker, 0.26);
+  } else if (style === "folk") {
+    // folk: a light kick on 1 and 3, a rim (or snare at the peak) on 2 and 4, shaker eighths
+    if (!intro) { at([0, 8], DRUM.kick, 0.7); at([4, 12], climax ? DRUM.snare : DRUM.rim, climax ? 0.6 : 0.5); }
+    if (D > 0.45) at(EIGHTHS, DRUM.shaker, 0.32);
+  } else if (style === "postrock") {
+    // post-rock: quiet ride when calm, floor-tom eighths as it builds, the full kit at the peak
+    if (climax || D > 0.8) { at([0, 6, 8], DRUM.kick, 0.95); at([4, 12], DRUM.snare, 0.95); at(EIGHTHS, DRUM.ride, 0.55); if (b % 2 === 0) at([0], DRUM.crash, 0.8); }
+    else if (D > 0.55 && !intro) { at(EIGHTHS, DRUM.ltom, 0.5); at([0, 8], DRUM.kick, 0.7); }
+    else if (!intro) at([0, 4, 8, 12], DRUM.ride, 0.32);
+  } else if (style === "chiptune") {
+    // 8-bit: kick on 1 and 3, snare on 2 and 4, eighth hats (sixteenths at the peak)
+    if (!intro) { at([0, 8], DRUM.kick, 0.9); at([4, 12], DRUM.snare, 0.85); }
+    at(climax ? [...Array(16).keys()] : EIGHTHS, DRUM.chat, climax ? 0.36 : 0.44);
+  } else if (style === "triphop") {
+    // trip-hop: a slow heavy break, kick on 1 and the "and" of 2, snare on 3 (half time), swung hats
+    if (!intro) { at([0, 6, 10], DRUM.kick, 0.92); at([8], DRUM.snare, 0.95); }
+    at(EIGHTHS, DRUM.chat, intro ? 0.3 : 0.4);
+    if (D > 0.7 && !intro) put(E(lerp(2, 4, a.tex), a.rot2 + 3), DRUM.rim, 0.3);
+  } else if (style === "reggae") {
+    // the one-drop: nothing on 1, kick and rim together on 3, swung hats; a snare roll into the peak
+    if (!intro) { at([8], DRUM.kick, 0.95); at([8], DRUM.rim, 0.85); }
+    at(EIGHTHS, DRUM.chat, intro ? 0.32 : 0.42);
+    if (D > 0.7 && !intro) at([14], DRUM.ohat, 0.4);
+  } else if (style === "eastasian") {
+    // sparse: a woodblock (rim) on an euclidean figure, a taiko (low tom) on the downbeat when tense
+    if (!intro) put(E(lerp(2, 4, a.tex), a.rot2), DRUM.rim, 0.36);
+    if (D > 0.6 && !intro) at([0], DRUM.ltom, 0.7);
+    if (climax) at([8], DRUM.ltom, 0.6);
+  } else if (style === "dnb") {
+    // drum and bass: the two-step, kick on 1 and the "and" of 3, snare on 2 and 4, sixteenth hats
+    if (!intro) { at([0, 10], DRUM.kick, 0.95); at([4, 12], DRUM.snare, 0.95); put(E(lerp(1, 3, a.tex), a.rot2 + 5).map((on, q) => on && q !== 4 && q !== 12), DRUM.snare, 0.22); }
+    for (let q = 0; q < 16; q++) if (!intro || q % 2 === 0) bar[q].push([DRUM.chat, q % 2 ? 0.26 : 0.46]);
+  } else if (style === "techno") {
+    // techno: four on the floor, an off-beat open hat, a rim or clap on 2 and 4, sixteenths at the peak
+    if (!intro) at([0, 4, 8, 12], DRUM.kick, 0.96);
+    at(OFF8, D > 0.5 ? DRUM.ohat : DRUM.chat, intro ? 0.38 : 0.5);
+    if (!intro && D > 0.45) at([4, 12], D > 0.75 ? DRUM.clap : DRUM.rim, 0.6);
+    if (D > 0.65 || climax) at(ODD16, DRUM.chat, 0.24);
+  } else if (style === "classical" || style === "neoclassical" || style === "meditation" || style === "baroque") {
+    // no drums: the instruments keep time
   } else if (style === "movie") {
     // underscore: mostly silence; a heartbeat at mid tension, timpani at the peak
     if (D > 0.5 && !intro) at([0, 3], DRUM.kick, 0.45);
@@ -165,14 +207,19 @@ export function barPattern(style, D, a, section, b = 0) {
 
 // Fill over the last beat of a phrase, per style (electronic builds with a snare roll instead).
 const FILL = {
+  lofinature: null, neoclassical: null, meditation: null, baroque: null, folk: [DRUM.rim, DRUM.rim, DRUM.kick, DRUM.kick], postrock: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom],
+  chiptune: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.snare], triphop: [DRUM.snare, DRUM.kick, DRUM.snare, DRUM.rim], reggae: [DRUM.rim, DRUM.rim, DRUM.snare, DRUM.snare],
+  eastasian: [DRUM.ltom, DRUM.ltom, DRUM.ltom, DRUM.ltom], dnb: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.snare], techno: [DRUM.clap, DRUM.clap, DRUM.clap, DRUM.clap],
   ambient: [DRUM.htom, DRUM.mtom, DRUM.mtom, DRUM.ltom], cinematic: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom],
   minimal: [DRUM.rim, DRUM.rim, DRUM.rim, DRUM.rim], jazz: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.snare],
   electronic: [DRUM.clap, DRUM.clap, DRUM.clap, DRUM.clap], epic: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], movie: [DRUM.ltom, DRUM.ltom, DRUM.ltom, DRUM.ltom],
   lofi: [DRUM.snare, DRUM.kick, DRUM.snare, DRUM.snare], bossa: [DRUM.rim, DRUM.rim, DRUM.ltom, DRUM.ltom], synthwave: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], classical: null,
   pop: [DRUM.snare, DRUM.snare, DRUM.clap, DRUM.snare], blues: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom], funk: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.htom], rock: [DRUM.snare, DRUM.htom, DRUM.mtom, DRUM.ltom], metal: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom]
 };
+// styles without drums (the instruments keep time; no crash at the climax either)
+const NO_DRUMS = new Set(["neoclassical", "meditation", "baroque"]);
 // Kit level per style (velocity scale), set from offline renders of the demos.
-const LEVEL = { blues: 96, funk: 98, pop: 96, rock: 100, metal: 104, ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
+const LEVEL = { lofinature: 84, neoclassical: 90, folk: 90, meditation: 80, postrock: 98, chiptune: 92, triphop: 100, reggae: 96, baroque: 90, eastasian: 92, dnb: 96, techno: 96, blues: 96, funk: 98, pop: 96, rock: 100, metal: 104, ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
 
 /*
  * segs: composed points (t0, t1, idx, x, tim, reg, tension, section); arc: { climax };
@@ -203,7 +250,7 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
       const acc = q % 4 === 0 ? 1 : q % 2 === 0 ? 0.86 : 0.74;
       for (const [midi, v] of bar[q]) push(t, midi, lv * v * acc * a.acc * dyn);
     }
-    if (b === climaxBar && style !== "ambient" && style !== "minimal") push(b * 4, DRUM.crash, 96, { dur: 0.5 });
+    if (b === climaxBar && style !== "ambient" && style !== "minimal" && !NO_DRUMS.has(style)) push(b * 4, DRUM.crash, 96, { dur: 0.5 });
     // transition swells, ending where the next section begins
     if (arcOn && next && (sectionChange || intoClimax) && R.swell) {
       const end = (b + 1) * 4, len = R.swell === "riser" && intoClimax ? 4 : 2;
@@ -215,7 +262,7 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
   // accents the user put on points: a cymbal and a kick on the point's first beat (a low drum in classical)
   for (const F of segs) if (F.accent) { push(F.t0, style === "classical" ? DRUM.ltom : DRUM.crash, 100, { dur: 0.5, accent: true }); if (style !== "classical") push(F.t0, DRUM.kick, 100, { accent: true }); }
   // cadence
-  const cad = { ambient: [[DRUM.ltom, 60]], cinematic: [[DRUM.kick, 90], [DRUM.crash, 80]], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [[DRUM.kick, 110], [DRUM.ltom, 100], [DRUM.crash, 96]], movie: [[DRUM.ltom, 70]], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
+  const cad = { lofinature: [[DRUM.kick, 50]], neoclassical: [], meditation: [], baroque: [], folk: [[DRUM.kick, 70]], postrock: [[DRUM.kick, 100], [DRUM.crash, 96]], chiptune: [[DRUM.kick, 90], [DRUM.crash, 70]], triphop: [[DRUM.kick, 96], [DRUM.crash, 60]], reggae: [[DRUM.kick, 90], [DRUM.rim, 80]], eastasian: [[DRUM.ltom, 90]], dnb: [[DRUM.kick, 100], [DRUM.crash, 80]], techno: [[DRUM.kick, 100], [DRUM.crash, 70]], ambient: [[DRUM.ltom, 60]], cinematic: [[DRUM.kick, 90], [DRUM.crash, 80]], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [[DRUM.kick, 110], [DRUM.ltom, 100], [DRUM.crash, 96]], movie: [[DRUM.ltom, 70]], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
   for (const [midi, vel] of cad) notes.push({ layer: "perc", t: body, dur: midi === DRUM.ride || midi === DRUM.crash ? 0.4 : 0.1, midi, vel, point: -2 });
   return notes;
 }

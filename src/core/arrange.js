@@ -52,7 +52,19 @@ export const STYLE_ROLES = {
   rock: ["sustain", "counter", "runs", "double", "ostinato", "ornament", "pulse"],
   metal: ["double", "sustain", "runs", "pulse", "counter", "ostinato", "ornament"],
   blues: ["counter", "sustain", "runs", "ornament", "double", "ostinato", "drone"],
-  funk: ["ostinato", "counter", "sustain", "runs", "ornament", "double", "pulse"]
+  funk: ["ostinato", "counter", "sustain", "runs", "ornament", "double", "pulse"],
+  lofinature: ["ornament", "counter", "sustain", "runs", "drone", "ostinato", "double"],
+  neoclassical: ["sustain", "counter", "ornament", "runs", "drone", "double", "ostinato"],
+  folk: ["counter", "ostinato", "runs", "sustain", "ornament", "double", "drone"],
+  meditation: ["drone", "ornament", "sustain", "counter", "runs", "double", "ostinato"],
+  postrock: ["sustain", "ostinato", "counter", "runs", "double", "pulse", "ornament"],
+  chiptune: ["counter", "ostinato", "runs", "ornament", "double", "pulse", "sustain"],
+  triphop: ["sustain", "counter", "ornament", "runs", "drone", "double", "ostinato"],
+  reggae: ["ostinato", "counter", "sustain", "ornament", "runs", "double", "pulse"],
+  baroque: ["counter", "runs", "sustain", "ornament", "double", "drone", "pulse"],
+  eastasian: ["ornament", "counter", "drone", "runs", "sustain", "ostinato", "pulse"],
+  dnb: ["sustain", "ostinato", "counter", "runs", "ornament", "pulse", "double"],
+  techno: ["ostinato", "sustain", "pulse", "runs", "counter", "ornament", "double"]
 };
 // Instrument per style and role: sampled (when sampled instruments are on) and synthesized.
 const SAMPLED = {
@@ -71,14 +83,35 @@ const SAMPLED = {
   blues: { runs: "s.piano", counter: "s.harmonica", sustain: "s.organ", ornament: "s.piano", double: "s.harmonica", ostinato: "s.jazzgtr", drone: "s.organ", pulse: "s.acbass" },
   funk: { ostinato: "s.clav", counter: "s.tenorsax", sustain: "s.brass", runs: "s.clav", ornament: "s.trumpet", double: "s.trumpet", pulse: "s.slapbass", drone: "s.organ" },
   rock: { runs: "s.overdrive", counter: "s.overdrive", sustain: "s.organ", double: "s.overdrive", ostinato: "s.cleangtr", ornament: "s.rockorgan", pulse: "s.pickbass", drone: "s.rockorgan" },
+  lofinature: { runs: "s.nylon", counter: "s.flute", ornament: "s.glock", sustain: "s.warmpad", drone: "s.warmpad", ostinato: "s.kalimba", double: "s.flute", pulse: "s.marimba" },
+  neoclassical: { runs: "s.piano", counter: "s.cello", ornament: "s.celesta", sustain: "s.strings", drone: "s.contrabass", ostinato: "s.pizz", double: "s.violin", pulse: "s.timpani" },
+  folk: { runs: "s.banjo", counter: "s.fiddle", ornament: "s.recorder", sustain: "s.accordion", drone: "s.accordion", ostinato: "s.banjo", double: "s.recorder", pulse: "s.acbass" },
+  meditation: { runs: "s.harp", counter: "s.panflute", ornament: "s.celesta", sustain: "s.choir", drone: "s.warmpad", ostinato: "s.kalimba", double: "s.panflute", pulse: "s.timpani" },
+  postrock: { runs: "s.cleangtr", counter: "s.cleangtr", ornament: "s.glock", sustain: "s.strings", drone: "s.strings", ostinato: "s.tremolo", double: "s.overdrive", pulse: "s.timpani" },
+  triphop: { runs: "s.wurli", counter: "s.mutedtpt", ornament: "s.vibes", sustain: "s.strings", drone: "s.strings", ostinato: "s.wurli", double: "s.mutedtpt", pulse: "s.synthbass" },
+  reggae: { runs: "s.organ", counter: "s.trumpet", ornament: "s.glock", sustain: "s.organ", drone: "s.organ", ostinato: "s.organ", double: "s.trombone", pulse: "s.fingerbass" },
+  baroque: { runs: "s.harpsichord", counter: "s.violin", ornament: "s.recorder", sustain: "s.strings", drone: "s.organ", ostinato: "s.pizz", double: "s.oboe", pulse: "s.timpani" },
+  eastasian: { runs: "s.koto", counter: "s.shakuhachi", ornament: "s.kalimba", sustain: "s.strings", drone: "s.strings", ostinato: "s.koto", double: "s.panflute", pulse: "s.timpani" },
   metal: { runs: "s.overdrive", counter: "s.overdrive", sustain: "s.choir", double: "s.overdrive", ostinato: "s.distortion", ornament: "s.celesta", pulse: "s.timpani", drone: "s.choir" }
 };
 // synthesizer styles take their own sounds for some roles
-const STYLE_SYNTH = { electronic: { ostinato: "electronic.lead", sustain: "electronic.pad", pulse: "electronic.bass" }, synthwave: { ostinato: "synthwave.harm", sustain: "synthwave.pad", pulse: "synthwave.bass", counter: "x.synthlead" } };
+const STYLE_SYNTH = { chiptune: { counter: "chiptune.lead", ostinato: "chiptune.harm", runs: "chiptune.harm", sustain: "chiptune.pad", pulse: "chiptune.bass", double: "chiptune.lead", ornament: "chiptune.harm" }, techno: { ostinato: "techno.lead", sustain: "techno.harm", pulse: "techno.bass", drone: "techno.pad" }, dnb: { counter: "dnb.lead", sustain: "dnb.harm", pulse: "dnb.bass", drone: "dnb.pad" }, electronic: { ostinato: "electronic.lead", sustain: "electronic.pad", pulse: "electronic.bass" }, synthwave: { ostinato: "synthwave.harm", sustain: "synthwave.pad", pulse: "synthwave.bass", counter: "x.synthlead" } };
 const SYNTH = { runs: "x.glass", counter: "x.softlead", ornament: "x.glass", ostinato: "x.keys", sustain: "x.brass", double: "x.warmlead", drone: "x.sine", pulse: "x.keys" };
 // Each style's band: the instruments Add layer offers first, each with the role it plays (what it
 // reads in the image and how). Synthesizer styles list their own sounds.
 export const STYLE_BAND = {
+  lofinature: [["s.nylon", "runs"], ["s.flute", "counter"], ["s.kalimba", "ostinato"], ["s.glock", "ornament"], ["s.vibes", "ornament"], ["s.warmpad", "sustain"], ["s.cello", "counter"], ["s.marimba", "pulse"]],
+  neoclassical: [["s.strings", "sustain"], ["s.cello", "counter"], ["s.violin", "double"], ["s.piano", "runs"], ["s.celesta", "ornament"], ["s.pizz", "ostinato"], ["s.contrabass", "drone"], ["s.horn", "double"]],
+  folk: [["s.fiddle", "counter"], ["s.banjo", "ostinato"], ["s.recorder", "ornament"], ["s.accordion", "sustain"], ["s.harmonica", "counter"], ["s.acgtr", "runs"], ["s.flute", "double"], ["s.acbass", "pulse"]],
+  meditation: [["s.panflute", "counter"], ["s.celesta", "ornament"], ["s.kalimba", "ostinato"], ["s.harp", "runs"], ["s.choir", "sustain"], ["s.warmpad", "drone"], ["s.glock", "ornament"], ["x.glass", "ornament"]],
+  postrock: [["s.cleangtr", "counter"], ["s.tremolo", "ostinato"], ["s.strings", "sustain"], ["s.overdrive", "double"], ["s.glock", "ornament"], ["s.piano", "runs"], ["s.horn", "double"], ["s.timpani", "pulse"]],
+  chiptune: [["chiptune.lead", "counter"], ["chiptune.harm", "ostinato"], ["chiptune.pad", "sustain"], ["x.glass", "ornament"], ["chiptune.bass", "pulse"], ["x.sine", "drone"]],
+  triphop: [["s.mutedtpt", "counter"], ["s.wurli", "runs"], ["s.vibes", "ornament"], ["s.strings", "sustain"], ["s.cello", "counter"], ["s.mutedgtr", "ostinato"], ["s.synthbass", "pulse"], ["x.glass", "ornament"]],
+  reggae: [["s.organ", "ostinato"], ["s.trumpet", "counter"], ["s.trombone", "double"], ["s.tenorsax", "counter"], ["s.mutedgtr", "ostinato"], ["s.glock", "ornament"], ["s.fingerbass", "pulse"]],
+  baroque: [["s.violin", "counter"], ["s.harpsichord", "runs"], ["s.oboe", "double"], ["s.recorder", "ornament"], ["s.cello", "counter"], ["s.strings", "sustain"], ["s.organ", "drone"], ["s.pizz", "ostinato"]],
+  eastasian: [["s.shakuhachi", "counter"], ["s.koto", "runs"], ["s.panflute", "double"], ["s.kalimba", "ornament"], ["s.strings", "sustain"], ["s.koto", "ostinato"], ["s.timpani", "pulse"]],
+  dnb: [["dnb.lead", "counter"], ["dnb.harm", "sustain"], ["s.synthstrings", "sustain"], ["x.glass", "ornament"], ["dnb.bass", "pulse"], ["x.synthlead", "double"], ["s.vibes", "ornament"]],
+  techno: [["techno.lead", "ostinato"], ["techno.harm", "sustain"], ["techno.bass", "pulse"], ["x.synthlead", "counter"], ["x.glass", "ornament"], ["techno.pad", "drone"]],
   ambient: [["s.harp", "runs"], ["s.flute", "counter"], ["s.glock", "ornament"], ["s.celesta", "ornament"], ["s.vibes", "ostinato"], ["s.synthstrings", "sustain"], ["s.choir", "sustain"], ["s.warmpad", "drone"], ["x.wavepad", "sustain"], ["x.glass", "ornament"]],
   cinematic: [["s.strings", "sustain"], ["s.cello", "counter"], ["s.violin", "counter"], ["s.harp", "runs"], ["s.pizz", "ostinato"], ["s.tremolo", "ostinato"], ["s.horn", "double"], ["s.celesta", "ornament"], ["s.choir", "sustain"], ["s.timpani", "pulse"], ["s.contrabass", "drone"]],
   minimal: [["s.marimba", "ostinato"], ["s.vibes", "ostinato"], ["s.clarinet", "counter"], ["s.flute", "counter"], ["s.piano", "runs"], ["s.glock", "ornament"], ["s.celesta", "ornament"], ["s.strings", "sustain"], ["s.organ", "drone"]],
@@ -229,13 +262,22 @@ export function extraNotes(ctx) {
         prev = voices;
       });
     } else if (role === "drone") {
-      const [lo, hi] = reg("drone"), tonic = nearestIn(new Set([PCS(degMidi(0, modeIv, 60 + pcOff))]), lo + 4, lo, hi), fifth = tonic + 7;
-      for (let b = 0; b < body - 1e-9; b += 8) {
-        const S = slots.find(S => b >= S.t0 - 1e-9 && b < S.t1 - 1e-9) || slots[0];
-        if (!active(S) && S.F.tension < thr - 0.1) continue;
-        const d = Math.min(8, body - b);
-        add(b, d, tonic, 44 * (0.7 + 0.3 * density)); add(b, d, fifth, 36 * (0.7 + 0.3 * density));
+      // never below C2: lower, a drone only muddies the bass
+      const [lo, hi] = reg("drone"), t0n = nearestIn(new Set([PCS(degMidi(0, modeIv, 60 + pcOff))]), lo + 4, lo, hi), tonic = t0n === null ? null : t0n + 12 * Math.max(0, Math.ceil((36 - t0n) / 12)), fifth = tonic + 7;
+      // held across the chords, but a drone note a semitone from a tone of the chord over it (the
+      // fifth under the sixth degree, the tonic under the leading tone) rests for that chord
+      const rubs = (p, S) => S.pcs.has(PCS(p + 1)) || S.pcs.has(PCS(p - 1));
+      const open = {};
+      const close = m => { const o = open[m]; if (o) { add(o.t, o.end - o.t, m, o.vel); delete open[m]; } };
+      for (const S of slots) {
+        const on = active(S) || S.F.tension >= thr - 0.1;
+        for (const [m, v] of [[tonic, 44], [fifth, 36]]) {
+          if (!on || (rubs(m, S) && !S.pcs.has(PCS(m)))) { close(m); continue; }
+          if (open[m] && Math.abs(open[m].end - S.t0) < 1e-9) open[m].end = Math.min(body, S.t1);
+          else { close(m); open[m] = { t: S.t0, end: Math.min(body, S.t1), vel: v * (0.7 + 0.3 * density) }; }
+        }
       }
+      close(tonic); close(fifth);
     } else if (role === "runs") {
       // the path between consecutive points, as a run from one chord to the next (passages.js)
       const [lo, hi] = reg("runs"), slotAt = t => slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || slots[slots.length - 1];
@@ -294,7 +336,7 @@ export function cadenceExtra(layers, cadChord, baseLead, tc, holdFor, inst) {
   for (const L of layers) {
     const role = L.role, R = REGISTER[role]; if (!R || role === "pulse" || role === "ostinato") continue;
     const lo = baseLead + R[0], hi = baseLead + R[1], tim = inst[L.id];
-    const ms = role === "sustain" ? [...pcs].slice(0, 3).map((pc, i) => nearestIn(new Set([pc]), lo + 4 + 4 * i, lo, hi)) : role === "drone" ? [nearestIn(new Set([PCS(cadChord[0])]), lo + 4, lo, hi)] : [nearestIn(pcs, (lo + hi) / 2, lo, hi)];
+    const ms = role === "sustain" ? [...pcs].slice(0, 3).map((pc, i) => nearestIn(new Set([pc]), lo + 4 + 4 * i, lo, hi)) : role === "drone" ? [(m => (m === null ? m : m + 12 * Math.max(0, Math.ceil((36 - m) / 12))))(nearestIn(new Set([PCS(cadChord[0])]), lo + 4, lo, hi))] : [nearestIn(pcs, (lo + hi) / 2, lo, hi)];
     for (const m of ms) if (m !== null) out.push({ layer: L.id, t: tc, dur: holdFor(tim), midi: m, vel: role === "ornament" ? 50 : 54, tim, pan: ROLES[role].pan, point: -2 });
   }
   return out;

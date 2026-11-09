@@ -15,8 +15,8 @@ import { clamp, clampInt, lerp } from "./util.js";
 import { degMidi } from "./theory.js";
 import { euclid } from "./rhythm.js";
 
-export const HARM_NAME = { powerhit: "syncopated power-chord hits", funk16: "funk scratch guitar in sixteenths", power: "power chords, let ring", power8: "power chords in eighths", chug16: "palm-muted riff in sixteenths", bossa: "bossa nova comping (clave)", block: "held chord", swell: "swelling held chord", pulse: "pulsing chord", arp: "arpeggio", broken: "broken chord", comp: "comping (Charleston)", stab: "off-beat stabs", ostinato: "string ostinato" };
-export const BASS_NAME = { boogie: "boogie line in swung eighths", funk16: "syncopated sixteenths with octave pops", pick8: "picked eighths on the root", chug16: "palm-muted sixteenths, locked with the guitar", bossa: "bossa bass: root, then the fifth", octave8: "octave eighths (80s)", hold: "held root", pedal: "pedal on the tonic", pulse: "repeated root", walk: "walking line", twofeel: "two-feel, root and fifth", rootfifth: "root and fifth", offbeat: "off-beat eighths", ostinato: "eighth-note ostinato", rest: "silent (enters after the introduction)" };
+export const HARM_NAME = { skank: "the skank: short chords on the off-beats", powerhit: "syncopated power-chord hits", funk16: "funk scratch guitar in sixteenths", power: "power chords, let ring", power8: "power chords in eighths", chug16: "palm-muted riff in sixteenths", bossa: "bossa nova comping (clave)", block: "held chord", swell: "swelling held chord", pulse: "pulsing chord", arp: "arpeggio", broken: "broken chord", comp: "comping (Charleston)", stab: "off-beat stabs", ostinato: "string ostinato" };
+export const BASS_NAME = { dub: "dub bass: root on 1, the one-drop on 3", boogie: "boogie line in swung eighths", funk16: "syncopated sixteenths with octave pops", pick8: "picked eighths on the root", chug16: "palm-muted sixteenths, locked with the guitar", bossa: "bossa bass: root, then the fifth", octave8: "octave eighths (80s)", hold: "held root", pedal: "pedal on the tonic", pulse: "repeated root", walk: "walking line", twofeel: "two-feel, root and fifth", rootfifth: "root and fifth", offbeat: "off-beat eighths", ostinato: "eighth-note ostinato", rest: "silent (enters after the introduction)" };
 
 // Articulation from the style's list: calm in the introduction and resolution, busiest at the
 // climax, otherwise by 0.6·tension + 0.4·texture (< 0.5 calm, < 0.68 middle, else busy).
@@ -94,6 +94,12 @@ export function harmonyNotes(kind, chord, t0, dur, D, a, base) {
     if (!k) chord.forEach(m => mk(t0, 0.45, m, base.vel * 0.85, true));
     return out;
   }
+  if (kind === "skank") {
+    // reggae skank: short chords on the off-beats (the "and" of every beat), the top three voices
+    const top = sorted.slice(-3); let k = 0;
+    grid((t, q) => { if (q % 4 === 2) { top.forEach(m => mk(t, 0.22, m, base.vel * (q % 8 === 6 ? 0.95 : 0.85), k === 0)); k++; } });
+    return out;
+  }
   if (kind === "stab") {
     // house stabs: short chords on the off-beat eighths (sidechained against the kick)
     let k = 0;
@@ -135,6 +141,17 @@ export function bassNotes(kind, root, modeIv, pcOff, bm, t0, dur, a, base, opts 
   if (kind === "pulse") {
     const sub = a.tex > 0.66 ? 0.5 : a.tex > 0.33 ? 1 : 2;
     for (let b = 0; b < dur - 1e-6; b += sub) mk(t0 + b, Math.min(sub, dur - b) * 0.8, bm, b === 0 ? 88 : 70, b === 0);
+    return out;
+  }
+  if (kind === "dub") {
+    // dub bass per bar: the root on 1, a rest on the third beat (the one-drop), the fifth and the
+    // root again on the "and" of 3 and on 4
+    const fifth = near(root + 4, bm - 5, bm + 7);
+    for (let b = 0; b < dur - 1e-6; b += 4) {
+      mk(t0 + b, Math.min(1.4, dur - b) * 0.95, bm, 92, b === 0);
+      if (b + 2.5 < dur) mk(t0 + b + 2.5, 0.45, fifth, 76, false);
+      if (b + 3 < dur) mk(t0 + b + 3, 0.9, bm, 84, false);
+    }
     return out;
   }
   if (kind === "offbeat") {

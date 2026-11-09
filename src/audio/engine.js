@@ -281,7 +281,7 @@ function padVoice(ctx, out, t0, durSec, midi, vel, tim, pan, glide, sw) {
   const end = adsr(g.gain, t0, durSec, tim.a, tim.d, tim.s, tim.r, (vel / 127) * 0.14);
   const oscs = [];
   [[-det, -0.6], [0, 0], [det, 0.6]].forEach(([dc, pn]) => {
-    const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = f; o.detune.value = dc;
+    const o = ctx.createOscillator(); o.type = tim.osc || "sawtooth"; o.frequency.value = f; o.detune.value = dc;
     const og = ctx.createGain(); og.gain.value = 0.5 * tim.col;
     o.connect(og); connectPan(ctx, og, lp, pn); oscs.push(o);
   });

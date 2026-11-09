@@ -16,7 +16,7 @@ import { clamp, clampInt } from "./util.js";
 
 export const PERFORM_DEFAULTS = { dynRange: 0.5, velDetail: 0.5, accent: 0.4, phrasing: 0.4, ccExpr: 0.6, ccMod: 0.4, humTime: 8, humLen: 0.1, humVel: 6 };
 // how much of the timing variation a style takes (1 = all of it)
-export const LOOSENESS = { electronic: 0.15, synthwave: 0.3, metal: 0.5, funk: 0.6, pop: 0.7, rock: 0.8, minimal: 0.6, jazz: 1.3, lofi: 1.4, blues: 1.2, bossa: 1.1 };
+export const LOOSENESS = { chiptune: 0, techno: 0.15, dnb: 0.3, triphop: 1.2, reggae: 1.1, folk: 1.2, baroque: 0.8, neoclassical: 1.3, lofinature: 1.4, meditation: 1.5, eastasian: 1.3, postrock: 1, electronic: 0.15, synthwave: 0.3, metal: 0.5, funk: 0.6, pop: 0.7, rock: 0.8, minimal: 0.6, jazz: 1.3, lofi: 1.4, blues: 1.2, bossa: 1.1 };
 // layers that play one note at a time (a varied length must not run into the next note)
 const MONO = new Set(["lead", "bass"]), MONO_ROLES = new Set(["counter", "double", "runs", "ostinato", "pulse", "ornament"]);
 const SUSTAINED = new Set(["pad"]), SUSTAINED_ROLES = new Set(["sustain", "drone"]);

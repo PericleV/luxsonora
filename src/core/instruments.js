@@ -65,6 +65,17 @@ const SAMPLED = {
   "s.clav": SF("Clavinet", "clavinet", "pluck", { d: 0.6, r: 0.1, col: 0.6 }),
   "s.slapbass": SF("Slap bass", "slap_bass_1", "bass", { a: 0.003, r: 0.08, cut: 4000, col: 0.6 }),
   "s.mutedgtr": SF("Muted guitar", "electric_guitar_muted", "pluck", { d: 0.4, r: 0.06, col: 0.5 }),
+  "s.acgtr": SF("Acoustic guitar", "acoustic_guitar_steel", "pluck", { d: 1.8, r: 0.4, col: 0.45 }),
+  "s.banjo": SF("Banjo", "banjo", "pluck", { d: 0.9, r: 0.2, col: 0.6 }),
+  "s.fiddle": SF("Fiddle", "fiddle", "pad", { a: 0.04, r: 0.3, col: 0.6, vib: 14 }),
+  "s.accordion": SF("Accordion", "accordion", "pad", { a: 0.05, r: 0.3, col: 0.5 }),
+  "s.koto": SF("Koto", "koto", "pluck", { d: 1.8, r: 0.5, col: 0.55 }),
+  "s.shakuhachi": SF("Shakuhachi", "shakuhachi", "pad", { a: 0.06, r: 0.5, col: 0.15, vib: 16 }),
+  "s.kalimba": SF("Kalimba", "kalimba", "fm", { d: 1.2, s: 0.1, r: 0.6, ratio: 4 }),
+  "s.harpsichord": SF("Harpsichord", "harpsichord", "pluck", { d: 1.4, r: 0.3, col: 0.75 }),
+  "s.mutedtpt": SF("Muted trumpet", "muted_trumpet", "pad", { a: 0.03, r: 0.3, col: 0.6, vib: 10 }),
+  "s.panflute": SF("Pan flute", "pan_flute", "pad", { a: 0.05, r: 0.4, col: 0.15, vib: 12 }),
+  "s.recorder": SF("Recorder", "recorder", "pad", { a: 0.04, r: 0.3, col: 0.2, vib: 8 }),
   "s.distortion": SF("Distortion guitar", "distortion_guitar", "pad", { a: 0.006, r: 0.15, cut: 6000, col: 0.95 }),
   "s.pickbass": SF("Picked bass", "electric_bass_pick", "bass", { a: 0.004, r: 0.12, cut: 3500, col: 0.6 }),
   "s.rockorgan": SF("Rock organ", "rock_organ", "pad", { a: 0.02, r: 0.3, col: 0.4 })
@@ -89,13 +100,25 @@ export const STYLE_SAMPLED = {
   rock: { lead: "s.overdrive", harm: "s.distortion", bass: "s.pickbass", pad: "s.organ" },
   metal: { lead: "s.overdrive", harm: "s.distortion", bass: "s.pickbass", pad: "s.choir" },
   blues: { lead: "s.jazzgtr", harm: "s.piano", bass: "s.acbass", pad: "s.organ" },
-  funk: { lead: "s.brass", harm: "s.mutedgtr", bass: "s.slapbass", pad: "s.organ" }
+  funk: { lead: "s.brass", harm: "s.mutedgtr", bass: "s.slapbass", pad: "s.organ" },
+  lofinature: { lead: "s.piano", harm: "s.nylon", bass: "s.acbass", pad: "s.warmpad" },
+  neoclassical: { lead: "s.piano", harm: "s.piano", bass: "s.cello", pad: "s.strings" },
+  folk: { lead: "s.fiddle", harm: "s.acgtr", bass: "s.acbass", pad: "s.accordion" },
+  meditation: { lead: "s.celesta", harm: "s.warmpad", pad: "s.warmpad" },
+  postrock: { lead: "s.cleangtr", harm: "s.cleangtr", bass: "s.pickbass", pad: "s.strings" },
+  chiptune: {},
+  triphop: { lead: "s.mutedtpt", harm: "s.wurli", bass: "s.synthbass", pad: "s.strings" },
+  reggae: { harm: "s.cleangtr", bass: "s.fingerbass", pad: "s.organ" },
+  baroque: { lead: "s.violin", harm: "s.harpsichord", bass: "s.cello", pad: "s.strings" },
+  eastasian: { lead: "s.shakuhachi", harm: "s.koto", bass: "s.contrabass", pad: "s.strings" },
+  dnb: { pad: "s.synthstrings" },
+  techno: {}
 };
-export const STORY_SAMPLED = { pop: "s.flute", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
+export const STORY_SAMPLED = { lofinature: "s.flute", neoclassical: "s.cello", folk: "s.fiddle", meditation: "s.flute", postrock: "s.cleangtr", triphop: "s.mutedtpt", reggae: "s.trumpet", baroque: "s.violin", eastasian: "s.shakuhachi", pop: "s.flute", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
 
 // With the Story melody the line is long and tied, so a plucked default would cut it into
 // separate attacks: each style uses a sustained lead instead, unless a preset is chosen.
-export const STORY_LEAD = { blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
+export const STORY_LEAD = { lofinature: "x.softlead", neoclassical: "x.warmlead", folk: "x.softlead", meditation: "x.softlead", postrock: "x.softlead", chiptune: "chiptune.lead", triphop: "x.softlead", reggae: "x.softlead", baroque: "x.softlead", eastasian: "x.softlead", dnb: "x.synthlead", techno: "x.synthlead", blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
 
 // Adds catalog entries (sampled instruments listed at runtime by the UI, see samples.js) to
 // the library without replacing curated presets.

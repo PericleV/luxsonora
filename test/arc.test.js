@@ -47,7 +47,8 @@ describe("arrangement over the arc", () => {
     const sc = run(1, { ...P0, style }), perc = sc.notes.filter(n => n.layer === "perc" && n.point >= 0);
     const rate = sec => { const ps = sc.points.filter(F => F.section === sec); const beats = ps.reduce((s, F) => s + F.dur, 0); return beats ? perc.filter(n => ps.some(F => F.idx === n.point)).length / beats : null; };
     const intro = rate("intro"), climax = rate("climax");
-    if (intro !== null && climax !== null) expect(climax).toBeGreaterThan(intro);
+    // (styles without drums have none to get denser)
+    if (intro !== null && climax !== null && STYLES[style].perc !== "none") expect(climax).toBeGreaterThan(intro);
     // the bass enters after the introduction, except where the genre keeps a pedal or a pulse
     if (RULES[style].bass[0] !== "pedal" && style !== "epic")
       for (const S of sc.slots.filter(S => sc.points[S.point].section === "intro")) expect(sc.notes.some(n => n.layer === "bass" && n.t >= S.t0 - 1e-9 && n.t < S.t1 - 1e-9)).toBe(false);

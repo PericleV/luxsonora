@@ -3,7 +3,7 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook, defaultEdit, curveLUT, CURVE_X } from "../export/look.js";
 import { LABEL_MODES } from "../export/labels.js";
@@ -122,7 +122,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         <p class="snote">When the eye arrives, the place lifts out of the picture and shows what the analysis saw there.</p>
         <div id="xPatchBox">${sel("xPatchMap", "What it shows", opts(PATCH_MAPS))}${seg("xPatchAnim", "How it appears")}${box("xPatchLook")}<div class="vtoggles">${tog("xPatchKeep", "Visited places keep their texture")}</div></div></div>
       ${sel("xRipple", "Ripple on the picture", opts(RIPPLE_TRACKS))}
-      <div id="xRippleBox"><p class="snote">Each note of that track sends a ring across the picture from where the eye is.</p>${box("xRippleAmt")}</div>
+      <div id="xRippleBox"><p class="snote">Each note of that track sends a wave across the picture from where the eye is.</p>${seg("xRippleLook", "Look")}<p class="snote" id="xRippleLookNote"></p>${box("xRippleAmt")}<div class="vcolors">${col("xRippleCol", "Colour")}</div></div>
       ${seg("xBottom", "Sound display")}
       <div id="xBarBox">${seg("xBarOrient", "Orientation")}${seg("xBarDir", "Which way it grows")}
         <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xBarReset" hidden>Put it back</button></p>
@@ -204,6 +204,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xLabels", "labels", Object.entries(LABEL_MODES), false, () => vis()],
     ["xBottom", "bottom", Object.entries(BOTTOMS), false, () => vis()],
     ["xPatchAnim", "patchAnim", Object.entries(PATCH_ANIMS)],
+    ["xRippleLook", "rippleLook", Object.entries(RIPPLE_LOOKS), false, () => vis()],
     ["xBarOrient", "barOrient", Object.entries(BAR_ORIENT), false, () => { V.barXY = null; vis(); }],
     ["xBarDir", "barDir", Object.entries(BAR_DIR)],
     ["xBottomFill", "bottomFill", Object.entries(BOTTOM_FILLS), false, () => vis()],
@@ -251,7 +252,9 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xPathTime", { key: "pathTrail", label: "Trail", min: 0, max: 10, step: 1, def: 0, unit: "places", help: "Only the last few places of the path stay drawn. At 0 the whole path stays." }],
     ["#xPatchLook", pct("patchOpacity", "Texture opacity", 0.6, 1, "How strongly the analysis view shows over the picture inside the place. Lower it when a view looks too harsh.")],
     ["#xPatchLook", pct("patchSoft", "Soft edge", 0.4, 1, "How much of the circle fades out towards its edge. At 0 the place is a sharp disc with a thin ring.")],
-    ["#xRippleAmt", pct("rippleAmt", "Ripple strength", 0.5)],
+    ["#xRippleAmt", pct("rippleAmt", "Strength", 0.5, 1, "How far each wave travels and how wide it is.")],
+    ["#xRippleAmt", pct("rippleBand", "Band opacity", 0.5, 1, "How much the wave's band shows. Lower it when the band is too bright.")],
+    ["#xRippleAmt", pct("rippleSoft", "Soft edges", 0.6, 1, "How gradually the band fades at its edges. At 0 its edges are sharp.")],
     ["#xLogoOps", { key: "logoSize", label: "Size", min: 0.4, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
     ["#xLogoOps", pct("logoOpacity", "Opacity", 0.85)],
     ["#xBarOps", { key: "barSize", label: "Height", min: 0.3, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
@@ -325,7 +328,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   });
   // every colour picker on P.video: [input, key, part of the theme]
   const COLS = [["#xPathCol", "pathColor", true], ["#xPointCol", "pointColor", true], ["#xTitleCol", "titleColor"], ["#xSubCol", "subColor"], ["#xEyeCol", "eyeColor"],
-    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"], ["#xLogoCol", "logoColor"],
+    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"], ["#xLogoCol", "logoColor"], ["#xRippleCol", "rippleColor"],
     ["#xPathColA", "pathColor", true], ["#xPathCol2", "pathColor2"], ["#xClimaxCol", "climaxColor"], ["#xVigCol", "vigColor"], ["#xTintCol", "tintColor"], ["#xSpotCol", "spotColor"], ["#xBoxCol", "boxColor"]];
   const syncColors = () => { for (const [id, key] of COLS) $(id).value = V[key] || "#ffffff"; };
   for (const [id, key, theme] of COLS) $(id).addEventListener("input", e => { V[key] = e.target.value; if (theme) { V.theme = "custom"; showTheme(); } look(); });
@@ -419,6 +422,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#xBoxCols").hidden = !["box", "outline"].includes(V.textStyle || "shadow");
     $("#xPosReset").hidden = !(V.titleXY || V.pointXY);
     $("#xPatchBox").hidden = !V.patch; $("#xRippleBox").hidden = !V.ripple || V.ripple === "off";
+    $("#xRippleLookNote").textContent = { lens: "The picture is magnified a little inside the wave, like water.", rings: "Thin rings spread out, nothing else changes.", dots: "A grid of dots lights up as the wave passes, like an LED wall. Suits electronic styles." }[V.rippleLook || "lens"] || "";
     $("#xLogoBox").hidden = !V.logo; $("#xLogoReset").hidden = !V.logoXY;
     $("#xBarBox").hidden = V.bottom === "none"; $("#xBarReset").hidden = !V.barXY; $("#xCoverCleanBox").hidden = V.cover === "image";
     $("#xCoverBox").hidden = V.cover === "off"; sl.coverTime.el.hidden = V.cover !== "time"; $("#xCoverPickBox").hidden = V.cover !== "image";

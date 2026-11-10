@@ -49,6 +49,7 @@ export const PATCH_MAPS = { auto: "Auto (what shaped its sound)", edges: "Edges"
 export const PATCH_ANIMS = { rise: "Rises", reveal: "Changes its texture", both: "Rises and changes" };
 // the ripple: which track sets it off
 export const RIPPLE_TRACKS = { off: "Off", perc: "Drums", bass: "Bass", lead: "Melody", harm: "Harmony", pad: "Pad" };
+export const RIPPLE_LOOKS = { lens: "Lens", rings: "Rings", dots: "Dots" };
 // the sound display: lying along the frame or standing up its side, and which way its bars grow
 // (its place is dragged on the preview, barXY; by default along the bottom, or up the right side)
 export const BAR_ORIENT = { h: "Horizontal", v: "Vertical" };
@@ -75,7 +76,7 @@ export function defaultVideo() {
     placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
     spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
     titleAlign: "auto", titleXY: null, pointXY: null, pointAlign: "left", textStyle: "shadow", boxColor: "#000000", caps: false, letterSpace: 0, titleAnim: "fade",
-    patch: false, patchMap: "auto", patchAnim: "both", patchKeep: false, patchOpacity: 0.6, patchSoft: 0.4, ripple: "off", rippleAmt: 0.5, pathFrom: 0, pathTo: 0, pathTrail: 0,
+    patch: false, patchMap: "auto", patchAnim: "both", patchKeep: false, patchOpacity: 0.6, patchSoft: 0.4, ripple: "off", rippleAmt: 0.5, rippleLook: "lens", rippleBand: 0.5, rippleSoft: 0.6, rippleColor: "#FFFFFF", pathFrom: 0, pathTo: 0, pathTrail: 0,
     logo: false, logoColor: "#FFFFFF", logoSize: 1, logoOpacity: 0.85, logoAnim: true, logoXY: null,
     barOrient: "h", barXY: null, barDir: "up", barSize: 1, barLength: 1, barOpacity: 1, coverClean: false, edit: defaultEdit(),
     bottom: "bars", bottomFill: "solid", bottomColor: VIDEO_THEMES.gold.point, bottomColor2: VIDEO_THEMES.gold.path, fadeIn: 0.6, fadeOut: 1.5, fadeSound: true, endCard: false, credit: "Made with Lux Sonora",
@@ -277,6 +278,13 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
 }
 
 const FONT_UI = '"Geist", system-ui, -apple-system, "Segoe UI", sans-serif';
+// a frame-sized canvas for the ripple's lens
+let RIPPLE_CV = null;
+function rippleCanvas(W, H) {
+  if (!RIPPLE_CV) RIPPLE_CV = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(W, H) : document.createElement("canvas");
+  if (RIPPLE_CV.width !== W || RIPPLE_CV.height !== H) { RIPPLE_CV.width = W; RIPPLE_CV.height = H; }
+  return RIPPLE_CV;
+}
 // one small canvas reused for every place's texture (grown when a bigger place needs it)
 let PATCH_CV = null;
 function patchCanvas(D) {
@@ -365,19 +373,77 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   const drawPicture = (img = src, to = g) => { if (ex > sx && ey > sy) { const fx = img.width / iw, fy = img.height / ih; to.drawImage(img, sx * fx, sy * fy, (ex - sx) * fx, (ey - sy) * fy, (sx - v.x) * k, (sy - v.y) * k, (ex - sx) * k, (ey - sy) * k); } };
   drawPicture();
   if (o.dim > 0) { g.fillStyle = `rgba(0,0,0,${o.dim})`; g.fillRect(0, 0, W, H); }
-  // the ripple: every note of the chosen track sends a ring across the picture from where the eye
-  // is; inside the ring the picture is magnified a little, like a wave on water
+  // the ripple: every note of the chosen track sends a wave across the picture from where the eye
+  // is. Lens: inside the wave the picture is magnified a little, like water. Rings: thin rings only.
+  // Dots: a grid of dots lights up as the wave passes, like an LED matrix. The band's opacity and
+  // the softness of its edges are set apart from the strength (its size and width).
   if (o.ripple && o.ripple !== "off" && !opt.clean && S.onsets && S.onsets[o.ripple]) {
-    const life = 1.4, amt = clamp(o.rippleAmt ?? 0.5), list = S.onsets[o.ripple], cur = tl.length ? tl[Math.max(0, gazeIndex(tl, sec))] : null;
+    const life = 1.4, amt = clamp(o.rippleAmt ?? 0.5), band = clamp(o.rippleBand ?? 0.5), soft = clamp(o.rippleSoft ?? 0.6), look = o.rippleLook || "lens", col = o.rippleColor || "#FFFFFF";
+    const list = S.onsets[o.ripple], cur = tl.length ? tl[Math.max(0, gazeIndex(tl, sec))] : null;
     const cx = cur ? X(cur.x) : W / 2, cy = cur ? Y(cur.y) : H / 2, maxR = Math.hypot(W, H) * (0.25 + 0.35 * amt), ringW = (16 + 28 * amt) * u;
     let lo = 0, hi = list.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid][0] <= sec) lo = mid + 1; else hi = mid; }
-    for (let q = lo - 1, shown = 0; q >= 0 && shown < 4; q--) {
+    const waves = [];
+    for (let q = lo - 1; q >= 0 && waves.length < 4; q--) {
       const age = sec - list[q][0]; if (age > life) break;
-      const f = age / life, rr = ringW + f * maxR, strength = (1 - f) * (0.4 + 0.6 * list[q][1]) * amt, zoom = 1 + 0.06 * strength;
-      g.save(); g.beginPath(); g.arc(cx, cy, rr + ringW / 2, 0, Math.PI * 2); g.arc(cx, cy, Math.max(0, rr - ringW / 2), 0, Math.PI * 2, true); g.clip();
-      g.translate(cx, cy); g.scale(zoom, zoom); g.translate(-cx, -cy); drawPicture(); g.restore();
-      ring(g, cx, cy, rr, "#ffffff", 0.35 * strength, 1.5 * u);
-      shown++;
+      const f = age / life;
+      waves.push({ rr: ringW + f * maxR, s: (1 - f) * (0.4 + 0.6 * list[q][1]) });
+    }
+    // the band's profile across its width (d: distance from its middle): flat in the middle, its
+    // edges fading over `soft` of the half-width (0: hard edges)
+    const hw = ringW / 2, feather = Math.max(0.001, soft * hw);
+    const prof = d => { const e = Math.abs(d); return e >= hw ? 0 : e <= hw - feather ? 1 : (hw - e) / feather; };
+    if (waves.length && band > 0) {
+      if (look === "lens") {
+        // the waves are drawn as a mask on a frame-sized canvas, the magnified (and as dimmed)
+        // picture is put inside it, and the result goes over the frame at the band's opacity
+        const rc = rippleCanvas(W, H), rg = rc.getContext("2d"), R = waves[0].rr + hw + 2, bx = Math.max(0, cx - R), by = Math.max(0, cy - R), bw = Math.min(W, cx + R) - bx, bh = Math.min(H, cy + R) - by;
+        if (bw > 0 && bh > 0) {
+          rg.setTransform(1, 0, 0, 1, 0, 0); rg.globalCompositeOperation = "source-over"; rg.globalAlpha = 1; rg.clearRect(bx, by, bw, bh);
+          for (const w of waves) {
+            const i0 = Math.max(0, w.rr - hw), o0 = w.rr + hw, gr = rg.createRadialGradient(cx, cy, i0, cx, cy, o0), fz = Math.min(0.49, feather / (o0 - i0 || 1));
+            gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(fz, `rgba(0,0,0,${w.s})`); gr.addColorStop(1 - fz, `rgba(0,0,0,${w.s})`); gr.addColorStop(1, "rgba(0,0,0,0)");
+            rg.fillStyle = gr; rg.beginPath(); rg.arc(cx, cy, o0, 0, Math.PI * 2); rg.arc(cx, cy, i0, 0, Math.PI * 2, true); rg.fill();
+          }
+          const zoom = 1.03 + 0.05 * amt;
+          rg.save(); rg.globalCompositeOperation = "source-in"; rg.beginPath(); rg.rect(bx, by, bw, bh); rg.clip();
+          rg.imageSmoothingEnabled = true; rg.translate(cx, cy); rg.scale(zoom, zoom); rg.translate(-cx, -cy); drawPicture(src, rg); rg.restore();
+          // as dimmed as the rest of the frame (the old band was bright because it was not), with a
+          // light sheen of the ripple's colour
+          rg.save(); rg.globalCompositeOperation = "source-atop";
+          if (o.dim > 0) { rg.fillStyle = `rgba(0,0,0,${o.dim})`; rg.fillRect(bx, by, bw, bh); }
+          rg.fillStyle = hexA(col, 0.12); rg.fillRect(bx, by, bw, bh); rg.restore();
+          g.save(); g.globalAlpha = Math.min(1, band * 1.6); g.drawImage(rc, bx, by, bw, bh, bx, by, bw, bh); g.restore();
+        }
+        // a faint line in the middle of each band, gone when the edges are fully soft
+        for (const w of waves) ring(g, cx, cy, w.rr, col, 0.3 * w.s * band * (1 - soft), 1.4 * u);
+      } else if (look === "rings") {
+        // two or three thin rings per wave; softness widens them into a haze
+        for (const w of waves) for (let m = 0; m < 3; m++) {
+          const rr = w.rr - m * ringW * 0.45; if (rr <= 0) continue;
+          const a = w.s * band * (1 - m * 0.3);
+          if (soft > 0.05) ring(g, cx, cy, rr, col, a * 0.25 * soft, (2 + 10 * soft) * u);
+          ring(g, cx, cy, rr, col, a * 0.8, 1.5 * u);
+        }
+      } else {
+        // dots: a fixed grid; each dot near a wave lights up by how close it is to the wave's
+        // middle, bigger and brighter. Drawn in a few batches by brightness.
+        const step = Math.max(6, (22 - 10 * amt) * u), dr = step * 0.32, R = waves[0].rr + hw;
+        const x0 = Math.max(0, cx - R), x1 = Math.min(W, cx + R), y0 = Math.max(0, cy - R), y1 = Math.min(H, cy + R);
+        const buckets = Array.from({ length: 6 }, () => []);
+        for (let y = Math.ceil(y0 / step) * step + step / 2; y < y1; y += step) for (let x = Math.ceil(x0 / step) * step + step / 2; x < x1; x += step) {
+          const d = Math.hypot(x - cx, y - cy); let v = 0;
+          for (const w of waves) { const pv = prof(d - w.rr) * w.s; if (pv > v) v = pv; }
+          if (v > 0.03) buckets[Math.min(5, Math.floor(v * 6))].push(x, y, v);
+        }
+        g.save(); g.fillStyle = col;
+        buckets.forEach((b, k) => {
+          if (!b.length) return;
+          g.globalAlpha = Math.min(1, band * 1.5 * ((k + 0.5) / 6)); g.beginPath();
+          for (let j = 0; j < b.length; j += 3) { const rad = dr * (0.45 + 0.55 * b[j + 2]); g.moveTo(b[j] + rad, b[j + 1]); g.arc(b[j], b[j + 1], rad, 0, Math.PI * 2); }
+          g.fill();
+        });
+        g.restore();
+      }
     }
   }
   // the picture alone (a cover without the drawings): its tint, vignette and grain, nothing over it

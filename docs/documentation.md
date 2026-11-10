@@ -376,6 +376,7 @@ Every piece goes through the same voice-leading rules after it is composed (and 
 | Melody on top | a harmony note (or a held section chord) above the melody moves down an octave while it stays at or above MIDI 48; a voice still covering the melody is left out when its chord keeps others below it |
 | No restrikes | a note that starts while the same pitch sounds in its layer ends the earlier one; in single-line layers (melody, bass, counter-melody, runs, doubling, ostinato, pulse, ornaments) at any pitch |
 | No stale notes | an accompaniment note held into a chord it rubs against ends at the change (the drone keeps its pedal) |
+| No stray notes | an added instrument's lone note, far from the rest of its part, is left out (an ornament keeps it, softer, with a grace note); an instrument with almost nothing to play stays out (§7.11) |
 
 `scripts/music-audit.mjs` measures, note by note, what can still sound wrong, on 25 pieces per style (5 images × 5 settings), per minute of music: exposed clashes (two notes a semitone or a minor ninth apart in different layers, one of them outside the chord, on a beat or held half a beat, not resolving by step), notes outside the harmony's scale, accompaniment notes outside the chord on a beat, melody notes rubbing against the chord on a beat, unresolved notes, wrong bass notes on a chord change (pedal points allowed), the melody under the harmony, restrikes, leaps over an octave, drum hits off the grid (swing excepted), pile-ups, the range and the ending. `test/harmony.test.js` keeps the main ones under limits. Measured in November 2026, before and after these rules (exposed clashes per minute):
 
@@ -403,7 +404,7 @@ Piece › Advanced: composition rules lists every rule the composer follows that
 |---|---|
 | Harmony | Smooth chord changes (common tones, §7.4), Contrast moves the chords, Dominant before the end (classical) |
 | Melody | Melody on the chord (and avoid notes, §7.7b), Suspensions resolve, Leaps folded into range (§7.3), Pickup notes |
-| Voices | Melody on top, No restrikes, No stale notes (§7.7b), Bass approach notes |
+| Voices | Melody on top, No restrikes, No stale notes, No stray notes (§7.7b), Bass approach notes |
 | Genre | Break before the climax (stop-down), Pumping (sidechain) |
 | Classical craft | the seven below |
 
@@ -416,7 +417,7 @@ The seven classical-craft rules read the picture where they can:
 | Question and answer | every four bars a phrase ends: its last bar gets its own chord, the dominant (a half cadence, or the subtonic VII where V has no perfect fifth) and the tonic in turn. Not in styles with a chord loop or a grid longer than a bar | |
 | A bright minor ending | a minor piece whose last place is bright (L over 0.55) ends on the major tonic chord, the Picardy third | the lightness of the last place |
 | Leaps turn back | after a melody leap wider than a fourth, the next note turns back by step (a chord tone on a beat) | |
-| No parallel fifths | where the melody and the bass move the same way into the same fifth or octave, the melody takes another chord tone nearby, contrary motion first. Runs again after the ties and the legato | |
+| No parallel fifths | where the melody and the bass move the same way into the same fifth or octave, the melody takes another chord tone nearby, contrary motion first. Runs again after the ties and the legato. The last note of the piece is never moved: it keeps its place on the final chord (moved, it used to take a tone of the chord before it, the leading tone held over the tonic) | |
 | The peak at the climax | the highest melody note falls on the climax: its top note rises to the chord tone just above the rest of the melody, at most a sixth, with its neighbours within a sixth of it | the climax of the arc (§7.10) |
 
 The score records the modulation (`modulation: { t0, t1, shift, dir, keyPc }`), each chord slot's key shift and cadence, the Picardy third and the rules used; the point line under the stage says when a point is in the new key. The Story and Improvise melodies get the same melody rules after they are fitted to the chords. The audit (§7.7b) reads the key at each moment and counts parallel fifths and octaves between the melody and the bass; `--rules-off` composes with every rule off, to compare. Measured in November 2026 (per minute, 25 pieces per style): parallel fifths and octaves fell from 0.2-1.6 to 0-0.3 in every style, and exposed clashes stayed between 0 and 1.4, lower than without the rules in most styles.
@@ -467,7 +468,7 @@ User rules win over the style's, and stay in harmony: a chord is always a degree
 
 ### 7.8 Cadence (the ending)
 
-The ending (one or two bars, or none) plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
+The ending (one or two bars, or none) plays the tonic chord (with a seventh if the style uses sevenths), the bass on the tonic and, in the melody, the tonic closest to the last note played. The drums close it in the style's way (a kick, a kick and a crash, a low drum), but never harder than the music that led there: each hit is at most 6 velocity steps above the loudest hit of the last two bars, a crash is played only when that loudest hit reached 84, and when the drums were silent in those two bars they stay silent (a lone drum and cymbal on a soft last chord sounded like a gong). The instruments play unmodulated here (the style's base timbre). Each note is shortened so that its release (`1.6·r`) ends before T, but never below one beat. Styles with a kick mark the start of the cadence.
 
 With the ending Off the piece stops with its last place: nothing is generated after it and every note is cut at T (the master fade of the last 0.4 s still applies).
 
@@ -477,8 +478,9 @@ The intro (`src/core/intro.js`) leads into the first place, built from the whole
 
 - the **pad** plays the key's tonic chord over the whole intro, growing out of silence;
 - the **harmony** (the tonic chord, swelling) and the **bass** (the tonic) come in on its last bar;
-- a **lead-in** steps from below, along the melody's scale, into the first melody note: one note on the last beat in the calm styles (Ambient, Classical, Minimal, Movie score), two eighths otherwise;
-- the **rhythm** prepares the entrance its own way: a count-in of four on the hi-hat (Rock, Metal) or the sticks (Pop, Funk), a soft ride on 2 and 4 in swung styles (Jazz, Lo-fi, Bossa nova, Blues), the style's swell (cymbal, riser or timpani) in the others that have one, nothing in the calm ones.
+- a **lead-in** steps from below, along the melody's scale, into the first melody note: one note on the last beat in the calm styles (Ambient, Classical, Minimal, Movie score), two eighths otherwise. It grows into that note: 60% and 78% of its velocity for the two eighths, 80% for the single note (between 36 and 100);
+- the intro's chord is voiced within a sixth of the harmony's first bar, so the harmony does not change register when the piece starts;
+- the **rhythm** prepares the entrance its own way: a count-in of four on the hi-hat (Rock, Metal) or the sticks (Pop, Funk), a soft ride on 2 and 4 in swung styles (Jazz, Lo-fi, Bossa nova, Blues), the style's swell (cymbal, riser or timpani) in the others that have one, nothing in the calm ones. When the intro ends on a swell, a second swell or roll in the first bar after it is left out.
 
 The intro's notes are marked `intro` and belong to no place (point −3); the score starts with an intro chord slot, records `intro` and `endBeats`, and the MIDI file has an *Intro* marker (and *Ending* at the ending). In the video the eye is not yet anywhere during the intro: the whole picture shows with the title, and the path starts at the first place.
 
@@ -523,12 +525,12 @@ The timeline shows the tension as a band along the top of the ruler; the Focus p
 | Section | the large calm regions | the slot's triad held and swelling, voice-led, in the middle register |
 | Doubling | the melody | the melody an octave lower (higher below MIDI 48) at 70% velocity; recomputed after a neural melody |
 | Drone | the background | tonic and fifth in two-bar blocks, low |
-| Pulse | the edges | low pitched percussion (timpani, taiko) on a euclidean figure, root on the downbeat, the chord tone nearest a fifth above otherwise |
+| Pulse | the edges | low pitched percussion (timpani, taiko) on a euclidean figure, the chord's root on the downbeat and its fifth on the other hits, as timpani are tuned (a chord without a perfect fifth keeps to its root) |
 | Runs | the path between points (§7.7a) | a Rich passage in its own register (base to +19) at the end of each point, a scalar run that links the places |
 
 Two layers with the same role play it differently: the second counter-melody follows another gaze path (seed 1) an octave lower, a second ostinato turns its figure around, a second pulse rotates its euclidean figure, ornaments come a sixteenth later, sections and runs an octave lower, drones an octave higher, and a second doubling sits on the other side of the melody.
 
-Arrangement rules: notes come from the sounding chord (or the melody), so every layer stays in the scale; each role has its own register; with n extra layers each plays `1 / (1 + 0.22·(n − 1))` as densely; the k-th layer enters when the tension reaches `0.84·b + 0.76·b·k / n`, with b the **Layers build up** setting (0.5 by default, giving `0.42 + 0.38·k / n`), so they join one by one toward the climax and leave in the resolution (the drone and the ornaments stay). In the cadence the sustained roles play the tonic chord. Extra layers take their timbre from the image like the harmony (50% depth, blended between regions), have their own channel (level per role, mute, solo, volume, EQ, drive, sends; sidechained in Electronic), their own MIDI track (channels 5-9 and 11-16, General MIDI program per role) and are saved in recipes.
+Arrangement rules: notes come from the sounding chord (or the melody), so every layer stays in the scale; each role has its own register; with n extra layers each plays `1 / (1 + 0.22·(n − 1))` as densely; the k-th layer enters when the tension reaches `0.84·b + 0.76·b·k / n`, with b the **Layers build up** setting (0.5 by default, giving `0.42 + 0.38·k / n`), so they join one by one toward the climax and leave in the resolution (the drone and the ornaments stay). In the ending, an added layer plays the tonic chord only if it was still playing in the last two bars (a note sounding in the 8 beats before the ending): an instrument that left earlier does not come back for one note on the last chord. **No stray notes** (a rule, on by default): a note of a moving layer (counter-melody, runs, ostinato, pulse, doubling) with nothing else of its layer within two bars on either side is left out, and a moving layer left with fewer than three notes in the body plays nothing; an ornament's lone note stays, at velocity 60 at most, led in by a grace note a sixteenth earlier on the chord tone below it. Ostinato and pulse build on the chord's real root (the scale degree of the slot), not on the lowest note of its voicing, which is often the third or the fifth because the chords are voiced in inversions. Extra layers take their timbre from the image like the harmony (50% depth, blended between regions), have their own channel (level per role, mute, solo, volume, EQ, drive, sends; sidechained in Electronic), their own MIDI track (channels 5-9 and 11-16, General MIDI program per role) and are saved in recipes.
 
 ---
 
@@ -726,7 +728,7 @@ The interface shows only the essentials by default; the rest is in collapsed "Ad
 | Advanced: performance | Dynamic range, Picture detail, Accents, Phrasing, Expression (CC11), Vibrato (CC1) | 0-100% | 50, 50, 40, 40, 60, 40% | §7.7d |
 | | Humanize timing, length, velocity | 0-30 ms, 0-30%, 0-20 | 8 ms, 10%, 6 | §7.7d |
 | Orchestration (Advanced) | Instrument of every track, role of every extra layer | library, 8 roles | style | §7.11 |
-| Advanced: composition rules | 19 rules in 5 groups | on / off | all on | §7.7c |
+| Advanced: composition rules | 20 rules in 5 groups | on / off | all on | §7.7c |
 | Expert rules | when (place, part, colour, zone, time) → do (add an instrument, silence, chord, octave, louder or softer) | any number | none | §7.7f |
 | | Fidelity | 0-100% | 60% | literal (high) or smoothed (low) melody |
 | | Melody octave | −2…+2 | 0 | shifts the melody by octaves |

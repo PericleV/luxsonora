@@ -14,7 +14,8 @@
 //   offgrid    a drum hit off the sixteenth grid
 //   pileup     more than 14 pitched notes starting in one beat
 //   range      a note outside MIDI 24-100
-//   ending     the last chord is not the tonic, or a note starts after the end
+//   ending     the last chord is not the tonic, the melody's last note is not a tone of it, or a
+//              note starts after the end
 // Counts are per minute of music, so styles with different lengths compare.
 import { synthImage } from "../test/helpers.js";
 import { analyze } from "../src/core/analyze.js";
@@ -32,8 +33,9 @@ const IMAGES = [[200, 133, 1], [133, 200, 7], [200, 133, 3], [180, 180, 11], [24
 const BASE = { count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7 };
 const CONFIGS = [
   { duration: 30, orch: "small", connect: "off" },
-  { duration: 30, orch: "full", connect: "light" },
-  { duration: 60, orch: "medium", connect: "rich" },
+  // two of the settings use the sampled band, as the app does by default (its roles and instruments differ)
+  { duration: 30, orch: "full", connect: "light", samples: true, intro: "auto" },
+  { duration: 60, orch: "medium", connect: "rich", samples: true },
   { duration: 30, orch: "full", connect: "rich", count: 14, smooth: 0.9 },
   { duration: 15, orch: "small", connect: "light", count: 4 }
 ];
@@ -161,6 +163,7 @@ export function auditScore(sc) {
   for (const n of pitched) if (n.midi < 24 || n.midi > 100) hit("range", where(n));
   if (tonic && !new Set(sc.cadence.chord.map(pc)).has(pc(sc.pc))) hit("ending", "cadence chord lacks the tonic");
   for (const n of sc.notes) if (n.t > sc.total + 1e-6) hit("ending", `${where(n)} after the end`);
+  if (tonic) for (const n of sc.notes) if (n.layer === "lead" && !n.dbl && n.point === -2 && !tonic.has(pc(n.midi))) hit("ending", `${where(n)} is not a tone of the final chord`);
   const per = {}; for (const k of Object.keys(cnt)) per[k] = cnt[k] / minutes;
   return { per, cnt, ex, minutes };
 }

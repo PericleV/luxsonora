@@ -265,6 +265,15 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
   for (const F of segs) if (F.accent) { const soft = NO_CRASH.has(style); push(F.t0, soft ? DRUM.ltom : DRUM.crash, soft ? 80 : 100, { dur: 0.5, accent: true }); if (!soft) push(F.t0, DRUM.kick, 100, { accent: true }); }
   // cadence
   const cad = { lofinature: [[DRUM.kick, 50]], neoclassical: [], meditation: [], baroque: [], folk: [[DRUM.kick, 70]], postrock: [[DRUM.kick, 100], [DRUM.crash, 96]], chiptune: [[DRUM.kick, 90], [DRUM.crash, 70]], triphop: [[DRUM.kick, 96], [DRUM.crash, 60]], reggae: [[DRUM.kick, 90], [DRUM.rim, 80]], eastasian: [[DRUM.ltom, 90]], dnb: [[DRUM.kick, 100], [DRUM.crash, 80]], techno: [[DRUM.kick, 100], [DRUM.crash, 70]], ambient: [[DRUM.ltom, 60]], cinematic: [[DRUM.kick, 90], [DRUM.crash, 80]], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [[DRUM.kick, 110], [DRUM.ltom, 100], [DRUM.crash, 96]], movie: [[DRUM.ltom, 70]], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
-  for (const [midi, vel] of cad) notes.push({ layer: "perc", t: body, dur: midi === DRUM.ride || midi === DRUM.crash ? 0.4 : 0.1, midi, vel, point: -2 });
+  // The ending never hits harder than the music that led to it: each hit is at most a little
+  // louder than the loudest hit of the last two bars, a crash closes only a loud ending, and when
+  // the drums were silent there they stay silent (a lone drum on a soft last chord sounds like a gong).
+  const tail = notes.filter(n => !n.swell && !n.roll && n.t >= body - 8 - 1e-9 && n.t < body - 1e-9);
+  const ref = tail.reduce((m, n) => Math.max(m, n.vel), 0);
+  for (const [midi, vel] of cad) {
+    if (!tail.length) break;
+    if (midi === DRUM.crash && ref < 84) continue;
+    notes.push({ layer: "perc", t: body, dur: midi === DRUM.ride || midi === DRUM.crash ? 0.4 : 0.1, midi, vel: clampInt(Math.min(vel, ref + 6), 1, 127), point: -2 });
+  }
   return notes;
 }

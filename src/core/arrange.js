@@ -186,6 +186,11 @@ export function extraNotes(ctx) {
   const pointAt = t => points.find(F => t >= F.t0 - 1e-9 && t < F.t1 - 1e-9) || points[points.length - 1];
   const density = 1 / (1 + 0.22 * (n - 1));
   const leadAt = t => ctx.leadNotes.find(x => t >= x.t - 1e-9 && t < x.t + x.dur - 1e-9);
+  // the root of a slot's chord as a pitch class. The chord is voiced in inversions (smooth voice
+  // leading), so its lowest note is often not the root: figures built on "the lowest note" would
+  // put the third or the fifth under the harmony.
+  const L7 = modeIv.length;
+  const rootPcOf = S => { const p = PCS(modeIv[((S.root % L7) + L7) % L7] + pcOff + (S.shift || 0)); return S.pcs.has(p) ? p : PCS([...S.chord].sort((a, b) => a - b)[0]); };
   const seen = {};
   layers.forEach((L, k) => {
     // a second layer with the same role plays it differently: another path, another register, off-beat
@@ -244,8 +249,9 @@ export function extraNotes(ctx) {
       const [lo, hi] = reg("ostinato");
       slots.forEach(S => {
         if (!active(S) || S.F.section === "intro") return;
-        const sorted = [...S.chord].sort((a, b) => a - b), root = nearestIn(new Set([PCS(sorted[0])]), (lo + hi) / 2 - 4, lo, hi) ?? sorted[0];
-        const fifth = nearestIn(new Set([PCS(sorted.find(x => PCS(x - sorted[0]) === 7) ?? sorted[sorted.length - 1])]), root + 7, root, root + 12) ?? root + 7;
+        const sorted = [...S.chord].sort((a, b) => a - b), rp = rootPcOf(S), root = nearestIn(new Set([rp]), (lo + hi) / 2 - 4, lo, hi) ?? sorted[0];
+        // the fifth of the chord (a diminished or altered chord: its tone nearest a fifth above the root)
+        const fifth = nearestIn(S.pcs.has(PCS(rp + 7)) ? new Set([PCS(rp + 7)]) : new Set([...S.pcs].filter(p => p !== rp)), root + 7, root, root + 12) ?? root + 7;
         // eighths; sixteenths only in a slow piece at a very tense moment with few layers (fast
         // sixteenths on a plucked instrument over a full arrangement only rattle)
         const fig = [root, fifth, root + 12, fifth], rate = S.F.tension > 0.85 && density > 0.75 && (ctx.bpm || 120) <= 100 ? 0.25 : 0.5;
@@ -302,10 +308,11 @@ export function extraNotes(ctx) {
         // on the eighths only (a low drum on odd sixteenths sounds clumsy), at most four a bar
         const a = areaDrive(S.F), hits8 = euclid(Math.min(4, Math.round(lerp(2, 4, S.F.tension) * (0.6 + 0.4 * density))), 8, Math.round((a.rot + dup * 2) / 2));
         const hits = Array.from({ length: 16 }, (_, q) => q % 2 === 0 && hits8[q / 2]);
-        const root = nearestIn(new Set([PCS([...S.chord].sort((x, y) => x - y)[0])]), (lo + hi) / 2, lo, hi);
+        // the chord's root on the downbeat and its fifth on the other hits, as timpani are tuned
+        // (a chord without a perfect fifth keeps to its root)
+        const rp = rootPcOf(S), root = nearestIn(new Set([rp]), (lo + hi) / 2, lo, hi);
         if (root === null) return;
-        // the other hits take the chord tone nearest a fifth above (a diminished chord has no perfect fifth)
-        const up = nearestIn(new Set([...S.pcs].filter(p => p !== PCS(root))), root + 7, root + 1, hi) ?? root;
+        const up = S.pcs.has(PCS(rp + 7)) ? nearestIn(new Set([PCS(rp + 7)]), root + 7, lo, hi) ?? root : root;
         for (let j = Math.round(S.t0 * 4); j < Math.round(S.t1 * 4); j++) if (hits[((j % 16) + 16) % 16]) add(j / 4, 0.5, j % 16 === 0 ? root : up, j % 16 === 0 ? 80 : 60);
       });
     }
@@ -335,13 +342,49 @@ export function doubleNotes(score) {
 }
 
 // Cadence notes of the extra layers (the tonic chord, in each role's register).
-export function cadenceExtra(layers, cadChord, baseLead, tc, holdFor, inst) {
+// Only the layers still playing in the last two bars take part (playing: the ids of those layers):
+// an instrument that left earlier does not come back for one note on the last chord.
+export function cadenceExtra(layers, cadChord, baseLead, tc, holdFor, inst, playing = null) {
   const out = [], pcs = new Set(cadChord.map(PCS));
   for (const L of layers) {
+    if (playing && !playing.has(L.id)) continue;
     const role = L.role, R = REGISTER[role]; if (!R || role === "pulse" || role === "ostinato") continue;
     const lo = baseLead + R[0], hi = baseLead + R[1], tim = inst[L.id];
     const ms = role === "sustain" ? [...pcs].slice(0, 3).map((pc, i) => nearestIn(new Set([pc]), lo + 4 + 4 * i, lo, hi)) : role === "drone" ? [(m => (m === null ? m : m + 12 * Math.max(0, Math.ceil((36 - m) / 12))))(nearestIn(new Set([PCS(cadChord[0])]), lo + 4, lo, hi))] : [nearestIn(pcs, (lo + hi) / 2, lo, hi)];
     for (const m of ms) if (m !== null) out.push({ layer: L.id, t: tc, dur: holdFor(tim), midi: m, vel: role === "ornament" ? 50 : 54, tim, pan: ROLES[role].pan, point: -2 });
   }
   return out;
+}
+
+/*
+ * No stray notes: a note of an added layer with nothing else of its layer within two bars on
+ * either side is not a part, it is a stray sound. Ornaments keep theirs but softer and led in by
+ * a grace note (a tone of the chord below it, a sixteenth earlier), so it reads as an ornament;
+ * the other moving roles (counter-melody, runs, ostinato, pulse, doubling) drop theirs. Held
+ * roles (section, drone) are left alone. A moving layer left with fewer than three notes in the
+ * body plays nothing: it either has a part or stays out.
+ * slotAt(t): the chord slot sounding at t (pcs: its pitch classes).
+ */
+export function tidyStrays(notes, layers, body, slotAt) {
+  const GAP = 8;
+  for (const L of layers) {
+    if (L.only || L.role === "sustain" || L.role === "drone") continue;
+    const mine = notes.filter(n => n.layer === L.id && n.point !== -2 && n.t < body - 1e-9).sort((a, b) => a.t - b.t);
+    if (!mine.length) continue;
+    const drop = new Set();
+    if (mine.length < 3 && L.role !== "ornament") mine.forEach(n => drop.add(n));
+    else mine.forEach((n, i) => {
+      const prev = mine[i - 1], next = mine[i + 1];
+      const before = prev ? n.t - (prev.t + prev.dur) : Infinity, after = next ? next.t - (n.t + n.dur) : Infinity;
+      if (before < GAP - 1e-9 || after < GAP - 1e-9) return;
+      if (L.role !== "ornament") { drop.add(n); return; }
+      n.vel = Math.min(n.vel, 60);
+      const S = slotAt(n.t - 0.25);
+      let g = null;
+      if (S && S.pcs) for (let m = n.midi - 1; m >= n.midi - 9; m--) if (S.pcs.has(PCS(m))) { g = m; break; }
+      if (g !== null && n.t - 0.25 >= 0) notes.push({ ...n, t: n.t - 0.25, dur: 0.25, midi: g, vel: Math.max(1, Math.round(n.vel * 0.72)), grace: true });
+    });
+    if (drop.size) for (let k = notes.length - 1; k >= 0; k--) if (drop.has(notes[k])) notes.splice(k, 1);
+  }
+  return notes;
 }

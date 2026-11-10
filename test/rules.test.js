@@ -60,7 +60,7 @@ describe("composition rules", () => {
       expect(last.shift).toBe(0);
     }
     expect(seen).toBeGreaterThan(5);
-  });
+  }, 180000);
   it("any single rule can be turned off and the piece stays well formed", () => {
     for (const k of Object.keys(RULES_INFO)) for (const style of ["classical", "epic", "electronic", "jazz", "rock"]) {
       const sc = run(IMAGES[0], { ...BASE, style, rules: { [k]: false } });

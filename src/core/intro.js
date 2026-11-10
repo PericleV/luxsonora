@@ -23,7 +23,10 @@ export function introNotes(ctx) {
     const steps = [], scale = ctx.scalePcs;
     for (let m = L.midi - 1; m >= L.midi - 7 && steps.length < 2; m--) if (scale.has(pc(m))) steps.push(m);
     const lead = CALM.has(style) ? [{ t: I - 1, dur: 0.9, midi: steps[0] }] : [{ t: I - 1, dur: 0.45, midi: steps[1] ?? steps[0] }, { t: I - 0.5, dur: 0.45, midi: steps[0] }];
-    for (const x of lead) if (x.midi !== undefined && x.t >= 0) out.push({ layer: "lead", t: x.t, dur: x.dur, midi: x.midi, vel: 58, tim: tim.lead, pan: 0, point: P, pickup: true, intro: true });
+    // the lead-in grows into the first note: each step a little louder, the last one about three
+    // quarters of that note's loudness (a fixed soft lead-in before a loud first note made a jump)
+    const v1 = L.vel || 80, grow = lead.length > 1 ? [0.6, 0.78] : [0.8];
+    lead.forEach((x, k) => { if (x.midi !== undefined && x.t >= 0) out.push({ layer: "lead", t: x.t, dur: x.dur, midi: x.midi, vel: Math.max(36, Math.min(100, Math.round(v1 * grow[k]))), tim: tim.lead, pan: 0, point: P, pickup: true, intro: true }); });
   }
   // the rhythm's way in
   if (COUNT_IN.has(style)) for (let b = 0; b < 4; b++) out.push({ layer: "perc", t: last + b, dur: 0.1, midi: style === "metal" || style === "rock" ? 42 : 37, vel: b === 0 ? 74 : 62, point: P, intro: true });

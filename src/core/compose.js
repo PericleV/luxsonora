@@ -12,7 +12,7 @@ import { dramaticArc, dynamics } from "./arc.js";
 import { rhythmPart, areaDrive, DRUM_NAME } from "./rhythm.js";
 import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
-import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, roleInstrument, ROLES } from "./arrange.js";
+import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, roleInstrument, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
 
 export const SCORE_VERSION = 2;
@@ -336,7 +336,9 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   notes.push({ layer: "lead", t: tc, dur: holdFor(cadTim.lead), midi: cadLead, vel: 76, tim: cadTim.lead, pan: 0, point: -2 });
   cadChord.forEach(m => notes.push({ layer: "harm", t: tc, dur: holdFor(cadTim.harm), midi: m, vel: 54, tim: cadTim.harm, pan: 0, point: -2 }));
   notes.push({ layer: "bass", t: tc, dur: holdFor(cadTim.bass), midi: cadBass, vel: 82, tim: cadTim.bass, pan: 0, point: -2 });
-  notes.push(...cadenceExtra(extra, cadChord, baseLead, tc, holdFor, Object.fromEntries(extra.map(L => [L.id, modulate(inst[L.id], ZERO_M, LAYER_DEPTH.harm, 0)]))));
+  // the last chord is played by the added layers still playing in the last two bars
+  const stillPlaying = new Set(notes.filter(nn => nn.t < tc - 1e-9 && nn.t + nn.dur > tc - 8 + 1e-9).map(nn => nn.layer));
+  notes.push(...cadenceExtra(extra, cadChord, baseLead, tc, holdFor, Object.fromEntries(extra.map(L => [L.id, modulate(inst[L.id], ZERO_M, LAYER_DEPTH.harm, 0)])), stillPlaying));
 
   // background pad: two-bar blocks in the body, then the tonic on the cadence
   // with focus point footprints the background is what was not looked at (1 − coverage);
@@ -460,6 +462,8 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const score = { notes, points: out };
   doubleClimax(score);
   doubleNotes({ notes, points: out, extra, inst, body: plan.body, buildUp: P.buildUp ?? 0.5 });
+  // no stray notes on the added layers (a lone note far from the rest of its part)
+  if (extra.length && ruleOn(P, "strays")) tidyStrays(notes, extra, plan.body, slotAt);
   // Expert rules on the notes: silence, octave, dynamics, and the added instruments kept to their places
   if (P.expert && P.expert.length) applyExpertNotes(P.expert, notes, out, spb);
   if (ruleOn(P, "melodyTop")) keepMelodyOnTop(notes, extra);
@@ -476,9 +480,14 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     for (const S of slots) { S.t0 += I; S.t1 += I; }
     if (mod) { mod.t0 += I; mod.t1 += I; }
     const firstLead = notes.filter(nn => nn.layer === "lead" && !nn.dbl && nn.point >= 0).sort((a, b) => a.t - b.t)[0];
-    const tonicChord = [0, 2, 4].map(o => degMidi(o, modeIv, 48 + pcOff)).map(m => { while (m < 52) m += 12; while (m > 64) m -= 12; return m; }).sort((a, b) => a - b);
+    // the intro's chord sits in the register of the harmony's first bar, so the harmony does not
+    // jump when the piece starts (rock and metal voice theirs low, some styles high)
+    const firstHarm = notes.filter(nn => nn.layer === "harm" && nn.point >= 0 && nn.t < I + 2), hc = firstHarm.length ? firstHarm.reduce((a, nn) => a + nn.midi, 0) / firstHarm.length : 58;
+    const tonicChord = [0, 2, 4].map(o => degMidi(o, modeIv, 48 + pcOff)).map(m => { while (m < hc - 6) m += 12; while (m > hc + 6) m -= 12; return m; }).sort((a, b) => a - b);
     notes.push(...introNotes({ I, style: P.style, R, tonicChord, bass: cadBass, padChord: [0, 2, 4].map(o => degMidi(o, modeIv, 48 + pcOff)), firstLead, scalePcs, tim: { lead: cadTim.lead, harm: cadTim.harm, bass: cadTim.bass, pad: ptim }, padVel }));
     introSlot = { t0: 0, t1: I, point: -3, root: 0, chord: tonicChord, harmKind: "intro", bassKind: "intro", shift: 0, cadence: null, expert: null, intro: true };
+    // the intro ends on its own swell: a second swell or roll in the first bar after it is left out
+    if (notes.some(nn => nn.intro && nn.layer === "perc" && nn.swell)) for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.layer === "perc" && !nn.intro && (nn.swell || nn.roll) && nn.t < I + 4 - 1e-9) notes.splice(k, 1); }
   }
   const T = plan.total + I;
   for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.t >= T - 1e-9) notes.splice(k, 1); else if (nn.t + nn.dur > T) nn.dur = T - nn.t; }

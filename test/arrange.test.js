@@ -70,3 +70,61 @@ describe("extra layers", () => {
     for (const role of Object.keys(ROLES)) expect(ROLES[role].gain).toBeGreaterThan(0);
   });
 });
+
+// Out of the box: no gong on the last chord, no instrument coming back for one note, the last
+// melody note on the final chord, and a lead-in that grows into the first note.
+describe("endings, stray notes and the way in", () => {
+  const STY = ["cinematic", "movie", "ambient", "classical", "pop", "rock", "minimal", "epic", "eastasian", "lofi"];
+  const pc = m => ((m % 12) + 12) % 12;
+  it("the last drum hits are never much louder than the two bars before, and silent drums stay silent", () => {
+    for (const style of STY) for (const seed of [1, 3, 7]) {
+      const sc = run({ ...P0, style, orch: "full", samples: true, intro: "auto" }, seed);
+      const perc = sc.notes.filter(n => n.layer === "perc"), fin = perc.filter(n => n.point === -2);
+      const tail = perc.filter(n => !n.swell && !n.roll && n.point !== -2 && n.t >= sc.body - 8 - 1e-9 && n.t < sc.body - 1e-9);
+      if (!tail.length) { expect(fin.length).toBe(0); continue; }
+      const ref = Math.max(...tail.map(n => n.vel));
+      for (const n of fin) { expect(n.vel).toBeLessThanOrEqual(ref + 6); if (n.midi === 49) expect(ref).toBeGreaterThanOrEqual(84); }
+    }
+  }, 180000);
+  it("an added layer plays the last chord only if it was playing in the last two bars", () => {
+    let checked = 0;
+    for (const style of STY) for (const seed of [1, 3, 7]) {
+      const sc = run({ ...P0, style, orch: "full", samples: true }, seed);
+      for (const L of sc.extra) {
+        const fin = sc.notes.filter(n => n.layer === L.id && n.point === -2); if (!fin.length) continue;
+        checked++;
+        expect(sc.notes.some(n => n.layer === L.id && n.point !== -2 && n.t < sc.body - 1e-9 && n.t + n.dur > sc.body - 8 + 1e-9)).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  }, 180000);
+  it("the melody's last note is a tone of the final chord", () => {
+    for (const style of Object.keys(STYLES)) for (const seed of [1, 3, 5, 7, 11]) {
+      const sc = run({ ...P0, style, orch: "full", samples: true, intro: "auto", connect: "light" }, seed);
+      const tonic = new Set(sc.cadence.chord.map(pc)), last = sc.notes.filter(n => n.layer === "lead" && !n.dbl && n.point === -2);
+      for (const n of last) expect(tonic.has(pc(n.midi)), `${style} seed ${seed}`).toBe(true);
+    }
+  }, 180000);
+  it("no moving layer keeps a lone note far from the rest of its part", () => {
+    for (const style of STY) for (const seed of [1, 7]) {
+      const sc = run({ ...P0, style, orch: "full", samples: true }, seed);
+      for (const L of sc.extra) {
+        if (["sustain", "drone", "ornament"].includes(L.role)) continue;
+        const mine = sc.notes.filter(n => n.layer === L.id && n.point !== -2 && n.t < sc.body - 1e-9).sort((a, b) => a.t - b.t);
+        if (!mine.length) continue;
+        if (L.role !== "double") expect(mine.length).toBeGreaterThanOrEqual(3);
+      }
+    }
+  }, 180000);
+  it("the intro's lead-in grows into the first melody note", () => {
+    for (const style of ["cinematic", "pop", "jazz", "classical", "ambient"]) {
+      const sc = run({ ...P0, style, intro: "auto" });
+      if (!sc.intro) continue;
+      const lead = sc.notes.filter(n => n.layer === "lead" && !n.dbl).sort((a, b) => a.t - b.t), ins = lead.filter(n => n.intro), first = lead.find(n => !n.intro);
+      if (!ins.length || !first) continue;
+      for (let k = 1; k < ins.length; k++) expect(ins[k].vel).toBeGreaterThanOrEqual(ins[k - 1].vel);
+      expect(ins[ins.length - 1].vel).toBeLessThanOrEqual(first.vel);
+      expect(first.vel - ins[ins.length - 1].vel).toBeLessThanOrEqual(30);
+    }
+  }, 180000);
+});

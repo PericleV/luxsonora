@@ -136,7 +136,7 @@ export function kitSpecs(kit) {
 // (the list lives in core/gm.js, which the MIDI export shares)
 // family: name, synthesized fallback type and envelope (release reaches the samples too)
 const FAMILY = [
-  ["Piano", "fm", { d: 2.4, s: 0.15, r: 0.8, ratio: 1, col: 0.15 }], ["Chromatic percussion", "fm", { d: 1.4, s: 0.15, r: 0.8, ratio: 3.5 }],
+  ["Piano", "fm", { d: 2.4, s: 0.15, r: 0.8, ratio: 1, col: 0.15 }], ["Chromatic percussion", "fm", { d: 1.4, s: 0.15, r: 0.8, ratio: 4 }],
   ["Organ", "pad", { a: 0.02, r: 0.3, col: 0.3 }], ["Guitar", "pluck", { d: 1.8, r: 0.4 }], ["Bass", "bass", { a: 0.008, r: 0.2, cut: 3000 }],
   ["Strings", "pad", { a: 0.1, r: 0.6, col: 0.55 }], ["Ensemble", "pad", { a: 0.25, r: 0.9, col: 0.5 }], ["Brass", "pad", { a: 0.04, r: 0.4, col: 0.7 }],
   ["Reed", "pad", { a: 0.04, r: 0.35, col: 0.4 }], ["Pipe", "pad", { a: 0.05, r: 0.35, col: 0.1 }], ["Synth lead", "pad", { a: 0.01, r: 0.3, col: 0.75 }],

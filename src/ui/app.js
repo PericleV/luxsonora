@@ -10,7 +10,7 @@ import { DIMS, DIM_NAME, DIM_SOURCE } from "../core/timbre.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
-import { suggestStyles } from "../core/suggest.js";
+import { suggestStyles, explainStyles } from "../core/suggest.js";
 import { saveSession, loadSession } from "./session.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
@@ -57,6 +57,8 @@ const P = {
   smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
+  // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
+  circleSize: "area",
   // Advanced: composition (chord changes, swing, how the layers build up, contrast) and performance (perform.js)
   chordRate: 1, swingAdj: 1, buildUp: 0.5, contrastThr: 0.45,
   // the generated intro and ending: "off", 1 or 2 bars, or "auto"
@@ -180,7 +182,7 @@ function recompute() {
   }
   if (lvl >= LV.SAL) { SAL = attention(computeSaliency(A, { color: P.wColor, texture: P.wTex, semantic: SEM ? P.wSem : 0 }, SEM)); buildSalOverlay(); }
   if (lvl >= LV.PATH) {
-    const pp = { count: P.count, returns: P.returns, inhibition: P.inhibition, memory: P.memory, seed: P.seed, radius: P.radius };
+    const pp = { count: P.count, returns: P.returns, inhibition: P.inhibition, memory: P.memory, seed: P.seed, radius: P.radius, sizing: P.circleSize || "same" };
     let raw;
     if (PATH.mode === "manual") raw = PATH.points.map((q, i) => ({ ...q, s: saliencyAt(A, SAL.map, q.x, q.y), source: "manual", revisitOf: null, index: i }));
     else if (P.placement === "scan") raw = scanPath(A, SAL.map, P.count, P.radius, newId);
@@ -311,10 +313,18 @@ const STYLE_DESC = {
 };
 
 // The three styles that suit the picture best (core/suggest.js), as buttons: the name and why.
+let WHY_OPEN = false;
 function styleSuggestHtml(cur) {
   if (!A) return "";
-  return `<span class="sugg-k">Suits this picture:</span>${suggestStyles(A).map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" data-style="${x.style}" title="${esc(x.reason)}"><b>${esc(STYLES[x.style].name)}</b><small>${esc(x.reason)}</small></button>`).join("")}`;
+  const list = suggestStyles(A), ex = explainStyles(A, list);
+  // why: the picture's five measures in words, then each style's fit, in plain sentences
+  const why = `<details class="sugg-why"${WHY_OPEN ? " open" : ""}><summary>Why these styles?</summary>
+    <p>This picture: ${ex.measures.map(m => `${m.name.toLowerCase()} ${nf(m.value)} (${m.level})`).join(", ")}; its main colour is ${esc(ex.family)}. Each style has a profile on the same measures, and the closest three are suggested.</p>
+    ${ex.styles.map(x => `<p><b>${esc(STYLES[x.style].name)}</b> (${Math.round(x.score * 100)}% match). ${esc(STYLE_DESC[x.style] || "")} ${esc(x.lines.join(" "))}</p>`).join("")}</details>`;
+  return `<span class="sugg-k">Suits this picture:</span>${list.map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" data-style="${x.style}" title="${esc(x.reason)}"><b>${esc(STYLES[x.style].name)}</b><small>${esc(x.reason)}</small></button>`).join("")}${why}`;
 }
+// the explanation stays open or closed as you left it
+document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("sugg-why")) WHY_OPEN = e.target.open; }, true);
 function renderStyleSuggest() { const el = $("#styleSuggest"); if (el) el.innerHTML = styleSuggestHtml(P.style); }
 
 /* ============ orchestration: extra layers (src/core/arrange.js) ============ */
@@ -323,7 +333,15 @@ function renderStyleSuggest() { const el = $("#styleSuggest"); if (el) el.innerH
 const laneKeys = () => [...LAYERS, ...((SCORE && SCORE.extra) || []).map(L => L.id)];
 const extraOf = id => ((SCORE && SCORE.extra) || []).find(L => L.id === id);
 const layerName = l => LAYER_NAME[l] || (extraOf(l) ? ROLES[extraOf(l).role].name : l);
-const laneColor = l => css("--lane-" + l) || (extraOf(l) ? ROLE_COLOR[extraOf(l).role] : "#888");
+// an added layer takes its role's colour; a second or third layer with the same role gets a lighter
+// or darker shade of it, so the lanes, the notes and the orchestration list can tell them apart
+const shadeHex = (hex, to, a) => { const c = parseInt(hex.slice(1), 16), t = to === "w" ? 255 : 0, m = v => Math.round(v + (t - v) * a); return "#" + ((m(c >> 16) << 16) | (m((c >> 8) & 255) << 8) | m(c & 255)).toString(16).padStart(6, "0"); };
+function extraColor(L) {
+  const same = ((SCORE && SCORE.extra) || []).filter(x => x.role === L.role), k = Math.max(0, same.findIndex(x => x.id === L.id));
+  const base = ROLE_COLOR[L.role] || "#888888";
+  return k === 0 ? base : k % 2 ? shadeHex(base, "w", 0.4) : shadeHex(base, "b", 0.3);
+}
+const laneColor = l => css("--lane-" + l) || (extraOf(l) ? extraColor(extraOf(l)) : "#888");
 // mixer and effect state for every layer the score has
 function ensureLayerState(sc) {
   for (const L of sc.extra || []) {
@@ -347,7 +365,7 @@ function renderOrch() {
       <span class="oname"><b>${esc(LAYER_NAME[l])}</b><small>${esc(MAIN_DESC[l])}</small></span>
       <button type="button" class="choose ochoose" data-act="${l === "perc" ? "kit" : "minst"}" aria-haspopup="dialog" title="${l === "perc" ? "Change drum kit" : "Change instrument"}"><span>${esc(l === "perc" ? kitLabel() : (SCORE.inst[l] || {}).name || "")}</span></button><span aria-hidden="true"></span></li>`).join("");
   const roleSel = L => `<span class="select select-sm adv-only"><select data-act="role" aria-label="What the ${esc(L.name)} plays">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}"${k === L.role ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></span>`;
-  host.innerHTML = main + (xs.length ? xs.map(L => `<li data-id="${L.id}" style="--dot:${ROLE_COLOR[L.role]}"><span class="odot" aria-hidden="true"></span>
+  host.innerHTML = main + (xs.length ? xs.map(L => `<li data-id="${L.id}" style="--dot:${extraColor(L)}"><span class="odot" aria-hidden="true"></span>
       <span class="oname"><b class="simple-only">${esc(ROLES[L.role].name)}</b>${roleSel(L)}<small>${esc(ROLES[L.role].desc)}</small></span>
       <button type="button" class="choose ochoose" data-act="inst" aria-haspopup="dialog" title="Change instrument"><span>${esc(L.name)}</span></button>
       <button type="button" class="icon-btn" data-act="remove" aria-label="Remove ${esc(ROLES[L.role].name)}" title="Remove"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></li>`).join("")
@@ -480,9 +498,11 @@ function openNewSong(fresh = false) {
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, P.count || sug)}">
       <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.${P.returns > 0 ? ` The eye may also look back at up to ${P.returns} of them.` : ""}</p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblCircle">Circle size</div><div class="seg" id="nsCircle" role="radiogroup" aria-labelledby="nsLblCircle"></div><p class="snote" id="nsCircleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblMel">Melody</div><div class="seg" id="nsMel" role="radiogroup" aria-labelledby="nsLblMel"></div><p class="snote" id="nsMelNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblConn">Between the spots</div><div class="seg" id="nsConn" role="radiogroup" aria-labelledby="nsLblConn"></div><p class="snote" id="nsConnNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblOrch">Orchestration</div><div class="seg" id="nsOrch" role="radiogroup" aria-labelledby="nsLblOrch"></div><p class="snote" id="nsOrchNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblGroove">Groove</div><div class="seg" id="nsGroove" role="radiogroup" aria-labelledby="nsLblGroove"></div><p class="snote" id="nsGrooveNote"></p></div>
     <p class="snote">Everything here can be changed later in the Piece tab. Advanced shows the rest: every instrument, the composition rules, how it is played, and more.</p>
     <div class="ns-actions">
       <button type="button" class="btn btn-primary" id="nsAuto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>Generate song</button>
@@ -494,6 +514,15 @@ function openNewSong(fresh = false) {
   if (fresh && A) { const best = suggestStyles(A)[0]; if (best) $b("#nsStyle").value = best.style; }
   $b("#nsSuggest").addEventListener("click", e => { const x = e.target.closest("[data-style]"); if (!x) return; $b("#nsStyle").value = x.dataset.style; note(); });
   let dur = P.duration, mel = P.melody || "classic", conn = P.connect || "light", orch = P.orch === "custom" ? "custom" : P.orch || "small";
+  let circle = P.circleSize || "area", groove = P.groove === "neural" ? "neural" : "straight";
+  const CIRCLE_DESC = {
+    area: "Each circle takes the size of the spot that draws the eye there: small for a sharp detail, large for a wide, even area. The circle is what that place reads, so its size shapes the sound too.",
+    same: "Every circle has the same size, set by Radius in the Piece tab."
+  };
+  const GROOVE_DESC = {
+    straight: "The drums play exactly on the grid, with the style's own accents and swing.",
+    neural: "A neural model (Magenta GrooVAE, about 15 MB, downloaded once) plays the drums like a drummer, with small shifts in timing and loudness. The hits stay the ones the picture chose."
+  };
   const MEL_DESC = {
     classic: "The tune follows the eye: high places sound high, every place has its own motif, and places that look alike share one.",
     story: "A neural model (Magenta MusicVAE, about 18 MB, downloaded once) writes a longer, singing line that still follows the places and the chords.",
@@ -516,7 +545,10 @@ function openNewSong(fresh = false) {
     $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
     $b("#nsCountVal").textContent = $b("#nsCount").value; fillRange($b("#nsCount"));
     $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
+    $b("#nsCircleNote").textContent = CIRCLE_DESC[circle]; $b("#nsGrooveNote").textContent = GROOVE_DESC[groove];
   };
+  makeSeg($b("#nsCircle"), [["area", "From the area"], ["same", "Same for all"]], circle, v => { circle = v; note(); });
+  makeSeg($b("#nsGroove"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], groove, v => { groove = v; note(); });
   makeSeg($b("#nsDur"), DURATIONS.map(d => [String(d), `${d} s`]), String(dur), v => { dur = Number(v); });
   makeSeg($b("#nsMel"), [["classic", "Classic"], ["story", "Story (AI)"], ["improv", "Improvise (AI)"]], mel, v => { mel = v; note(); });
   makeSeg($b("#nsConn"), Object.entries(CONNECT), conn, v => { conn = v; note(); });
@@ -528,7 +560,8 @@ function openNewSong(fresh = false) {
   const apply = () => {
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value);
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
-    P.connect = conn; P.orch = orch;
+    P.connect = conn; P.orch = orch; P.circleSize = circle;
+    if (P.groove !== groove) { P.groove = groove; GROOVE.failed = false; }
     SL.reverb.set(STYLES[P.style].reverb, false); ATTN.failed = false;
   };
   $b("#nsAuto").addEventListener("click", () => {
@@ -816,6 +849,29 @@ function heat(v) {
     return c0.map((c, k) => Math.round(lerp(c, c1[k], t)));
   }
   return HEAT[HEAT.length - 1][1];
+}
+// The views of the analysis for the video's place textures (Export › Effects and sound), at the
+// analysis size and drawn over the picture: edges (light on dark), texture (each region's entropy
+// as heat), the eye map, the regions in their family colours, and colour areas (each region in its
+// average colour). Made once per analysis.
+let VMAPS = null;
+function videoMaps() {
+  if (!A || !SAL || !IMG) return null;
+  if (VMAPS && VMAPS.A === A && VMAPS.SAL === SAL) return VMAPS.maps;
+  const { W, H, N, mag, p95, labels, regions } = A, mk = fn => { const c = makeCanvas(W, H), im = c.getContext("2d").createImageData(W, H); for (let p = 0; p < N; p++) im.data.set(fn(p), p * 4); c.getContext("2d").putImageData(im, 0, 0); return c; };
+  // average colour of each region, from the analysed image
+  const sum = new Float64Array(regions.length * 4), d = IMG.data, sx = IMG.width / W, sy = IMG.height / H;
+  for (let p = 0; p < N; p++) { const x = p % W, y = (p / W) | 0, q = (Math.min(IMG.height - 1, Math.floor(y * sy)) * IMG.width + Math.min(IMG.width - 1, Math.floor(x * sx))) * 4, l = labels[p] * 4; sum[l] += d[q]; sum[l + 1] += d[q + 1]; sum[l + 2] += d[q + 2]; sum[l + 3]++; }
+  const rgb = CLUSTER_COL.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+  const maps = {
+    edges: mk(p => { const a = clamp(mag[p] / p95); return [Math.round(12 + 236 * a), Math.round(14 + 236 * a), Math.round(20 + 235 * a), 255]; }),
+    texture: mk(p => { const h = heat(clamp((regions[labels[p]].entropy ?? 0.5) * 1.1)); return [h[0], h[1], h[2], 255]; }),
+    attention: mk(p => { const h = heat(SAL.map[p]); return [h[0], h[1], h[2], 255]; }),
+    regions: mk(p => { const x = p % W, y = (p / W) | 0, l = labels[p], bnd = (x < W - 1 && labels[p + 1] !== l) || (y < H - 1 && labels[p + W] !== l), c = rgb[CL.assign[l] % rgb.length]; return bnd ? [255, 255, 255, 255] : [c[0], c[1], c[2], 255]; }),
+    colour: mk(p => { const l = labels[p] * 4, n = sum[l + 3] || 1; return [sum[l] / n, sum[l + 1] / n, sum[l + 2] / n, 255]; })
+  };
+  VMAPS = { A, SAL, maps };
+  return maps;
 }
 function buildCovOverlay() {
   const { W, H, N } = A, c = makeCanvas(W, H), im = c.getContext("2d").createImageData(W, H);
@@ -1286,6 +1342,8 @@ function renderLanes() {
   }
   for (const l of LANE_KEYS) {
     const s = host.querySelector(`.lane[data-layer="${l}"]`);
+    // the colour is set every time: a layer's role (and so its colour) or the theme can change
+    s.style.setProperty("--dot", laneColor(l));
     const iname = l === "perc" ? PERC_NAME[P.style] : ((SCORE && SCORE.inst[l]) || st.inst[l] || { name: "" }).name;
     s.querySelector("em").textContent = iname; s.querySelector(".lname").title = `${layerName(l)}: ${iname}`;
     s.querySelector('[data-act="mute"]').setAttribute("aria-pressed", String(P.mix[l].mute));
@@ -1703,6 +1761,7 @@ function applySettings(j) {
   P.expert = Array.isArray(j.settings.expert) ? j.settings.expert : [];
   // projects from before the generated intro had none, and a one-bar ending
   if (!("intro" in j.settings)) P.intro = "off";
+  if (!("circleSize" in j.settings)) P.circleSize = "same";
   if (!("end" in j.settings)) P.end = 1;
   if (EXPORT) EXPORT.sync();
   if (j.settings.src) { const cropRef = P.src.crop, crop = { ...cropRef, ...(j.settings.src.crop || {}) }; Object.assign(P.src, j.settings.src); P.src.crop = Object.assign(cropRef, crop); }
@@ -1814,7 +1873,7 @@ function syncAllControls() {
   for (const k of Object.keys(SL)) SL[k].set(P[k], false);
   for (const k of Object.keys(SRC_CTL)) if (SRC_CTL[k].el) { const [host, key] = k.split("."); SRC_CTL[k].set((host === "srcCrop" ? P.src.crop : P.src)[key], false); }
   SRC_CTL.ch.set(P.src.channels); SRC_CTL.range.set(P.src.range); $("#srcInvert").checked = P.src.invert; $("#srcMix").hidden = P.src.channels !== "mix";
-  STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); CHORD_SEG.set(String(P.chordRate ?? 1)); INTRO_SEG.set(String(P.intro ?? "auto")); END_SEG.set(String(P.end ?? "auto")); $("#placeSel").value = P.placement;
+  STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); CHORD_SEG.set(String(P.chordRate ?? 1)); CIRCLE_SEG.set(P.circleSize || "same"); INTRO_SEG.set(String(P.intro ?? "auto")); END_SEG.set(String(P.end ?? "auto")); $("#placeSel").value = P.placement;
   document.querySelectorAll(".lane").forEach(el => { const l = el.dataset.layer, r = el.querySelector("input[type=range]"); r.value = P.mix[l].vol; r.style.setProperty("--p", ((P.mix[l].vol / 1.5) * 100).toFixed(1) + "%"); });
   syncSourceControls(); syncRules(); renderLanes(); if (SOUND) SOUND.sync();
 }
@@ -1822,7 +1881,7 @@ function closeMenus() { document.querySelectorAll(".popover").forEach(p => (p.hi
 
 /* ============ tabs ============ */
 const TABS = ["piece", "point", "sound", "export"];
-let INTRO_SEG = null, END_SEG = null, CHORD_SEG = null, STYLE_SEG = null, DUR_SEG = null, MEL_SEG = null, CONNECT_SEG = null, GROOVE_SEG = null, ORCH_SEG = null, UI_SEG = null, SOUND = null;
+let CIRCLE_SEG = null, INTRO_SEG = null, END_SEG = null, CHORD_SEG = null, STYLE_SEG = null, DUR_SEG = null, MEL_SEG = null, CONNECT_SEG = null, GROOVE_SEG = null, ORCH_SEG = null, UI_SEG = null, SOUND = null;
 function selectTab(which) {
   for (const t of TABS) {
     const on = t === which;
@@ -1848,7 +1907,7 @@ const SLIDERS = {
   sGaze: [
     { key: "inhibition", label: "Inhibition radius", min: 0.06, max: 0.4, step: 0.01, def: 0.18, scale: 100, unit: "%", level: LV.PATH, help: "How far the eye has to move away from spots it has already looked at." },
     { key: "memory", label: "Memory", min: 0, max: 0.2, step: 0.005, def: 0.05, scale: 100, unit: "%", dec: 1, level: LV.PATH, help: "How soon a spot the eye has seen becomes interesting again, and so how early it looks back." },
-    { key: "radius", label: "Focus radius", min: 0.02, max: 0.3, step: 0.005, def: DEFAULT_RADIUS, scale: 100, unit: "%", dec: 1, level: LV.PATH, help: "The size of the circles the app places. You can resize each one on the picture." },
+    { key: "radius", label: "Focus radius", min: 0.02, max: 0.3, step: 0.005, def: DEFAULT_RADIUS, scale: 100, unit: "%", dec: 1, level: LV.PATH, help: "The base size of the circles the app places (with From the area, each circle is between 40% and 220% of it). You can resize each one on the picture." },
     { key: "seed", label: "Variation", min: 0, max: 99, step: 1, def: 0, level: LV.PATH, help: "Try a different path for the same picture. Each number always gives the same path, and 0 is the original." }
   ],
   sSal: [
@@ -2135,7 +2194,7 @@ function scheduleAnalysis() {
 let COVER = { img: null, id: 0 };
 function sceneFor(sc, src) {
   const an = AN.key === masterKey() ? AN.an : null;
-  const S = videoScene(sc, src, P.video, videoCaption(sc), { an: an || undefined, auto: currentAutoLabels() });
+  const S = videoScene(sc, src, P.video, videoCaption(sc), { an: an || undefined, auto: currentAutoLabels(), maps: P.video.patch ? videoMaps() : null });
   S.coverImg = COVER.img; S.coverImgId = COVER.id;
   return S;
 }
@@ -2193,7 +2252,7 @@ function drawVideoPreview(cv) {
   stageGeom = { w, h }; PV = { w, h, W, H };
   if (EXPORT) EXPORT.sizeNote(`The video will be ${W} × ${H} px${o.size === "original" ? ", the image's own size" : ""}${o.shape !== "image" ? ` (${o.shape === "wide" ? "16:9" : o.shape === "square" ? "1:1" : o.shape === "portrait" ? "4:5" : "9:16"})` : ""}.`);
   const src = videoSource(Math.min(1600, Math.max(w, h) * dpr));
-  if (!VSCENE || VSCENE.sc !== SCORE || VSCENE.src !== src) VSCENE = sceneFor(SCORE, src);
+  if (!VSCENE || VSCENE.sc !== SCORE || VSCENE.src !== src || (P.video.patch && !VSCENE.maps)) VSCENE = sceneFor(SCORE, src);
   VSCENE.o = o;
   const g = cv.getContext("2d"), k = (w * dpr) / W; g.setTransform(k, 0, 0, k, 0, 0);
   // stopped at the very start, show the frame at 1 s: the first frame is black (fade in) and the title fades in
@@ -2287,6 +2346,7 @@ export function init() {
   const LEN = [["off", "Off"], ["1", "1 bar"], ["2", "2 bars"], ["auto", "Auto"]], lenVal = v => (v === "1" || v === "2" ? Number(v) : v);
   INTRO_SEG = makeSeg($("#introSeg"), LEN, String(P.intro ?? "auto"), v => { P.intro = lenVal(v); invalidate(LV.MUSIC); });
   END_SEG = makeSeg($("#endSeg"), LEN, String(P.end ?? "auto"), v => { P.end = lenVal(v); invalidate(LV.MUSIC); });
+  CIRCLE_SEG = makeSeg($("#circleSeg"), [["area", "From the area"], ["same", "Same for all"]], P.circleSize || "area", v => { P.circleSize = v; invalidate(LV.PATH); });
   CHORD_SEG = makeSeg($("#chordRateSeg"), [["2", "Slower"], ["1", "Style"], ["0.5", "Faster"]], String(P.chordRate ?? 1), v => { P.chordRate = Number(v); invalidate(LV.MUSIC); });
   GROOVE_SEG = makeSeg($("#grooveSeg"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], P.groove, v => { P.groove = v; GROOVE.failed = false; invalidate(LV.MUSIC); });
   makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; drawStage(); });

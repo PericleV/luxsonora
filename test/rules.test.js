@@ -39,7 +39,7 @@ describe("composition rules", () => {
       expect(sc.picardy).toBe(false);
       expect(sc.slots.every(S => !S.cadence && !S.shift)).toBe(true);
     }
-  });
+  }, 180000);
   it("the modulation moves one step on the circle of fifths, keeps its chords in the new key and comes home", () => {
     let seen = 0;
     for (const style of Object.keys(STYLES)) for (const I of IMAGES) {

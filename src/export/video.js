@@ -44,6 +44,11 @@ export const TITLE_POS = { tl: "Top left", tc: "Top centre", bl: "Bottom left", 
 export const TITLE_WHEN = { always: "Always", intro: "First seconds" };
 export const SUBTITLES = { info: "Style, key and tempo", custom: "My own", none: "None" };
 export const BOTTOMS = { bars: "Sound bars", spectrum: "Spectrum", wave: "Waveform", line: "Progress line", none: "None" };
+// the texture of a place, shown when the eye arrives: which view of the analysis, and how it appears
+export const PATCH_MAPS = { auto: "Auto (what shaped its sound)", edges: "Edges", texture: "Texture", attention: "Eye map", regions: "Regions", colour: "Colour areas", picture: "The picture" };
+export const PATCH_ANIMS = { rise: "Rises", reveal: "Changes its texture", both: "Rises and changes" };
+// the ripple: which track sets it off
+export const RIPPLE_TRACKS = { off: "Off", perc: "Drums", bass: "Bass", lead: "Melody", harm: "Harmony", pad: "Pad" };
 // the sound display: lying along the frame or standing up its side, and which way its bars grow
 // (its place is dragged on the preview, barXY; by default along the bottom, or up the right side)
 export const BAR_ORIENT = { h: "Horizontal", v: "Vertical" };
@@ -70,6 +75,7 @@ export function defaultVideo() {
     placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
     spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
     titleAlign: "auto", titleXY: null, pointXY: null, pointAlign: "left", textStyle: "shadow", boxColor: "#000000", caps: false, letterSpace: 0, titleAnim: "fade",
+    patch: false, patchMap: "auto", patchAnim: "both", patchKeep: false, patchOpacity: 0.6, patchSoft: 0.4, ripple: "off", rippleAmt: 0.5, pathFrom: 0, pathTo: 0, pathTrail: 0,
     logo: false, logoColor: "#FFFFFF", logoSize: 1, logoOpacity: 0.85, logoAnim: true, logoXY: null,
     barOrient: "h", barXY: null, barDir: "up", barSize: 1, barLength: 1, barOpacity: 1, coverClean: false, edit: defaultEdit(),
     bottom: "bars", bottomFill: "solid", bottomColor: VIDEO_THEMES.gold.point, bottomColor2: VIDEO_THEMES.gold.path, fadeIn: 0.6, fadeOut: 1.5, fadeSound: true, endCard: false, credit: "Made with Lux Sonora",
@@ -146,6 +152,8 @@ function indexAt(tl, sec) {
 }
 // The eye: which point it is on, how far it has moved toward the next one (u), its position,
 // the time since it arrived (age) and how much of the path is drawn (i + u).
+// the index of the place at sec (the first before it starts)
+export const gazeIndex = (tl, sec) => indexAt(tl, sec);
 export function gazeAt(tl, sec) {
   const i = indexAt(tl, sec); if (i < 0) return null;
   const p = tl[i], q = tl[i + 1];
@@ -239,6 +247,21 @@ export function soundEnvelope(sc, n = 160) {
 }
 // Everything the frames need that does not change with time. src: the (graded) image.
 // extra: { an (sound analysis; the notes' until the audio's is ready), auto (automatic labels) }.
+// The view of the analysis that best shows what shaped a place's sound: its edges when they were
+// sharp, its texture when it was busy, its colour when it was vivid, else where the eye goes.
+function autoMap(F) {
+  const m = (F.tim && F.tim.m) || {};
+  const c = [["edges", -(m.att ?? 0)], ["texture", m.bri ?? 0], ["colour", Math.max(m.res ?? 0, m.col ?? 0)]].sort((a, b) => b[1] - a[1])[0];
+  return c[1] > 0.2 ? c[0] : "attention";
+}
+// note starts per layer in seconds (drums: the kicks and snares, else every hit), with their loudness
+function onsetsOf(sc, spb) {
+  const out = {};
+  for (const n of sc.notes) { if (n.dbl) continue; (out[n.layer] = out[n.layer] || []).push([n.t * spb, n.vel / 127, n.midi]); }
+  if (out.perc) { const main = out.perc.filter(x => x[2] === 36 || x[2] === 38 || x[2] === 39); if (main.length) out.perc = main; }
+  for (const k of Object.keys(out)) { out[k].sort((a, b) => a[0] - b[0]); const dedup = []; for (const x of out[k]) if (!dedup.length || x[0] - dedup[dedup.length - 1][0] > 0.06) dedup.push(x); out[k] = dedup; }
+  return out;
+}
 export function videoScene(sc, src, opts, caption = {}, extra = {}) {
   const small = document.createElement("canvas"), k = 48 / Math.max(src.width, src.height);
   small.width = Math.max(4, Math.round(src.width * k)); small.height = Math.max(4, Math.round(src.height * k));
@@ -248,11 +271,19 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
   return {
     sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || [],
     an: extra.an || analyzeNotes(sc, env), passages: sc.notes.filter(n => n.passage && n.layer === "lead"),
+    maps: extra.maps || null, mapOf: sc.points.map(F => autoMap(F)), onsets: onsetsOf(sc, spb),
     geo(shape, tension = 0.5) { const k = shape + "|" + tension; return geos[k] || (geos[k] = pathGeometry(tl, shape === "curved", 18, tension)); }
   };
 }
 
 const FONT_UI = '"Geist", system-ui, -apple-system, "Segoe UI", sans-serif';
+// one small canvas reused for every place's texture (grown when a bigger place needs it)
+let PATCH_CV = null;
+function patchCanvas(D) {
+  if (!PATCH_CV) PATCH_CV = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(D, D) : document.createElement("canvas");
+  if (PATCH_CV.width < D || PATCH_CV.height < D) { PATCH_CV.width = Math.max(PATCH_CV.width, D); PATCH_CV.height = Math.max(PATCH_CV.height, D); }
+  return PATCH_CV;
+}
 function ring(g, x, y, r, col, a, w) { if (a <= 0 || r <= 0) return; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.strokeStyle = hexA(col, a); g.lineWidth = w; g.stroke(); }
 function pill(g, x, y, w, h) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, h / 2); else g.rect(x, y, w, h); }
 // The cover: the first frame of the video (what messaging apps show as its preview), held for a
@@ -331,8 +362,24 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   }
   const sx = Math.max(0, v.x), sy = Math.max(0, v.y), ex = Math.min(iw, v.x + v.w), ey = Math.min(ih, v.y + v.h);
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-  if (ex > sx && ey > sy) g.drawImage(src, sx, sy, ex - sx, ey - sy, (sx - v.x) * k, (sy - v.y) * k, (ex - sx) * k, (ey - sy) * k);
+  const drawPicture = (img = src, to = g) => { if (ex > sx && ey > sy) { const fx = img.width / iw, fy = img.height / ih; to.drawImage(img, sx * fx, sy * fy, (ex - sx) * fx, (ey - sy) * fy, (sx - v.x) * k, (sy - v.y) * k, (ex - sx) * k, (ey - sy) * k); } };
+  drawPicture();
   if (o.dim > 0) { g.fillStyle = `rgba(0,0,0,${o.dim})`; g.fillRect(0, 0, W, H); }
+  // the ripple: every note of the chosen track sends a ring across the picture from where the eye
+  // is; inside the ring the picture is magnified a little, like a wave on water
+  if (o.ripple && o.ripple !== "off" && !opt.clean && S.onsets && S.onsets[o.ripple]) {
+    const life = 1.4, amt = clamp(o.rippleAmt ?? 0.5), list = S.onsets[o.ripple], cur = tl.length ? tl[Math.max(0, gazeIndex(tl, sec))] : null;
+    const cx = cur ? X(cur.x) : W / 2, cy = cur ? Y(cur.y) : H / 2, maxR = Math.hypot(W, H) * (0.25 + 0.35 * amt), ringW = (16 + 28 * amt) * u;
+    let lo = 0, hi = list.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid][0] <= sec) lo = mid + 1; else hi = mid; }
+    for (let q = lo - 1, shown = 0; q >= 0 && shown < 4; q--) {
+      const age = sec - list[q][0]; if (age > life) break;
+      const f = age / life, rr = ringW + f * maxR, strength = (1 - f) * (0.4 + 0.6 * list[q][1]) * amt, zoom = 1 + 0.06 * strength;
+      g.save(); g.beginPath(); g.arc(cx, cy, rr + ringW / 2, 0, Math.PI * 2); g.arc(cx, cy, Math.max(0, rr - ringW / 2), 0, Math.PI * 2, true); g.clip();
+      g.translate(cx, cy); g.scale(zoom, zoom); g.translate(-cx, -cy); drawPicture(); g.restore();
+      ring(g, cx, cy, rr, "#ffffff", 0.35 * strength, 1.5 * u);
+      shown++;
+    }
+  }
   // the picture alone (a cover without the drawings): its tint, vignette and grain, nothing over it
   if (opt.clean) {
     if ((o.tintAmt || 0) > 0) { g.save(); g.globalCompositeOperation = "soft-light"; g.fillStyle = hexA(o.tintColor || "#2B1B4A", Math.min(1, o.tintAmt * 1.4)); g.fillRect(0, 0, W, H); g.restore(); }
@@ -355,12 +402,55 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       gr.addColorStop(0, hexA(o.spotColor || "#000000", 0)); gr.addColorStop(1, hexA(o.spotColor || "#000000", 0.6 * str * fadeEnd));
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
     }
-    // the path: the travelled part at its opacity; with "From the start" the part still ahead too
-    const drawn = gz.drawn, dOp = o.pathDone ?? 1, aOp = o.path === "all" ? o.pathAhead ?? 0.25 : 0;
-    if (o.path !== "off" && n > 1) {
+    if (o.patch && !opt.clean) {
+      // texture: how strongly the analysis view shows over the picture; soft: how much of the radius
+      // fades out towards the edge (0 is a hard disc with a thin ring, 1 fades from the centre)
+      const texA = clamp(o.patchOpacity ?? 0.6), soft = clamp(o.patchSoft ?? 0.4);
+      const drawPatch = (j, a, lift) => {
+        const p = tl[j], key = o.patchMap === "auto" || !o.patchMap ? S.mapOf[j] : o.patchMap, map = key === "picture" ? null : S.maps && S.maps[key];
+        const x = X(p.x), y = Y(p.y), r = R(p), anim = o.patchAnim || "both", rises = anim !== "reveal", changes = anim !== "rise";
+        const sc = rises ? 1 + 0.1 * lift : 1, up = rises ? 10 * u * lift : 0, rr = r * sc, cy = y - up;
+        if (rr < 1) return;
+        // the shadow under a rising place: a hard one under a hard disc, a soft blur under a soft one
+        if (rises && lift > 0.01) {
+          g.save();
+          if (soft < 0.15) { g.globalAlpha = a; g.shadowColor = "rgba(0,0,0,0.55)"; g.shadowBlur = 22 * u * lift; g.shadowOffsetY = 10 * u * lift; g.beginPath(); g.arc(x, cy, rr, 0, Math.PI * 2); g.fillStyle = "rgba(0,0,0,0.6)"; g.fill(); }
+          else { const sy = cy + 10 * u * lift, gr = g.createRadialGradient(x, sy, rr * (1 - soft) * 0.6, x, sy, rr * 1.2); gr.addColorStop(0, `rgba(0,0,0,${0.45 * a * lift})`); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x - rr * 1.3, sy - rr * 1.3, rr * 2.6, rr * 2.6); }
+          g.restore();
+        }
+        // the place is drawn on its own small canvas, then its edge is faded with a radial mask
+        const D = Math.ceil(2 * rr) + 4, ox = x - rr - 2, oy = cy - rr - 2, pc = patchCanvas(D), pg = pc.getContext("2d");
+        pg.setTransform(1, 0, 0, 1, 0, 0); pg.globalCompositeOperation = "source-over"; pg.globalAlpha = 1; pg.clearRect(0, 0, D, D);
+        pg.save(); pg.beginPath(); pg.arc(D / 2, D / 2, rr, 0, Math.PI * 2); pg.clip();
+        pg.translate(-ox, -oy); pg.translate(x, cy); pg.scale(sc, sc); pg.translate(-x, -y);
+        pg.imageSmoothingEnabled = true; pg.imageSmoothingQuality = "high";
+        drawPicture(src, pg);
+        if (changes && map && texA > 0) { pg.globalAlpha = texA * (lift > 0 ? 0.25 + 0.75 * lift : 0.85); drawPicture(map, pg); }
+        pg.restore();
+        if (soft > 0.01) {
+          const m = pg.createRadialGradient(D / 2, D / 2, rr * (1 - soft), D / 2, D / 2, rr);
+          m.addColorStop(0, "rgba(0,0,0,1)"); m.addColorStop(0.5, "rgba(0,0,0,0.6)"); m.addColorStop(1, "rgba(0,0,0,0)");
+          pg.globalCompositeOperation = "destination-in"; pg.fillStyle = m; pg.fillRect(0, 0, D, D); pg.globalCompositeOperation = "source-over";
+        }
+        g.save(); g.globalAlpha = a; g.drawImage(pc, 0, 0, D, D, ox, oy, D, D); g.restore();
+        // the thin ring belongs to the hard edge; it fades as the edge softens
+        ring(g, x, cy, rr, "#ffffff", 0.5 * a * (1 - soft) * (1 - soft), 1.6 * u);
+      };
+      // the places already visited keep their texture, flat and quieter
+      if (o.patchKeep) for (let j = 0; j < gz.i; j++) if (j !== gz.i) drawPatch(j, 0.55, 0);
+      // the current one rises in over 0.45 s and settles back as the eye moves on
+      const lift = ease(gz.age / 0.45) * (1 - gz.u);
+      if (lift > 0.005) drawPatch(gz.i, Math.min(1, lift * 1.4), lift);
+    }
+    // the path: the travelled part at its opacity; with "From the start" the part still ahead too.
+    // It can be shown only from one second to another, fading in and out over 0.6 s.
+    const pathVis = clamp((sec - (o.pathFrom || 0)) / 0.6 + (o.pathFrom ? 0 : 1)) * (o.pathTo > 0 ? 1 - clamp((sec - o.pathTo) / 0.6) : 1);
+    const drawn = gz.drawn, dOp = (o.pathDone ?? 1) * pathVis, aOp = (o.path === "all" ? o.pathAhead ?? 0.25 : 0) * pathVis;
+    if (o.path !== "off" && n > 1 && pathVis > 0.001) {
       const parts = [];
       if (o.path === "trail") { const j = Math.floor(drawn); if (j > 0) parts.push({ f0: j - 1, f1: j, a: dOp * (1 - ease(gz.age / 1.6)), done: true }); parts.push({ f0: j, f1: drawn, a: dOp, done: true }); }
-      else { parts.push({ f0: 0, f1: drawn, a: dOp, done: true }); if (aOp > 0) parts.push({ f0: drawn, f1: n - 1, a: aOp, done: false }); }
+      // a trail of the last few places only, when asked
+      else { parts.push({ f0: o.pathTrail > 0 ? Math.max(0, drawn - o.pathTrail) : 0, f1: drawn, a: dOp, done: true }); if (aOp > 0) parts.push({ f0: drawn, f1: n - 1, a: aOp, done: false }); }
       const pf = o.pathFill || "solid", c2 = o.pathColor2 || o.pointColor;
       const colorAt = pf === "gradient" ? f => mixHex(o.pathColor, c2, f / Math.max(1, n - 1)) : pf === "story" ? f => mixHex(o.pathColor, c2, clamp(((S.sc.points[Math.min(n - 1, Math.floor(f))] || {}).tension ?? 0.6) * 1.4 - 0.4)) : null;
       drawPath(g, geo, X, Y, { ...o, lineWidth: o.lineWidth * (1 + 0.35 * beat) }, u, sec, parts, hexA, colorAt);

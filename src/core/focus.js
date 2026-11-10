@@ -21,8 +21,27 @@ export const newId = () => "p" + nextId++;
  *  - count is the number of distinct places (anchors included); returns caps the number
  *    of revisits. A revisit beyond the cap is not recorded: the area is inhibited again
  *    and the search goes on. The path ends when count places are found or the map runs out.
- * p: { count, returns = ∞, inhibition, memory, seed, radius }
+ * p: { count, returns = ∞, inhibition, memory, seed, radius, sizing ("same" | "area") }
  */
+// The size of the spot that draws the eye at pixel i: the pixels around it, joined to it, that
+// keep at least 80% of its attention (a flood fill bounded at three times the radius), as the
+// radius of a disc with the same area; between 40% and 220% of the base radius. A small sharp
+// detail gets a small circle, a wide even area a large one.
+export function spotRadius(A, S0, i, base) {
+  const W = A.W, H = A.H, diag = Math.hypot(W, H), x0 = i % W, y0 = (i / W) | 0, thr = S0[i] * 0.8, reach = 3 * base * diag;
+  const seen = new Uint8Array(W * H), stack = [i]; seen[i] = 1;
+  let n = 0;
+  while (stack.length) {
+    const j = stack.pop(), x = j % W, y = (j / W) | 0; n++;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const k = ny * W + nx; if (seen[k]) continue; seen[k] = 1;
+      if (S0[k] >= thr && Math.hypot(nx - x0, ny - y0) <= reach) stack.push(k);
+    }
+  }
+  const r = Math.sqrt(n / Math.PI) / diag;
+  return Math.min(base * 2.2, Math.max(base * 0.4, r));
+}
 export function gazePath(A, S0, p, anchors = []) {
   const W = A.W, H = A.H, N = W * H, S = new Float32Array(S0), diag = Math.hypot(W, H);
   if (p.seed > 0) { const rnd = mulberry32(p.seed * 7919 + 13); for (let i = 0; i < N; i++) S[i] *= 0.88 + 0.24 * rnd(); }
@@ -77,7 +96,7 @@ export function gazePath(A, S0, p, anchors = []) {
       else inhibit(x, y, rInh); // refused return: also lower the map where the winner was
       inhibit(q.x * W - 0.5, q.y * H - 0.5, rInh);
     } else {
-      if (!tail) { out.push({ id: newId(), x: (x + 0.5) / W, y: (y + 0.5) / H, r: p.radius, w: S0[bi], s: S0[bi], region: A.labels[bi], source: "auto", revisitOf: null, index: k }); autoNew++; }
+      if (!tail) { out.push({ id: newId(), x: (x + 0.5) / W, y: (y + 0.5) / H, r: p.sizing === "area" ? spotRadius(A, S0, bi, p.radius) : p.radius, w: S0[bi], s: S0[bi], region: A.labels[bi], source: "auto", revisitOf: null, index: k }); autoNew++; }
       inhibit(x, y, rInh);
     }
     if (p.memory > 0) for (let i = 0; i < N; i++) S[i] += p.memory * (S0[i] - S[i]);

@@ -3,7 +3,7 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook, defaultEdit, curveLUT, CURVE_X } from "../export/look.js";
 import { LABEL_MODES } from "../export/labels.js";
@@ -89,6 +89,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       ${seg("xFit", "Framing")}`)}
     ${group("path", "Path and places", `
       ${seg("xPath", "Path")}
+      <div id="xPathTime" class="sliders sliders-2"></div>
       <div id="xPathOps" class="sliders sliders-2"></div>
       ${seg("xLineShape", "Shape")}
       ${box("xCurve")}
@@ -117,6 +118,11 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div class="field"><div class="flabel">When the eye arrives</div><div class="vtoggles" id="xFx">${Object.entries(EFFECTS).map(([k, n]) => tog("xFx_" + k, n)).join("")}</div></div>
       <div class="vcolors">${col("xSpotCol", "Spotlight colour")}</div>
       ${box("xStrength")}${box("xReact")}
+      <div class="field"><div class="vtoggles">${tog("xPatch", "Show the texture of each place")}</div>
+        <p class="snote">When the eye arrives, the place lifts out of the picture and shows what the analysis saw there.</p>
+        <div id="xPatchBox">${sel("xPatchMap", "What it shows", opts(PATCH_MAPS))}${seg("xPatchAnim", "How it appears")}${box("xPatchLook")}<div class="vtoggles">${tog("xPatchKeep", "Visited places keep their texture")}</div></div></div>
+      ${sel("xRipple", "Ripple on the picture", opts(RIPPLE_TRACKS))}
+      <div id="xRippleBox"><p class="snote">Each note of that track sends a ring across the picture from where the eye is.</p>${box("xRippleAmt")}</div>
       ${seg("xBottom", "Sound display")}
       <div id="xBarBox">${seg("xBarOrient", "Orientation")}${seg("xBarDir", "Which way it grows")}
         <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xBarReset" hidden>Put it back</button></p>
@@ -197,6 +203,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xEye", "eye", Object.entries(EYES)],
     ["xLabels", "labels", Object.entries(LABEL_MODES), false, () => vis()],
     ["xBottom", "bottom", Object.entries(BOTTOMS), false, () => vis()],
+    ["xPatchAnim", "patchAnim", Object.entries(PATCH_ANIMS)],
     ["xBarOrient", "barOrient", Object.entries(BAR_ORIENT), false, () => { V.barXY = null; vis(); }],
     ["xBarDir", "barDir", Object.entries(BAR_DIR)],
     ["xBottomFill", "bottomFill", Object.entries(BOTTOM_FILLS), false, () => vis()],
@@ -208,7 +215,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const segs = {};
   for (const [id, key, items, num, after] of SEGS) segs[id] = makeSeg($("#" + id), items, String(V[key]), v => { V[key] = num === "size" ? (v === "original" ? v : Number(v)) : num ? Number(v) : v; if (after) after(); look(); });
   // ---- selects
-  const SELS = [["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
+  const SELS = [["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
   for (const [id, key, after] of SELS) $("#" + id).addEventListener("change", e => { V[key] = e.target.value; if (after) after(V[key]); vis(); look(); });
   // ---- sliders on P.video: [host, definition]
   const pct = (key, label, def, max = 1, help) => ({ key, label, min: 0, max, step: 0.05, def, scale: 100, unit: "%", help });
@@ -239,6 +246,12 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xDim", { key: "dim", label: "Darken the image", min: 0, max: 0.6, step: 0.02, def: 0.1, scale: 100, unit: "%" }],
     ["#xTitleSecs", { key: "titleSecs", label: "For how long", min: 1, max: 15, step: 0.5, def: 4.5, unit: "s", dec: 1, help: "Then it fades out in a second." }],
     ["#xTextSize", { key: "textSize", label: "Text size", min: 0.6, max: 1.8, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xPathTime", { key: "pathFrom", label: "Show the path from", min: 0, max: 60, step: 0.5, def: 0, unit: "s", dec: 1, help: "Before this second the path is hidden; it fades in." }],
+    ["#xPathTime", { key: "pathTo", label: "Hide it after", min: 0, max: 60, step: 0.5, def: 0, unit: "s", dec: 1, help: "After this second the path fades out. At 0 it stays to the end." }],
+    ["#xPathTime", { key: "pathTrail", label: "Trail", min: 0, max: 10, step: 1, def: 0, unit: "places", help: "Only the last few places of the path stay drawn. At 0 the whole path stays." }],
+    ["#xPatchLook", pct("patchOpacity", "Texture opacity", 0.6, 1, "How strongly the analysis view shows over the picture inside the place. Lower it when a view looks too harsh.")],
+    ["#xPatchLook", pct("patchSoft", "Soft edge", 0.4, 1, "How much of the circle fades out towards its edge. At 0 the place is a sharp disc with a thin ring.")],
+    ["#xRippleAmt", pct("rippleAmt", "Ripple strength", 0.5)],
     ["#xLogoOps", { key: "logoSize", label: "Size", min: 0.4, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
     ["#xLogoOps", pct("logoOpacity", "Opacity", 0.85)],
     ["#xBarOps", { key: "barSize", label: "Height", min: 0.3, max: 3, step: 0.05, def: 1, scale: 100, unit: "%" }],
@@ -300,7 +313,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   function syncEdit() { for (const [, d] of EDS) esl[d.key].set(ED[d.key] ?? d.def, false); curveSeg.set(curveCh); drawCurve(); }
   // ---- toggles: [id, object, key]
   const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"],
-    ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xLogo", () => V, "logo"], ["#xLogoAnim", () => V, "logoAnim"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
+    ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xLogo", () => V, "logo"], ["#xPatch", () => V, "patch"], ["#xPatchKeep", () => V, "patchKeep"], ["#xLogoAnim", () => V, "logoAnim"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
   // ---- colours
   const themeBtns = [...host.querySelectorAll("#xTheme button")];
@@ -405,6 +418,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#xClimaxCols").hidden = !V.climaxOwn;
     $("#xBoxCols").hidden = !["box", "outline"].includes(V.textStyle || "shadow");
     $("#xPosReset").hidden = !(V.titleXY || V.pointXY);
+    $("#xPatchBox").hidden = !V.patch; $("#xRippleBox").hidden = !V.ripple || V.ripple === "off";
     $("#xLogoBox").hidden = !V.logo; $("#xLogoReset").hidden = !V.logoXY;
     $("#xBarBox").hidden = V.bottom === "none"; $("#xBarReset").hidden = !V.barXY; $("#xCoverCleanBox").hidden = V.cover === "image";
     $("#xCoverBox").hidden = V.cover === "off"; sl.coverTime.el.hidden = V.cover !== "time"; $("#xCoverPickBox").hidden = V.cover !== "image";

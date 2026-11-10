@@ -79,3 +79,30 @@ export function suggestStyles(A, count = 3, styles = Object.keys(PROFILE)) {
   return out.slice(0, count);
 }
 export const SUGGEST_PROFILES = PROFILE;
+
+// A fuller explanation, in sentences: the picture's measures in words, then for each suggested style
+// where it fits the picture and where it does not.
+const NAMES = ["Lightness", "Warmth", "Saturation", "Detail", "Contrast"];
+const LEVEL = v => (v < 0.2 ? "very low" : v < 0.4 ? "low" : v < 0.6 ? "medium" : v < 0.8 ? "high" : "very high");
+// what a style likes on each measure: low, middle or high
+const LIKES = [["darker pictures", "a middle lightness", "brighter pictures"], ["cooler colours", "colours neither warm nor cool", "warmer colours"], ["muted colours", "moderate colour", "vivid colours"], ["calm, smooth pictures", "a moderate amount of detail", "pictures full of detail"], ["soft light", "moderate contrast", "strong contrast"]];
+const likeOf = (k, v) => LIKES[k][v < 0.4 ? 0 : v <= 0.6 ? 1 : 2];
+export function explainStyles(A, list) {
+  const M = pictureMeasures(A);
+  const measures = NAMES.map((name, k) => ({ name, value: M.values[k], level: LEVEL(M.values[k]) }));
+  const styles = list.map(({ style, score }) => {
+    const p = PROFILE[style], fits = [], differs = [];
+    for (let k = 0; k < 5; k++) {
+      const d = M.values[k] - p[k], like = likeOf(k, p[k]);
+      if (Math.abs(d) <= 0.12) fits.push(`${NAMES[k].toLowerCase()} (${LEVEL(M.values[k])}), as it suits ${like}`);
+      else if (Math.abs(d) >= 0.25) differs.push(`${NAMES[k].toLowerCase()} is ${d > 0 ? "higher" : "lower"} than it usually has`);
+    }
+    const colour = p[5].includes(M.family) ? (M.family === "grey" ? "The picture has little colour, which this style likes." : `The main colour, ${M.family}, is one this style likes.`) : `The main colour, ${M.family}, is not one it usually goes with.`;
+    const lines = [];
+    if (fits.length) lines.push(`It matches the picture's ${fits.join(", ")}.`);
+    lines.push(colour);
+    if (differs.length) lines.push(`Less close: ${differs.join(", ")}.`);
+    return { style, score, lines };
+  });
+  return { measures, family: M.family, styles };
+}

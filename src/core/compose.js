@@ -313,7 +313,7 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     for (const F of out) { F.timX = F.timX || {}; F.timX[L.id] = modulate(inst[L.id], F.tim.m, LAYER_DEPTH.harm, P.timbre); }
   }
   if (extra.length) {
-    const xs = extraNotes({ layers: extra, A, sal, cov, points: out, slots, body: plan.body, baseLead, inst, modeIv, pcOff, style: P.style, buildUp: P.buildUp ?? 0.5, modePcs: new Set(modeIv.map(v => (((v + pcOff) % 12) + 12) % 12)), leadNotes: notes.filter(nn => nn.layer === "lead" && nn.point >= 0 && !nn.dbl) });
+    const xs = extraNotes({ layers: extra, A, sal, cov, points: out, slots, body: plan.body, baseLead, inst, modeIv, bpm, pcOff, style: P.style, buildUp: P.buildUp ?? 0.5, modePcs: new Set(modeIv.map(v => (((v + pcOff) % 12) + 12) % 12)), leadNotes: notes.filter(nn => nn.layer === "lead" && nn.point >= 0 && !nn.dbl) });
     for (const nn of xs) { const F = out[nn.point]; if (F && F.timX) nn.tim = F.timX[nn.layer]; notes.push(nn); }
   }
 

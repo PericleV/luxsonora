@@ -218,6 +218,8 @@ const FILL = {
 };
 // styles without drums (the instruments keep time; no crash at the climax either)
 const NO_DRUMS = new Set(["neoclassical", "meditation", "baroque"]);
+// styles whose climax is marked by the music, not by a crash cymbal
+const NO_CRASH = new Set(["ambient", "minimal", "classical", "lofinature", "eastasian", "folk", "movie", "neoclassical", "meditation", "baroque"]);
 // Kit level per style (velocity scale), set from offline renders of the demos.
 const LEVEL = { lofinature: 84, neoclassical: 90, folk: 90, meditation: 80, postrock: 98, chiptune: 92, triphop: 100, reggae: 96, baroque: 90, eastasian: 92, dnb: 96, techno: 96, blues: 96, funk: 98, pop: 96, rock: 100, metal: 104, ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
 
@@ -250,7 +252,7 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
       const acc = q % 4 === 0 ? 1 : q % 2 === 0 ? 0.86 : 0.74;
       for (const [midi, v] of bar[q]) push(t, midi, lv * v * acc * a.acc * dyn);
     }
-    if (b === climaxBar && style !== "ambient" && style !== "minimal" && !NO_DRUMS.has(style)) push(b * 4, DRUM.crash, 96, { dur: 0.5 });
+    if (b === climaxBar && !NO_CRASH.has(style)) push(b * 4, DRUM.crash, 96, { dur: 0.5 });
     // transition swells, ending where the next section begins
     if (arcOn && next && (sectionChange || intoClimax) && R.swell) {
       const end = (b + 1) * 4, len = R.swell === "riser" && intoClimax ? 4 : 2;
@@ -260,7 +262,7 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
     }
   }
   // accents the user put on points: a cymbal and a kick on the point's first beat (a low drum in classical)
-  for (const F of segs) if (F.accent) { push(F.t0, style === "classical" ? DRUM.ltom : DRUM.crash, 100, { dur: 0.5, accent: true }); if (style !== "classical") push(F.t0, DRUM.kick, 100, { accent: true }); }
+  for (const F of segs) if (F.accent) { const soft = NO_CRASH.has(style); push(F.t0, soft ? DRUM.ltom : DRUM.crash, soft ? 80 : 100, { dur: 0.5, accent: true }); if (!soft) push(F.t0, DRUM.kick, 100, { accent: true }); }
   // cadence
   const cad = { lofinature: [[DRUM.kick, 50]], neoclassical: [], meditation: [], baroque: [], folk: [[DRUM.kick, 70]], postrock: [[DRUM.kick, 100], [DRUM.crash, 96]], chiptune: [[DRUM.kick, 90], [DRUM.crash, 70]], triphop: [[DRUM.kick, 96], [DRUM.crash, 60]], reggae: [[DRUM.kick, 90], [DRUM.rim, 80]], eastasian: [[DRUM.ltom, 90]], dnb: [[DRUM.kick, 100], [DRUM.crash, 80]], techno: [[DRUM.kick, 100], [DRUM.crash, 70]], ambient: [[DRUM.ltom, 60]], cinematic: [[DRUM.kick, 90], [DRUM.crash, 80]], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [[DRUM.kick, 110], [DRUM.ltom, 100], [DRUM.crash, 96]], movie: [[DRUM.ltom, 70]], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
   for (const [midi, vel] of cad) notes.push({ layer: "perc", t: body, dur: midi === DRUM.ride || midi === DRUM.crash ? 0.4 : 0.1, midi, vel, point: -2 });

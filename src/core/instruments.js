@@ -7,7 +7,7 @@ import FFT from "fft.js";
 import { STYLES, LAYERS } from "./theory.js";
 
 const extra = {
-  "x.glass": { type: "fm", name: "Glass bell", a: 0.003, d: 1.8, s: 0.25, r: 1.6, cut: 9000, q: 0.7, col: 0.55, ratio: 3.5 },
+  "x.glass": { type: "fm", name: "Glass bell", a: 0.003, d: 1.8, s: 0.25, r: 1.6, cut: 9000, q: 0.7, col: 0.45, ratio: 4 },
   "x.keys": { type: "fm", name: "Warm keys", a: 0.008, d: 1.2, s: 0.4, r: 0.8, cut: 3000, q: 0.7, col: 0.2, ratio: 1 },
   "x.sine": { type: "pad", name: "Pure tone", a: 0.02, d: 0.5, s: 0.9, r: 0.4, cut: 12000, q: 0.5, col: 0, det: 0 },
   "x.brass": { type: "pad", name: "Soft brass", a: 0.08, d: 0.6, s: 0.8, r: 0.4, cut: 1800, q: 1.4, col: 0.85, det: 5 },
@@ -48,7 +48,7 @@ const SAMPLED = {
   "s.tenorsax": SF("Tenor sax", "tenor_sax", "pad", { a: 0.03, r: 0.35, col: 0.5, vib: 6 }),
   "s.harp": SF("Orchestral harp", "orchestral_harp", "pluck", { d: 3.0, r: 1.0, col: 0.5 }),
   "s.celesta": SF("Celesta", "celesta", "fm", { d: 1.4, s: 0.2, r: 0.8, ratio: 2 }),
-  "s.glock": SF("Glockenspiel", "glockenspiel", "fm", { d: 1.6, s: 0.1, r: 1.0, ratio: 3.5 }),
+  "s.glock": SF("Glockenspiel", "glockenspiel", "fm", { d: 1.6, s: 0.1, r: 1.0, ratio: 4 }),
   "s.marimba": SF("Marimba", "marimba", "fm", { d: 0.5, s: 0.15, r: 0.4, ratio: 4 }),
   "s.vibes": SF("Vibraphone", "vibraphone", "fm", { d: 1.8, s: 0.3, r: 1.0, ratio: 4 }),
   "s.nylon": SF("Nylon guitar", "acoustic_guitar_nylon", "pluck", { d: 2.0, r: 0.4 }),

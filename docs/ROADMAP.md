@@ -148,6 +148,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Performance (dynamics from the picture, accents, phrasing, CC11 expression, CC1 vibrato, humanize), composition settings in Advanced, every track's instrument in one list, each style's band in Add layer, MIDI for a DAW
 - [x] Expert mode: user rules on the places (add an instrument, silence a track, a chord, the melody's octave, dynamics; by place, part, colour, drawn zone or time)
 - [x] Every composition rule switchable in Advanced (19 in 5 groups); New song shows the melody, the connections and the orchestration's instruments; Save project and Load project in the top bar
+- [x] Circles sized from their area; added layers kept musical (no rattling ostinato, no gong); why these styles, in sentences; video place textures, a ripple driven by a track, the path shown over a chosen time; place textures with an opacity and a soft edge; circle size and groove in New song; the layer volume kept on narrow windows, and lane colours that follow each layer
 - [x] The session survives a reload (phones closing the tab in the background): saved in the browser after each change, restored on load; less memory on phones
 - [x] Resizable layout: the panel, the timeline and the layer names, dragged or with the keyboard, remembered
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)

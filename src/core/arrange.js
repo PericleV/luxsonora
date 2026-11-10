@@ -246,11 +246,13 @@ export function extraNotes(ctx) {
         if (!active(S) || S.F.section === "intro") return;
         const sorted = [...S.chord].sort((a, b) => a - b), root = nearestIn(new Set([PCS(sorted[0])]), (lo + hi) / 2 - 4, lo, hi) ?? sorted[0];
         const fifth = nearestIn(new Set([PCS(sorted.find(x => PCS(x - sorted[0]) === 7) ?? sorted[sorted.length - 1])]), root + 7, root, root + 12) ?? root + 7;
-        const fig = [root, fifth, root + 12, fifth], rate = S.F.tension > 0.8 && density > 0.6 ? 0.25 : 0.5;
+        // eighths; sixteenths only in a slow piece at a very tense moment with few layers (fast
+        // sixteenths on a plucked instrument over a full arrangement only rattle)
+        const fig = [root, fifth, root + 12, fifth], rate = S.F.tension > 0.85 && density > 0.75 && (ctx.bpm || 120) <= 100 ? 0.25 : 0.5;
         let j = 0;
         // a second ostinato answers the first: the figure turned around
         const f2 = dup % 2 ? [fig[2], fig[1], fig[0], fig[1]] : fig;
-        for (let t = S.t0; t < S.t1 - 1e-9; t += rate, j++) add(t, rate * 0.9, f2[j % 4], (j % 4 === 0 ? 70 : 54) * (0.6 + 0.4 * density));
+        for (let t = S.t0; t < S.t1 - 1e-9; t += rate, j++) add(t, rate * 0.85, f2[j % 4], (j % 4 === 0 ? 60 : 44) * (0.6 + 0.4 * density));
       });
     } else if (role === "sustain") {
       const [lo, hi] = reg("sustain");
@@ -297,12 +299,14 @@ export function extraNotes(ctx) {
       const [lo, hi] = reg("pulse");
       slots.forEach(S => {
         if (!active(S) || S.F.section === "intro") return;
-        const a = areaDrive(S.F), hits = euclid(Math.round(lerp(2, 5, S.F.tension) * (0.6 + 0.4 * density)), 16, a.rot + dup * 2);
+        // on the eighths only (a low drum on odd sixteenths sounds clumsy), at most four a bar
+        const a = areaDrive(S.F), hits8 = euclid(Math.min(4, Math.round(lerp(2, 4, S.F.tension) * (0.6 + 0.4 * density))), 8, Math.round((a.rot + dup * 2) / 2));
+        const hits = Array.from({ length: 16 }, (_, q) => q % 2 === 0 && hits8[q / 2]);
         const root = nearestIn(new Set([PCS([...S.chord].sort((x, y) => x - y)[0])]), (lo + hi) / 2, lo, hi);
         if (root === null) return;
         // the other hits take the chord tone nearest a fifth above (a diminished chord has no perfect fifth)
         const up = nearestIn(new Set([...S.pcs].filter(p => p !== PCS(root))), root + 7, root + 1, hi) ?? root;
-        for (let j = Math.round(S.t0 * 4); j < Math.round(S.t1 * 4); j++) if (hits[((j % 16) + 16) % 16]) add(j / 4, 0.5, j % 16 === 0 ? root : up, j % 16 === 0 ? 92 : 70);
+        for (let j = Math.round(S.t0 * 4); j < Math.round(S.t1 * 4); j++) if (hits[((j % 16) + 16) % 16]) add(j / 4, 0.5, j % 16 === 0 ? root : up, j % 16 === 0 ? 80 : 60);
       });
     }
   });

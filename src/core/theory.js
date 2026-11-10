@@ -222,7 +222,7 @@ export const STYLES = {
   meditation: {
     name: "Meditation", modes: ["ionian", "lydian", "aeolian", "dorian"], tempo: [50, 64], pent: true, ext: 7, swing: 0, perc: "none", bass: "pedal", reverb: 0.8,
     inst: {
-      lead: I("fm", "Singing bowl", { a: 0.02, d: 4.0, s: 0.3, r: 3.0, cut: 5000, q: 0.6, col: 0.4, ratio: 2.76 }),
+      lead: I("fm", "Singing bowl", { a: 0.02, d: 4.0, s: 0.3, r: 3.0, cut: 5000, q: 0.6, col: 0.3, ratio: 3 }),
       harm: I("pad", "Breath pad", { a: 2.0, d: 1.5, s: 0.85, r: 3.0, cut: 1200, q: 0.6, col: 0.2, det: 6 }),
       bass: I("bass", "Drone", { a: 1.0, d: 1.0, s: 0.9, r: 2.0, cut: 300, q: 0.7, col: 0.1 }),
       pad: I("pad", "Deep pad", { a: 2.4, d: 1.5, s: 0.85, r: 3.0, cut: 900, q: 0.6, col: 0.25, det: 10 })

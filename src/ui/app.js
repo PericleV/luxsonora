@@ -700,6 +700,7 @@ function openNewSong(fresh = false) {
     if ($b("#nsFrameBox").open) build();
   }
   const apply = () => {
+    if ($b("#nsStyle").value !== P.style) resetInstrumentChoice();
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value); P.returnsExact = true;
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
     P.connect = conn; P.orch = orch; P.circleSize = circle; P.gen = gen;
@@ -2085,6 +2086,9 @@ function initKeyControls() {
   $("#keySel").addEventListener("change", e => { const v = e.target.value; P.keyMode = v === "auto" ? "auto" : "manual"; if (v !== "auto") P.keyPc = Number(v); invalidate(LV.MUSIC); });
   $("#scaleSel").addEventListener("change", e => { P.scale = e.target.value; invalidate(LV.MUSIC); });
 }
+// A new genre brings its own instruments and drum kit: the ones chosen by hand on the five tracks
+// were for the old genre, so they are let go (your own list of added layers and the raw tracks stay).
+function resetInstrumentChoice() { P.instruments = {}; P.kit = "style"; }
 /* ============ how the song is made: Classic, By genre, Raw (core/gen.js, core/raw.js) ============ */
 let GEN_SEG = null, RAW_TEMPO = null;
 function setGen(v) { P.gen = v; document.body.classList.toggle("gen-raw", v === "raw"); invalidate(LV.MUSIC); }
@@ -2124,6 +2128,8 @@ function renderRaw() {
   const raw = P.gen === "raw";
   GEN_SEG.set(P.gen || "classic"); $("#genNote").textContent = GEN_DESC[P.gen || "classic"] || "";
   document.body.classList.toggle("gen-raw", raw);
+  // the controls a raw piece does not use (its tempo and key are in the Raw panel)
+  for (const k of ["tempoAdj", "arc", "smooth", "timbre"]) if (SL[k]) SL[k].el.classList.add("no-raw");
   $("#rawBox").hidden = !raw; if (!raw) return;
   const set = P.rawBpm > 0; RAW_TEMPO.set(set ? "set" : "auto");
   const bpm = $("#rawBpm"); $("#rawBpmRow").hidden = !set; bpm.value = set ? P.rawBpm : Math.round(SCORE ? SCORE.bpm : 100); $("#rawBpmVal").textContent = bpm.value + " BPM"; fillRange(bpm);
@@ -2674,7 +2680,7 @@ export function init() {
   STYLE_SEG = { set(v) { if (STYLES[v] && !styleSel.querySelector(`option[value="${v}"]`)) styleSel.insertAdjacentHTML("beforeend", `<option value="${v}">${esc(STYLES[v].name)}</option>`); styleSel.value = v; styleNote(); } };
   STYLE_SEG.set(P.style);
   styleSel.addEventListener("change", () => {
-    const v = styleSel.value; P.style = v; styleNote(); SL.reverb.set(STYLES[v].reverb, false); applyMixLive();
+    const v = styleSel.value; if (v !== P.style) resetInstrumentChoice(); P.style = v; styleNote(); SL.reverb.set(STYLES[v].reverb, false); applyMixLive();
     invalidate(LV.MUSIC);
   });
   $("#styleSuggest").addEventListener("click", e => {

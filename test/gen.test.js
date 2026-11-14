@@ -39,10 +39,20 @@ describe("song generation modes", () => {
       expect(names(a)).toEqual(names(b));
       seen.add(names(a).join("|"));
       expect(a.extra.length).toBeGreaterThanOrEqual(3);
-      expect(new Set(names(a)).size).toBe(names(a).length);
+      const main = new Set(names(a).slice(0, 4)), added = names(a).slice(4);
+      expect(added.some(n => main.has(n))).toBe(false); expect(new Set(added).size).toBe(added.length);
     }
     console.log([...seen]);
     expect(seen.size).toBeGreaterThan(1);
+  });
+  it("what the genre is built on comes first: no piano in rock or metal, an orchestral lead in classical", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const { A } = setup(seed), r = genreCore("rock", A), m = genreCore("metal", A), c = genreCore("classical", A);
+      for (const x of [r, m]) expect(Object.values(x)).not.toContain("s.piano");
+      expect(genreLayers("metal", "full", A).pick.map(L => L.preset)).not.toContain("s.piano");
+      expect([undefined, null, "s.overdrive", "s.distortion"]).toContain(r.lead ?? undefined);
+      expect([null, "s.piano", "s.violin", "s.cello", "s.flute", "s.clarinet", "s.oboe"]).toContain(c.lead);
+    }
   });
   it("By genre keeps your own instrument", () => {
     const sc = run({ ...P0, gen: "genre", instruments: { lead: { preset: "s.flute" } } });

@@ -5,6 +5,7 @@
 // style by how close it is to the profile, and gets a short reason in words.
 import { clamp } from "./util.js";
 import { colourOf } from "./expert.js";
+import { HIDDEN_STYLES } from "./theory.js";
 
 // [lightness, warmth, saturation, detail, contrast, colour families]
 const PROFILE = {
@@ -57,7 +58,7 @@ export function pictureMeasures(A) {
 }
 
 // The best `count` styles for a picture: [{ style, score (0-1), reason }], best first.
-export function suggestStyles(A, count = 3, styles = Object.keys(PROFILE)) {
+export function suggestStyles(A, count = 3, styles = Object.keys(PROFILE).filter(s => !HIDDEN_STYLES.has(s))) {
   const M = pictureMeasures(A), out = [];
   for (const st of styles) {
     const p = PROFILE[st]; if (!p) continue;

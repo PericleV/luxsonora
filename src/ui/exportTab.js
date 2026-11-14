@@ -3,7 +3,7 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, PLACE_NOW, LABEL_INS, LABEL_OUTS, LABEL_POS, LABEL_BEATS, LABEL_FILLS, RIPPLE_FILLS, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook, defaultEdit, curveLUT, CURVE_X } from "../export/look.js";
 import { LABEL_MODES } from "../export/labels.js";
@@ -87,46 +87,70 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div id="xCamBox">${box("xZoom")}${seg("xEase", "Motion")}${box("xCamMove")}</div>
       ${box("xDrift")}
       ${seg("xFit", "Framing")}`)}
-    ${group("path", "Path and places", `
+    ${group("path", "The path", `
       ${seg("xPath", "Path")}
-      <div id="xPathTime" class="sliders sliders-2"></div>
-      <div id="xPathOps" class="sliders sliders-2"></div>
-      ${seg("xLineShape", "Shape")}
-      ${box("xCurve")}
       ${sel("xLine", "Line style", opts(LINE_STYLES))}
+      <p class="snote" id="xLineNote"></p>
       ${box("xWidth")}
+      <div id="xPathOps" class="sliders sliders-2"></div>
       <div id="xDashBox" class="sliders sliders-2"></div>
       ${box("xGlow")}
+      ${seg("xLineShape", "Shape")}
+      ${box("xCurve")}
       ${seg("xPathFill", "Line colour")}
       <div class="vcolors" id="xPathCols">${col("xPathColA", "First colour")}${col("xPathCol2", "Second colour")}</div>
+      <div class="flabel xsub">When it shows</div>
+      <div id="xPathTime" class="sliders sliders-2"></div>
+      <div class="flabel xsub">The eye and the notes on the way</div>
+      ${seg("xEye", "The eye")}
+      <div class="vcolors">${col("xEyeCol", "Eye colour")}</div>
+      <div class="vtoggles">${tog("xPassages", "Connection notes")}</div>`)}
+    ${group("places", "The places", `
       ${seg("xPoints", "Places")}
       <div id="xPlaceOps" class="sliders sliders-2"></div>
       ${seg("xPlaceStyle", "Circles")}
+      <div class="vcolors">${col("xPlaceCol", "Circle colour")}</div>
       ${box("xPlaceSize")}
+      <div id="xPlaceLook" class="sliders sliders-2"></div>
       ${seg("xNumberStyle", "Numbers")}
-      <div class="vtoggles">${tog("xPassages", "Connection notes")}${tog("xClimaxOwn", "Climax in its own colour")}</div>
+      <div class="vtoggles">${tog("xClimaxOwn", "Climax in its own colour")}</div>
       <div class="vcolors" id="xClimaxCols">${col("xClimaxCol", "Climax colour")}</div>
-      ${seg("xEye", "The eye")}
-      <div class="vcolors">${col("xEyeCol", "Eye colour")}</div>`)}
-    ${group("labels", "Labels on places", `
-      ${seg("xLabels", "Labels")}
-      <div id="xLabelAuto"><button type="button" class="btn" id="xDetect">Detect objects</button><p class="snote" id="xLabelNote">Each spot gets the name of the object under it. Spots that aren't on an object get a short description of their colour.</p></div>
-      <div id="xLabelCustom"><p class="snote">Write a label for each spot, or leave it empty. <button type="button" class="linkbtn" id="xLabelFill">Fill in the detected names</button></p><ol class="xlabels" id="xLabelList"></ol></div>
-      <div class="vcolors">${col("xLabelCol", "Text")}${col("xLabelBg", "Background")}</div>
-      <div class="vtoggles">${tog("xLabelKeep", "Keep labels after the eye leaves")}</div>`)}
-    ${group("fx", "Effects and sound", `
+      <div class="flabel xsub">The place the eye is on</div>
+      ${seg("xPlaceNow", "How it stands out")}
+      <div id="xPlaceNowOps" class="sliders"></div>
       <div class="field"><div class="flabel">When the eye arrives</div><div class="vtoggles" id="xFx">${Object.entries(EFFECTS).map(([k, n]) => tog("xFx_" + k, n)).join("")}</div></div>
       <div class="vcolors">${col("xSpotCol", "Spotlight colour")}</div>
       ${box("xStrength")}${box("xReact")}
+      <div class="flabel xsub">What the analysis saw there</div>
       <div class="field"><div class="vtoggles">${tog("xPatch", "Show the texture of each place")}</div>
         <p class="snote">When the eye arrives, the place lifts out of the picture and shows what the analysis saw there.</p>
-        <div id="xPatchBox">${sel("xPatchMap", "What it shows", opts(PATCH_MAPS))}${seg("xPatchAnim", "How it appears")}${box("xPatchLook")}<div class="vtoggles">${tog("xPatchKeep", "Visited places keep their texture")}</div></div></div>
+        <div id="xPatchBox">${sel("xPatchMap", "What it shows", opts(PATCH_MAPS))}${seg("xPatchAnim", "How it appears")}${box("xPatchLook")}<div class="vtoggles">${tog("xPatchKeep", "Visited places keep their texture")}</div></div></div>`)}
+    ${group("labels", "Labels on places", `
+      ${seg("xLabels", "Labels")}
+      <div id="xLabelAuto"><button type="button" class="btn" id="xDetect">Detect objects</button><p class="snote" id="xLabelNote">Each spot gets the name of the object under it. Spots that aren't on an object get a short description of their colour.</p></div>
+      <div id="xLabelCustom"><p class="snote">Write a label for each spot, or leave it empty. It shows when the eye gets there. <button type="button" class="linkbtn" id="xLabelFill">Fill in the detected names</button></p><ol class="xlabels" id="xLabelList"></ol></div>
+      <div id="xLabelOpts">
+        ${seg("xLabelIn", "How it appears")}
+        ${seg("xLabelOut", "How it leaves")}
+        <div id="xLabelTime" class="sliders sliders-2"></div>
+        ${sel("xLabelPos", "Where it sits", opts(LABEL_POS))}
+        <p class="snote">Or drag a label on the preview to put it anywhere you like: it stays at that distance from its place, and its arrow follows. <button type="button" class="linkbtn" id="xLabelOffReset" hidden>Put the labels back</button></p>
+        <div id="xLabelLook" class="sliders sliders-2"></div>
+        ${seg("xLabelFill", "Label colour")}
+        <div class="vcolors">${col("xLabelCol", "Text")}${col("xLabelBg", "Background")}${col("xLabelBg2", "Second colour")}</div>
+        ${seg("xLabelBeat", "With the music")}
+        ${box("xLabelBeatAmt")}
+        <div class="vtoggles">${tog("xLabelLine", "An arrow from the label to its place")}${tog("xLabelKeep", "Keep labels after the eye leaves")}</div>
+      </div>`)}
+    ${group("fx", "With the music", `
       ${sel("xRipple", "Ripple on the picture", opts(RIPPLE_TRACKS))}
-      <div id="xRippleBox"><p class="snote">Each note of that track sends a wave across the picture from where the eye is.</p>${seg("xRippleLook", "Look")}<p class="snote" id="xRippleLookNote"></p>${box("xRippleAmt")}<div class="vcolors">${col("xRippleCol", "Colour")}</div></div>
+      <div id="xRippleBox"><p class="snote">Each note of that track sends a wave across the picture from where the eye is.</p>${seg("xRippleLook", "Look")}<p class="snote" id="xRippleLookNote"></p>${box("xRippleAmt")}${seg("xRippleFill", "Colour")}<div class="vcolors">${col("xRippleCol", "Colour")}${col("xRippleCol2", "Second colour")}</div></div>
       ${seg("xBottom", "Sound display")}
       <div id="xBarBox">${seg("xBarOrient", "Orientation")}${seg("xBarDir", "Which way it grows")}
         <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xBarReset" hidden>Put it back</button></p>
-        <div id="xBarOps" class="sliders sliders-2"></div></div>
+        <div id="xBarOps" class="sliders sliders-2"></div>
+        <div id="xBarShape" class="sliders sliders-2"></div>
+        <div class="vtoggles">${tog("xBarRound", "Round ends")}</div></div>
       <div id="xBottomCols">${seg("xBottomFill", "Bottom colour")}<div class="vcolors">${col("xBotA", "Colour")}${col("xBotB", "Second colour")}</div></div>`)}
     ${group("logo", "Logo", `
       <div class="vtoggles">${tog("xLogo", "Show the Lux Sonora logo")}</div>
@@ -195,6 +219,12 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xLineShape", "lineShape", Object.entries(LINE_SHAPES), false, () => vis()],
     ["xPathFill", "pathFill", Object.entries(PATH_FILLS), false, () => vis()],
     ["xPlaceStyle", "placeStyle", Object.entries(PLACE_STYLES)],
+    ["xPlaceNow", "placeNow", Object.entries(PLACE_NOW), false, () => vis()],
+    ["xLabelIn", "labelIn", Object.entries(LABEL_INS)],
+    ["xLabelOut", "labelOut", Object.entries(LABEL_OUTS)],
+    ["xLabelFill", "labelFill", Object.entries(LABEL_FILLS), false, () => vis()],
+    ["xLabelBeat", "labelBeat", Object.entries(LABEL_BEATS), false, () => vis()],
+    ["xRippleFill", "rippleFill", Object.entries(RIPPLE_FILLS), false, () => vis()],
     ["xNumberStyle", "numberStyle", Object.entries(NUMBER_STYLES), false, () => { V.numbers = V.numberStyle !== "none"; }],
     ["xTitleAlign", "titleAlign", Object.entries(ALIGNS), false, () => { V.pointAlign = V.titleAlign === "auto" ? "left" : V.titleAlign; }],
     ["xTextStyle", "textStyle", Object.entries(TEXT_STYLES), false, () => vis()],
@@ -216,7 +246,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const segs = {};
   for (const [id, key, items, num, after] of SEGS) segs[id] = makeSeg($("#" + id), items, String(V[key]), v => { V[key] = num === "size" ? (v === "original" ? v : Number(v)) : num ? Number(v) : v; if (after) after(); look(); });
   // ---- selects
-  const SELS = [["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
+  const SELS = [["xLabelPos", "labelPos"], ["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
   for (const [id, key, after] of SELS) $("#" + id).addEventListener("change", e => { V[key] = e.target.value; if (after) after(V[key]); vis(); look(); });
   // ---- sliders on P.video: [host, definition]
   const pct = (key, label, def, max = 1, help) => ({ key, label, min: 0, max, step: 0.05, def, scale: 100, unit: "%", help });
@@ -225,8 +255,8 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xCamMove", { key: "camMove", label: "Move time", min: 0.4, max: 4, step: 0.1, def: 1.6, unit: "s", dec: 1, help: "How long the camera takes to move from one spot to the next." }],
     ["#xCamMove", pct("camSmooth", "Smoothing", 0.45, 1, "Higher values turn the camera moves into one long, smooth glide.")],
     ["#xDrift", { key: "drift", label: "Slow push-in", min: 0, max: 0.3, step: 0.01, def: 0, scale: 100, unit: "%", help: "A slow zoom in over the whole song." }],
-    ["#xPathOps", pct("pathDone", "Travelled", 1)],
-    ["#xPathOps", pct("pathAhead", "Still ahead", 0.25)],
+    ["#xPathOps", pct("pathDone", "Line opacity", 1, 1, "The opacity of the part of the path already travelled.")],
+    ["#xPathOps", pct("pathAhead", "Opacity ahead", 0.25, 1, "The opacity of the part still ahead (with From the start).")],
     ["#xCoverTime", { key: "coverTime", label: "Which second", min: 0, max: 60, step: 0.5, def: 5, unit: "s", dec: 1, help: "The frame at this moment becomes the cover." }],
     ["#xCoverHold", { key: "coverHold", label: "Cover stays for", min: 0, max: 3, step: 0.1, def: 0.5, unit: "s", dec: 1, help: "Then it blends into the video." }],
     ["#xCurve", pct("curve", "How much it curves", 0.3)],
@@ -237,9 +267,21 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xTint", pct("tintAmt", "Tint amount", 0, 0.6)],
     ["#xSpacing", { key: "letterSpace", label: "Letter spacing", min: -0.05, max: 0.4, step: 0.01, def: 0, scale: 100, unit: "%" }],
     ["#xWidth", { key: "lineWidth", label: "Line width", min: 1, max: 12, step: 0.5, def: 3, unit: "px", dec: 1 }],
-    ["#xPlaceOps", pct("placeDone", "Visited", 0.7)],
-    ["#xPlaceOps", pct("placeAhead", "Still ahead", 0.35)],
-    ["#xStrength", pct("strength", "Effect strength", 0.6, 1, "How strong the effects are. They're a bit stronger at the climax.")],
+    ["#xPlaceLook", { key: "placeFill", label: "Circle fill", min: 0, max: 3, step: 0.05, def: 1, scale: 100, unit: "%", help: "How much the circles are filled with their colour." }],
+    ["#xPlaceLook", { key: "placeLineW", label: "Circle line", min: 0.4, max: 3, step: 0.05, def: 1, scale: 100, unit: "%", help: "How thick the line of the circles is." }],
+    ["#xPlaceNowOps", pct("placeNowOp", "Opacity, where the eye is", 1, 1, "The marker of the place the eye is on. Lower it to let the picture show through.")],
+    ["#xLabelTime", { key: "labelInSecs", label: "Appears in", min: 0.05, max: 2, step: 0.05, def: 0.35, unit: "s", dec: 2 }],
+    ["#xLabelTime", { key: "labelOutSecs", label: "Leaves in", min: 0.05, max: 3, step: 0.05, def: 0.5, unit: "s", dec: 2 }],
+    ["#xLabelTime", { key: "labelHold", label: "Stays for", min: 0, max: 12, step: 0.5, def: 0, unit: "s", dec: 1, help: "At 0 it stays while the eye is on the place. Otherwise it leaves after this long, or when the eye leaves if that comes first." }],
+    ["#xLabelLook", { key: "labelSize", label: "Label size", min: 0.6, max: 2, step: 0.05, def: 1, scale: 100, unit: "%" }],
+    ["#xLabelLook", pct("labelBgOp", "Background opacity", 0.78)],
+    ["#xLabelBeatAmt", pct("labelBeatAmt", "How much", 0.5, 1, "How far the label grows or stretches on each beat.")],
+    ["#xBarShape", { key: "barThick", label: "Thickness", min: 0.2, max: 4, step: 0.05, def: 1, scale: 100, unit: "%", help: "How thick the bars, the spectrum's columns or the waveform's line are." }],
+    ["#xBarShape", { key: "barGain", label: "Amplitude", min: 0.2, max: 5, step: 0.05, def: 1, scale: 100, unit: "%", help: "How tall the sound makes it. Above 100% it can go past its own height." }],
+    ["#xBarShape", { key: "barGap", label: "Spacing", min: 0, max: 4, step: 0.05, def: 1, scale: 100, unit: "%", help: "The space between the sound bars." }],
+    ["#xPlaceOps", pct("placeDone", "Opacity, visited", 0.7, 1, "The opacity of the places the eye has already left.")],
+    ["#xPlaceOps", pct("placeAhead", "Opacity, ahead", 0.35, 1, "The opacity of the places the eye has not reached yet (with From the start).")],
+    ["#xStrength", pct("strength", "Effect intensity", 0.6, 1, "How strong the effects on the place are. They're a bit stronger at the climax.")],
     ["#xReact", pct("react", "React to the sound", 0.4, 1, "Makes the line and the circles pulse with the beat.")],
     ["#xGradeAmt", pct("gradeAmt", "Grade amount", 0.6)],
     ["#xVignette", pct("vignette", "Vignette", 0.25)],
@@ -315,9 +357,10 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   $("#xEditReset").addEventListener("click", () => { const D = defaultVideo(); V.edit = defaultEdit(); for (const k of ["grade", "gradeAmt", "vignette", "vigColor", "tintColor", "tintAmt", "grain", "dim"]) V[k] = D[k]; sync(); look(); });
   function syncEdit() { for (const [, d] of EDS) esl[d.key].set(ED[d.key] ?? d.def, false); curveSeg.set(curveCh); drawCurve(); }
   // ---- toggles: [id, object, key]
-  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"],
+  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"], ["#xLabelLine", () => V, "labelLine"], ["#xBarRound", () => V, "barRound"],
     ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xLogo", () => V, "logo"], ["#xPatch", () => V, "patch"], ["#xPatchKeep", () => V, "patchKeep"], ["#xLogoAnim", () => V, "logoAnim"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
+  $("#xLabelOffReset").addEventListener("click", () => { V.labelOff = {}; vis(); look(); });
   // ---- colours
   const themeBtns = [...host.querySelectorAll("#xTheme button")];
   const showTheme = () => themeBtns.forEach(b => b.setAttribute("aria-checked", String(b.dataset.v === V.theme)));
@@ -327,8 +370,8 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     syncColors(); showTheme(); look();
   });
   // every colour picker on P.video: [input, key, part of the theme]
-  const COLS = [["#xPathCol", "pathColor", true], ["#xPointCol", "pointColor", true], ["#xTitleCol", "titleColor"], ["#xSubCol", "subColor"], ["#xEyeCol", "eyeColor"],
-    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"], ["#xLogoCol", "logoColor"], ["#xRippleCol", "rippleColor"],
+  const COLS = [["#xPathCol", "pathColor", true], ["#xPointCol", "pointColor", true], ["#xPlaceCol", "pointColor", true], ["#xTitleCol", "titleColor"], ["#xSubCol", "subColor"], ["#xEyeCol", "eyeColor"],
+    ["#xLabelCol", "labelColor"], ["#xLabelBg", "labelBg"], ["#xLabelBg2", "labelBg2"], ["#xRippleCol2", "rippleColor2"], ["#xBotA", "bottomColor"], ["#xBotB", "bottomColor2"], ["#xLogoCol", "logoColor"], ["#xRippleCol", "rippleColor"],
     ["#xPathColA", "pathColor", true], ["#xPathCol2", "pathColor2"], ["#xClimaxCol", "climaxColor"], ["#xVigCol", "vigColor"], ["#xTintCol", "tintColor"], ["#xSpotCol", "spotColor"], ["#xBoxCol", "boxColor"]];
   const syncColors = () => { for (const [id, key] of COLS) $(id).value = V[key] || "#ffffff"; };
   for (const [id, key, theme] of COLS) $(id).addEventListener("input", e => { V[key] = e.target.value; if (theme) { V.theme = "custom"; showTheme(); } look(); });
@@ -401,7 +444,15 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     sl.pathDone.el.hidden = V.path === "off"; sl.pathAhead.el.hidden = V.path !== "all";
     sl.placeDone.el.hidden = V.points === "off" || V.points === "current"; sl.placeAhead.el.hidden = V.points !== "all";
     sl.gradeAmt.el.hidden = V.grade === "none";
-    $("#xLabelAuto").hidden = V.labels !== "auto"; $("#xLabelCustom").hidden = V.labels !== "custom";
+    $("#xLabelOffReset").hidden = !V.labelOff || !Object.keys(V.labelOff).length;
+    sl.labelBeatAmt.el.hidden = !V.labelBeat || V.labelBeat === "off";
+    $("#l_xLabelBg2").hidden = !["gradient", "pulse", "cycle"].includes(V.labelFill || "solid");
+    $("#l_xLabelBg span").textContent = (V.labelFill || "solid") === "solid" ? "Background" : "First colour";
+    $("#l_xRippleCol2").hidden = (V.rippleFill || "solid") !== "gradient"; $("#l_xRippleCol").hidden = V.rippleFill === "rainbow";
+    sl.barGap.el.hidden = V.bottom !== "bars"; sl.barGain.el.hidden = V.bottom === "line"; $("#xBarRound").closest(".vtoggles").hidden = V.bottom === "none";
+    $("#xLabelAuto").hidden = V.labels !== "auto"; $("#xLabelCustom").hidden = V.labels !== "custom"; $("#xLabelOpts").hidden = !V.labels || V.labels === "off";
+    sl.placeNowOp.el.hidden = V.points === "off";
+    $("#xLineNote").textContent = { particles: "A faint thread with bright dots travelling along it.", constellation: "A hairline between the places and a small star on each.", electric: "A zigzag that flickers. Suits electronic styles.", marching: "Dashes that move forward along the path.", comet: "A tail behind the eye that fades with the distance.", tapered: "Thin where it started, full width at the eye.", brush: "Three thin strokes, like a hand-drawn line." }[V.line || "glow"] || "";
     $("#xTextBox").hidden = V.caption === "none"; $("#xCreditBox").hidden = !V.endCard;
     $("#xSubTextBox").hidden = V.subtitle !== "custom"; sl.titleSecs.el.hidden = V.titleWhen !== "intro";
     $("#l_xSubCol").hidden = V.subtitle === "none" && V.caption !== "points";
@@ -414,7 +465,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     const ln = V.line || "glow";
     sl.curve.el.hidden = V.lineShape !== "curved";
     $("#xDashBox").hidden = !["dashed", "dotted", "marching"].includes(ln); sl.dashLen.el.hidden = ln === "dotted";
-    sl.glow.el.hidden = !["glow", "neon"].includes(ln);
+    sl.glow.el.hidden = !["glow", "neon", "particles", "constellation", "electric"].includes(ln);
     $("#l_xPathCol2").hidden = (V.pathFill || "solid") === "solid";
     $("#l_xPathColA span").textContent = V.pathFill === "gradient" ? "Start" : V.pathFill === "story" ? "Calm" : "Colour";
     $("#l_xPathCol2 span").textContent = V.pathFill === "gradient" ? "End" : "Tense";
@@ -422,7 +473,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#xBoxCols").hidden = !["box", "outline"].includes(V.textStyle || "shadow");
     $("#xPosReset").hidden = !(V.titleXY || V.pointXY);
     $("#xPatchBox").hidden = !V.patch; $("#xRippleBox").hidden = !V.ripple || V.ripple === "off";
-    $("#xRippleLookNote").textContent = { lens: "The picture is magnified a little inside the wave, like water.", rings: "Thin rings spread out, nothing else changes.", dots: "A grid of dots lights up as the wave passes, like an LED wall. Suits electronic styles." }[V.rippleLook || "lens"] || "";
+    $("#xRippleLookNote").textContent = { lens: "The picture is magnified a little inside the wave, like water.", rings: "Thin rings spread out, nothing else changes.", dots: "A grid of dots lights up as the wave passes, like an LED wall. Suits electronic styles.", squares: "Square tiles light up and grow as the wave passes.", grid: "The lines of a grid light up where the wave is passing.", matrix: "Characters flicker on a grid as the wave passes; the brightest turn white." }[V.rippleLook || "lens"] || "";
     $("#xLogoBox").hidden = !V.logo; $("#xLogoReset").hidden = !V.logoXY;
     $("#xBarBox").hidden = V.bottom === "none"; $("#xBarReset").hidden = !V.barXY; $("#xCoverCleanBox").hidden = V.cover === "image";
     $("#xCoverBox").hidden = V.cover === "off"; sl.coverTime.el.hidden = V.cover !== "time"; $("#xCoverPickBox").hidden = V.cover !== "image";

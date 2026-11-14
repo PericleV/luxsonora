@@ -160,7 +160,7 @@ async function loadFile(file) {
     $("#demo").value = "";
     ORIG = { file };
     setBase(base, info);
-    NEW_SONG_PENDING = true; // once the image is analysed, the New song dialog opens
+    NEW_SONG_PENDING = "frame"; // once the image is analysed: frame it, then the New song dialog
     if (info.large) flash(`Large image (${info.mp.toFixed(0)} MP, ${mb.toFixed(0)} MB): it was reduced to ${base.w} × ${base.h} for display and analysis.`);
     if (info.pages > 1) flash(`This TIFF has ${info.pages} pages; the first one is used.`);
   } catch (e) {
@@ -209,17 +209,20 @@ function recompute() {
   refreshStatus();
   checkRecipe();
   scheduleSave();
-  if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { NEW_SONG_PENDING = false; openNewSong(true); }
+  // a new picture: first its frame (whole or a part), then the New song dialog
+  if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { const step = NEW_SONG_PENDING; NEW_SONG_PENDING = false; if (step === "frame") openFrame(true); else openNewSong(true); }
   // Play pressed while a neural model was still working: start now that the piece is final
   if (WAIT_PLAY && SCORE && !jobsPending() && !dirty) { WAIT_PLAY = false; startPlayback(Player.pausedBeat >= SCORE.total ? 0 : Player.pausedBeat); }
   updatePlayBtn();
 }
 /* ============ Simple / Advanced, one status line, why a point sounds as it does ============ */
-const UI = { mode: store.get("uiMode") || "simple", samples: 0, failed: false };
+// two modes; the old Expert mode (your own rules) is part of Advanced now
+const UI = { mode: store.get("uiMode") === "simple" || !store.get("uiMode") ? "simple" : "advanced", samples: 0, failed: false };
 function applyUiMode(m) {
+  if (m !== "simple") m = "advanced";
   UI.mode = m; store.set("uiMode", m);
+  const lab = $("#uiModeLabel"); if (lab) lab.textContent = m === "simple" ? "Simple mode: the main controls" : "Advanced mode: every control, rule and your own rules";
   document.documentElement.classList.toggle("ui-simple", m === "simple");
-  document.documentElement.classList.toggle("ui-expert", m === "expert");
   if (UI_SEG) UI_SEG.set(m);
   requestAnimationFrame(() => { drawAll(); });
 }
@@ -276,7 +279,7 @@ function renderWhy() {
 /* ============ styles: groups and one-line descriptions for the dropdown ============ */
 const STYLE_GROUPS = [
   ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
-  ["Classical and film", ["classical", "baroque", "acappella", "movie", "cinematic", "epic"]],
+  ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
   ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
   ["Band", ["pop", "rock", "postrock", "folk", "metal"]],
   ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
@@ -478,6 +481,124 @@ function attention(contrast) {
   return contrast;
 }
 
+/* ============ Frame the picture: the whole image or a part of it ============ */
+// The first step after a picture is opened: keep it whole or drag a frame on it, free or at a
+// fixed shape (1:1, 4:5, 5:4, 16:9, 9:16). The frame becomes the analysis source's crop, so the
+// eye, the notes and the video all read only that part. It can be opened again from the Image card.
+const FRAME_SHAPES = [["whole", "Whole image", 0], ["free", "Free", 0], ["1:1", "1:1", 1], ["4:5", "4:5", 4 / 5], ["5:4", "5:4", 5 / 4], ["16:9", "16:9", 16 / 9], ["9:16", "9:16", 9 / 16]];
+// the whole working image as it is displayed, before any crop
+function framePreview(max = 900) {
+  const f = fitSize(BASE.w, BASE.h, max), w = Math.max(1, f.w), h = Math.max(1, f.h);
+  const data = resampleFloat(BASE.data, BASE.w, BASE.h, BASE.ch, w, h);
+  const range = BASE.kind === "data" ? dataRange(INFO, stats(BASE.data, BASE.ch, P.src.lo, P.src.hi), P.src) : null;
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").putImageData(new ImageData(processImage(data, w, h, BASE.ch, BASE.kind, range, P.src), w, h), 0, 0);
+  return c;
+}
+function openFrame(thenNewSong = false) {
+  if (!BASE) return;
+  const img = framePreview(), c0 = P.src.crop, MIN = 0.08;
+  let R = { x0: c0.l, y0: c0.t, x1: 1 - c0.r, y1: 1 - c0.b }, shape = c0.l || c0.r || c0.t || c0.b ? "free" : "whole";
+  const { body, close } = openInfo(thenNewSong ? "First, frame the picture" : "Frame the picture", `<div class="dlg-info frame">
+    <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. The eye, the notes and the video read only what is inside.</p>
+    <div class="chips" role="radiogroup" aria-label="Shape of the frame" id="frShapes">${FRAME_SHAPES.map(([k, n]) => `<button type="button" class="chip" role="radio" aria-checked="false" data-k="${k}">${n}</button>`).join("")}</div>
+    <div class="frwrap"><canvas id="frCv" aria-label="The picture with the frame; drag its corners, its edges or the whole frame"></canvas></div>
+    <p class="snote mono" id="frInfo" role="status"></p>
+    <div class="ns-actions"><button type="button" class="btn btn-primary" id="frOk"></button><button type="button" class="btn" id="frWhole">Use the whole image</button></div></div>`, "dlg-frame");
+  const $b = s => body.querySelector(s), cv = $b("#frCv"), g = cv.getContext("2d");
+  // the frame's shape in fractions of the image: width / height of the frame × the image's own shape
+  const kOf = key => { const r = (FRAME_SHAPES.find(x => x[0] === key) || [])[2] || 0; return r ? (r * BASE.h) / BASE.w : 0; };
+  const clampR = () => { R.x0 = clamp(R.x0); R.y0 = clamp(R.y0); R.x1 = clamp(R.x1); R.y1 = clamp(R.y1); };
+  const setShape = key => {
+    shape = key; const k = kOf(key);
+    if (key === "whole") R = { x0: 0, y0: 0, x1: 1, y1: 1 };
+    else if (k) {
+      // the largest frame of that shape, centred where the frame is now
+      const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2; let w = 1, h = 1 / k; if (h > 1) { h = 1; w = k; }
+      const x0 = clamp(cx - w / 2, 0, 1 - w), y0 = clamp(cy - h / 2, 0, 1 - h); R = { x0, y0, x1: x0 + w, y1: y0 + h };
+    }
+    draw();
+  };
+  const draw = () => {
+    const wrap = cv.parentElement, maxW = Math.max(200, wrap.clientWidth), maxH = Math.max(160, Math.min(window.innerHeight * 0.5, 460)), sc = Math.min(maxW / img.width, maxH / img.height), w = Math.round(img.width * sc), h = Math.round(img.height * sc), dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.drawImage(img, 0, 0, w, h);
+    const x0 = R.x0 * w, y0 = R.y0 * h, x1 = R.x1 * w, y1 = R.y1 * h;
+    g.fillStyle = "rgba(4,6,10,0.62)"; g.fillRect(0, 0, w, y0); g.fillRect(0, y1, w, h - y1); g.fillRect(0, y0, x0, y1 - y0); g.fillRect(x1, y0, w - x1, y1 - y0);
+    g.strokeStyle = "rgba(255,255,255,0.35)"; g.lineWidth = 1; g.beginPath();
+    for (const f of [1 / 3, 2 / 3]) { g.moveTo(x0 + (x1 - x0) * f, y0); g.lineTo(x0 + (x1 - x0) * f, y1); g.moveTo(x0, y0 + (y1 - y0) * f); g.lineTo(x1, y0 + (y1 - y0) * f); }
+    g.stroke();
+    g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(x0 + 1, y0 + 1, Math.max(0, x1 - x0 - 2), Math.max(0, y1 - y0 - 2));
+    g.fillStyle = "#fff"; for (const [x, y] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) g.fillRect(clamp(x - 5, 0, w - 10), clamp(y - 5, 0, h - 10), 10, 10);
+    const whole = R.x0 < 1e-4 && R.y0 < 1e-4 && R.x1 > 1 - 1e-4 && R.y1 > 1 - 1e-4, pw = Math.round((R.x1 - R.x0) * INFO.w), ph = Math.round((R.y1 - R.y0) * INFO.h);
+    $b("#frInfo").textContent = whole ? `The whole image, ${INFO.w} × ${INFO.h} px` : `${pw} × ${ph} px of ${INFO.w} × ${INFO.h} (${Math.round((R.x1 - R.x0) * (R.y1 - R.y0) * 100)}% of the picture)`;
+    $b("#frOk").textContent = whole ? (thenNewSong ? "Continue with the whole image" : "Use the whole image") : thenNewSong ? "Continue with this frame" : "Use this frame";
+    $b("#frWhole").hidden = whole;
+    body.querySelectorAll("#frShapes .chip").forEach(b => b.setAttribute("aria-checked", String(b.dataset.k === shape)));
+  };
+  // dragging: a corner or an edge resizes (keeping the shape when one is chosen), inside moves
+  let drag = null;
+  const posOf = e => { const b = cv.getBoundingClientRect(); return { x: clamp((e.clientX - b.left) / b.width), y: clamp((e.clientY - b.top) / b.height), tx: 14 / b.width, ty: 14 / b.height }; };
+  const hit = p => {
+    const nx0 = Math.abs(p.x - R.x0) < p.tx, nx1 = Math.abs(p.x - R.x1) < p.tx, ny0 = Math.abs(p.y - R.y0) < p.ty, ny1 = Math.abs(p.y - R.y1) < p.ty, inX = p.x > R.x0 - p.tx && p.x < R.x1 + p.tx, inY = p.y > R.y0 - p.ty && p.y < R.y1 + p.ty;
+    const hx = inY ? (nx0 ? -1 : nx1 ? 1 : 0) : 0, hy = inX ? (ny0 ? -1 : ny1 ? 1 : 0) : 0;
+    if (hx || hy) return { hx, hy };
+    return p.x > R.x0 && p.x < R.x1 && p.y > R.y0 && p.y < R.y1 ? { move: true } : null;
+  };
+  cv.addEventListener("pointerdown", e => {
+    const p = posOf(e); let h = hit(p);
+    // a press outside the frame starts a new one from there
+    if (!h) { R = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; h = { hx: 1, hy: 1 }; if (shape === "whole") shape = "free"; }
+    drag = { ...h, p0: p, R0: { ...R } }; cv.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  cv.addEventListener("pointermove", e => {
+    const p = posOf(e);
+    if (!drag) { const h = hit(p); cv.style.cursor = !h ? "crosshair" : h.move ? "move" : h.hx && h.hy ? (h.hx === h.hy ? "nwse-resize" : "nesw-resize") : h.hx ? "ew-resize" : "ns-resize"; return; }
+    const A0 = drag.R0, k = kOf(shape);
+    if (drag.move) {
+      const w = A0.x1 - A0.x0, h = A0.y1 - A0.y0, x0 = clamp(A0.x0 + p.x - drag.p0.x, 0, 1 - w), y0 = clamp(A0.y0 + p.y - drag.p0.y, 0, 1 - h);
+      R = { x0, y0, x1: x0 + w, y1: y0 + h };
+    } else {
+      if (shape === "whole") shape = "free";
+      // the fixed side of the frame stays; the dragged one follows the pointer
+      const ax = drag.hx < 0 ? A0.x1 : A0.x0, ay = drag.hy < 0 ? A0.y1 : A0.y0, dx = drag.hx || 0, dy = drag.hy || 0;
+      let w = dx ? Math.max(MIN, dx * (p.x - ax)) : A0.x1 - A0.x0, h = dy ? Math.max(MIN, dy * (p.y - ay)) : A0.y1 - A0.y0;
+      const roomX = dx ? (dx > 0 ? 1 - ax : ax) : 1, roomY = dy ? (dy > 0 ? 1 - ay : ay) : 1;
+      if (k) {
+        if (dx && dy) { w = Math.min(w, h * k); } else if (dy) w = h * k;
+        // an edge keeps the frame centred across; a corner grows from the opposite corner
+        const cx = (A0.x0 + A0.x1) / 2, cy = (A0.y0 + A0.y1) / 2, maxW = dx ? roomX : 2 * Math.min(cx, 1 - cx), maxH = dy ? roomY : 2 * Math.min(cy, 1 - cy);
+        w = Math.min(w, maxW, maxH * k); h = w / k;
+        const x0 = dx ? (dx > 0 ? ax : ax - w) : cx - w / 2, y0 = dy ? (dy > 0 ? ay : ay - h) : cy - h / 2;
+        R = { x0, y0, x1: x0 + w, y1: y0 + h };
+      } else {
+        w = Math.min(w, roomX); h = Math.min(h, roomY);
+        R = { x0: dx ? (dx > 0 ? ax : ax - w) : A0.x0, y0: dy ? (dy > 0 ? ay : ay - h) : A0.y0, x1: 0, y1: 0 };
+        R.x1 = dx ? R.x0 + w : A0.x1; R.y1 = dy ? R.y0 + h : A0.y1;
+      }
+    }
+    clampR(); draw();
+  });
+  const end = () => { if (!drag) return; drag = null; if (R.x1 - R.x0 < MIN || R.y1 - R.y0 < MIN) setShape(shape === "free" ? "whole" : shape); };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  $b("#frShapes").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) setShape(b.dataset.k); });
+  const apply = whole => {
+    const r4 = v => Math.round(v * 1e4) / 1e4, crop = whole ? { l: 0, r: 0, t: 0, b: 0 } : { l: r4(R.x0), r: r4(1 - R.x1), t: r4(R.y0), b: r4(1 - R.y1) };
+    const changed = ["l", "r", "t", "b"].some(q => Math.abs(crop[q] - P.src.crop[q]) > 1e-4);
+    close();
+    if (changed) {
+      // another part of the picture: the places start again
+      Object.assign(P.src.crop, crop); PATH.mode = "auto"; PATH.points = []; SEL = 0; HIST = []; FUT = [];
+      for (const q of ["l", "r", "t", "b"]) if (SRC_CTL["srcCrop." + q]) SRC_CTL["srcCrop." + q].set(P.src.crop[q], false);
+      if (thenNewSong) NEW_SONG_PENDING = true;
+      applySource(); renderImageInfo();
+    } else if (thenNewSong) openNewSong(true);
+  };
+  $b("#frOk").addEventListener("click", () => apply(false));
+  $b("#frWhole").addEventListener("click", () => apply(true));
+  draw(); requestAnimationFrame(draw);
+}
+
 /* ============ New song: the guided start (genre, duration, points; automatic or by hand) ============ */
 let NEW_SONG_PENDING = false;
 // a suggested number of places from the image: richer images get more (4-14), within what the duration fits
@@ -609,7 +730,7 @@ function showWelcome() {
       <li><b>Play with it</b><span>Drag the spots around, pick the climax, then save the song or a video of it.</span></li>
     </ol>
     <ul class="welcome-points">
-      <li>29 styles, from ambient, nature lo-fi, classical and an a cappella choir to jazz, reggae, rock, metal, techno and 8-bit</li>
+      <li>28 styles, from ambient, nature lo-fi and classical to jazz, reggae, rock, metal, techno and 8-bit</li>
       <li>Real recorded instruments, plus optional AI models (Magenta) for melodies and grooves that feel more human</li>
       <li>It all runs in your browser, so your picture stays on your device</li>
       <li>Same picture, same settings, same song. Save the project and anyone can open it again</li>
@@ -737,8 +858,8 @@ function showHowItWorks() {
     <h3>5. How it is played</h3>
     <p>After the notes are written, they are played with some life: each note of a place reads the picture around it and is a little louder or softer, the first beat of the bar gets an accent, phrases rise and relax, each instrument swells with the story (expression, CC11) and saturated places get more vibrato (CC1). A light humanizer moves notes by a few milliseconds and varies their length and velocity, the same way every time. All of it is in Piece, Advanced, Performance, and goes into the MIDI file.</p>
 
-    <h3>6. Your own rules (Expert)</h3>
-    <p>In Expert mode you can add rules on the places the eye finds: at one place, in a part of the song, where the picture has a colour, inside a zone you draw, or between two seconds, you can add an instrument, silence a track, choose the chord, move the melody by octaves, or play louder or softer. Your rules win over the style's, and stay in harmony: chords come from the key and the melody is fitted to them.</p>
+    <h3>6. Your own rules (Advanced)</h3>
+    <p>In Advanced you can add rules on the places the eye finds: at one place, in a part of the song, where the picture has a colour, inside a zone you draw, or between two seconds, you can add an instrument, silence a track, choose the chord, move the melody by octaves, or play louder or softer. Your rules win over the style's, and stay in harmony: chords come from the key and the melody is fitted to them.</p>
 
     <h3>7. The AI models</h3>
     <p>They are optional. Each one downloads the first time you choose it (a bar at the top shows it loading), then runs on your device. Without a connection the app falls back to its own rules and still makes a complete song.</p>
@@ -1411,7 +1532,7 @@ function renderLanes() {
 let ZONE = null; // { id, drawing }: the rule whose zone is being drawn
 const MAIN_LAYERS = () => [["lead", "Melody"], ["harm", "Harmony"], ["bass", "Bass"], ["pad", "Pad"], ["perc", "Rhythm"], ...((SCORE && SCORE.extra) || []).filter(L => !L.only).map(L => [L.id, ROLES[L.role].name + (L.name ? ": " + L.name : "")])];
 function drawZones(g, w, h) {
-  if (UI.mode !== "expert") return;
+  if (UI.mode !== "advanced") return;
   const acc = css("--accent") || "#6D5DF0";
   (P.expert || []).forEach((r, k) => {
     const z = r.when && r.when.type === "zone" && r.when.zone; if (!z) return;
@@ -1581,14 +1702,15 @@ const SRC_SLIDERS = {
     { key: "gamma", label: "Gamma", min: 0.2, max: 5, step: 0.01, def: 1, dec: 2, help: "Above 1 brightens mid-tones, below 1 darkens them." }
   ],
   srcCrop: [
-    { key: "l", label: "Left", min: 0, max: 0.45, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 },
-    { key: "r", label: "Right", min: 0, max: 0.45, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 },
-    { key: "t", label: "Top", min: 0, max: 0.45, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 },
-    { key: "b", label: "Bottom", min: 0, max: 0.45, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 }
+    { key: "l", label: "Left", min: 0, max: 0.9, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 },
+    { key: "r", label: "Right", min: 0, max: 0.9, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 },
+    { key: "t", label: "Top", min: 0, max: 0.9, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 },
+    { key: "b", label: "Bottom", min: 0, max: 0.9, step: 0.005, def: 0, scale: 100, unit: "%", dec: 1 }
   ]
 };
 const SRC_CTL = {};
 function initSourceControls() {
+  { const fb = $("#frameBtn"); if (fb) fb.addEventListener("click", () => openFrame(false)); }
   for (const host of Object.keys(SRC_SLIDERS)) {
     const el = $("#" + host), target = host === "srcCrop" ? P.src.crop : P.src;
     for (const d of SRC_SLIDERS[host]) { const sl = makeSlider({ ...d, key: d.key }, target, () => scheduleSource()); SRC_CTL[host + "." + d.key] = sl; el.appendChild(sl.el); }
@@ -2269,12 +2391,14 @@ function initVideoDrag() {
   const cv = $("#stage");
   let drag = null;
   const frameAt = e => { const p = stagePos(e); return PV ? { x: (p.x * PV.W) / PV.w, y: (p.y * PV.H) / PV.h } : null; };
-  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; for (const k of ["title", "point", "logo", "bar"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
+  // a label under the pointer (labels first: they are drawn over everything), else the title, the chord line, the logo or the sound display
+  const labelAt = f => { const H = VSCENE && VSCENE.hit; return (H && f && H.labels ? [...H.labels].reverse().find(b => f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) : null) || null; };
+  const hitAt = f => { const H = VSCENE && VSCENE.hit; if (!H || !f) return null; if (labelAt(f)) return "label"; for (const k of ["title", "point", "logo", "bar"]) { const b = H[k]; if (b && f.x >= b.x0 && f.x <= b.x1 && f.y >= b.y0 && f.y <= b.y1) return k; } return null; };
   cv.addEventListener("pointerdown", e => {
     if (!exportView() || !VSCENE || e.button !== 0) return;
     const f = frameAt(e), k = hitAt(f); if (!k) return;
-    const b = VSCENE.hit[k];
-    drag = { k, dx: b.ax - f.x, dy: b.ay - f.y, align: b.align };
+    const b = k === "label" ? labelAt(f) : VSCENE.hit[k];
+    drag = { k, dx: b.ax - f.x, dy: b.ay - f.y, align: b.align, key: b.key, px: b.px, py: b.py };
     if (k === "title" && !P.video.titleXY) P.video.titleAlign = b.align;
     cv.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation();
   }, true);
@@ -2283,6 +2407,8 @@ function initVideoDrag() {
     const f = frameAt(e); if (!f) return;
     if (!drag) { cv.style.cursor = hitAt(f) ? "move" : ""; return; }
     const W = PV.W, H = PV.H, s = safeArea(P.video.shape), pad = 44 * (Math.min(W, H) / 1080);
+    // a label keeps its distance from its place (in the frame's short side), so it follows the place
+    if (drag.k === "label") { const M = Math.min(W, H); P.video.labelOff = { ...(P.video.labelOff || {}), [drag.key]: { dx: (f.x + drag.dx - drag.px) / M, dy: (f.y + drag.dy - drag.py) / M } }; drawStage(); return; }
     let x = (f.x + drag.dx) / W, y = (f.y + drag.dy) / H;
     const xs = [0.5, 1 / 3, 2 / 3, Math.max(pad / W, s.left), 1 - Math.max(pad / W, s.right)], ys = [0.5, 1 / 3, 2 / 3, Math.max(pad / H, s.top) + 0.04, 1 - Math.max(pad / H, s.bottom)];
     const guides = [];
@@ -2379,7 +2505,7 @@ export function init() {
   const styleSel = $("#styleSel");
   styleSel.innerHTML = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}">${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
   const styleNote = () => { $("#styleNote").textContent = STYLE_DESC[P.style] || ""; renderStyleSuggest(); };
-  STYLE_SEG = { set(v) { styleSel.value = v; styleNote(); } };
+  STYLE_SEG = { set(v) { if (STYLES[v] && !styleSel.querySelector(`option[value="${v}"]`)) styleSel.insertAdjacentHTML("beforeend", `<option value="${v}">${esc(STYLES[v].name)}</option>`); styleSel.value = v; styleNote(); } };
   STYLE_SEG.set(P.style);
   styleSel.addEventListener("change", () => {
     const v = styleSel.value; P.style = v; styleNote(); SL.reverb.set(STYLES[v].reverb, false); applyMixLive();
@@ -2406,7 +2532,7 @@ export function init() {
   makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; drawStage(); });
   // Simple keeps the image and the eye map; the analysis views are in Advanced
   for (const k of ["edge", "reg", "cov"]) { const b = $(`#viewSeg [data-v="${k}"]`); if (b) b.classList.add("adv-only"); }
-  UI_SEG = makeSeg($("#uiModeSeg"), [["simple", "Simple"], ["advanced", "Advanced"], ["expert", "Expert"]], UI.mode, applyUiMode);
+  UI_SEG = makeSeg($("#uiModeSeg"), [["simple", "Simple"], ["advanced", "Advanced"]], UI.mode, applyUiMode);
   $("#toAdvanced").addEventListener("click", () => applyUiMode("advanced"));
   applyUiMode(UI.mode);
   initAppearance();

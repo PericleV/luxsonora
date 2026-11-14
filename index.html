@@ -94,6 +94,7 @@
 
     <aside class="inspector" aria-label="Inspector">
       <div class="splitter splitter-v" id="splitInsp" role="separator" aria-orientation="vertical" aria-label="Width of the panel (drag, or use the arrow keys; double-click to reset)" title="Drag to resize; double-click to reset" tabindex="0"></div>
+      <div class="modebar"><span class="sub" id="uiModeLabel" role="status">Simple mode</span><div class="seg seg-sm" id="uiModeSeg" role="radiogroup" aria-label="Simple or Advanced controls"></div></div>
       <div class="tabs" role="tablist" aria-label="Inspector">
         <button type="button" role="tab" id="tab-piece" aria-selected="true" aria-controls="pan-piece">Piece</button>
         <button type="button" role="tab" id="tab-point" aria-selected="false" aria-controls="pan-point" tabindex="-1">Focus point</button>
@@ -102,7 +103,6 @@
       </div>
       <div class="panels">
         <div role="tabpanel" id="pan-piece" aria-labelledby="tab-piece" class="panel">
-          <div class="modebar"><span class="sub">Controls</span><div class="seg seg-sm" id="uiModeSeg" role="radiogroup" aria-label="How many controls"></div></div>
           <section class="card" aria-labelledby="hMusic"><h3 id="hMusic">Music</h3>
           <div class="field"><label class="flabel" for="styleSel">Style</label><span class="select"><select id="styleSel"></select></span><div class="sugg" id="styleSuggest"></div><p class="snote" id="styleNote"></p></div>
           <div class="field"><div class="flabel" id="lblDur">Duration</div><div class="seg" id="durSeg" role="radiogroup" aria-labelledby="lblDur"></div></div>
@@ -115,6 +115,7 @@
           </section>
           <section class="card" aria-labelledby="hImage"><h3 id="hImage">Image</h3>
             <div class="imginfo" id="imgInfo"></div>
+            <div class="field"><button type="button" class="btn" id="frameBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2v16h16M2 6h16v16"/></svg>Frame or crop the picture</button></div>
           <div class="field"><label class="flabel" for="placeSel">Where the eye looks</label><span class="select"><select id="placeSel"></select></span><p class="snote" id="placeNote" role="status"></p></div>
           <details class="adv adv-only" data-adv="source" id="srcBox">
             <summary>Analysis source</summary>
@@ -136,7 +137,7 @@
               <p class="snote">From the area: each circle takes the size of the spot that draws the eye there, small for a sharp detail, large for a wide even area. The circle is the part of the picture that place reads, so its size also shapes the sound.</p></div>
             <div id="sBasic" class="sliders"></div>
           </section>
-          <section class="card expert-only" aria-labelledby="hExpert"><h3 id="hExpert">Expert rules</h3>
+          <section class="card adv-only" aria-labelledby="hExpert"><h3 id="hExpert">Your own rules</h3>
             <p class="sub">Your own rules on the places the eye finds: when a condition is met, the music does what you ask. Your rules win over the style's, and stay in harmony: chords come from the key and the melody is fitted to them.</p>
             <ol class="xrules" id="expertList"></ol>
             <button type="button" class="btn" id="expertAdd"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a rule</button>

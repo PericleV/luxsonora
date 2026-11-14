@@ -8,7 +8,8 @@ import { clamp } from "../core/util.js";
 export const LINE_SHAPES = { straight: "Straight", curved: "Curved" };
 export const LINE_STYLES = {
   solid: "Solid", glow: "Glow", neon: "Neon", dashed: "Dashed", dotted: "Dotted", marching: "Marching",
-  tapered: "Tapered", comet: "Comet", brush: "Brush", arrows: "Arrows", double: "Double"
+  tapered: "Tapered", comet: "Comet", brush: "Brush", arrows: "Arrows", double: "Double",
+  particles: "Particles", constellation: "Constellation", electric: "Electric"
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -128,6 +129,42 @@ export function drawPath(g, geo, X, Y, o, u, sec, parts, hexA, colorAt = null) {
           g.moveTo(px - Math.cos(ang - 0.6) * s, py - Math.sin(ang - 0.6) * s); g.lineTo(px, py); g.lineTo(px - Math.cos(ang + 0.6) * s, py - Math.sin(ang + 0.6) * s);
           g.stroke();
         }
+        break;
+      }
+      case "particles": {
+        // a faint thread with bright dots travelling along it, the way the eye went
+        g.lineWidth = Math.max(1, w * 0.35); g.strokeStyle = hexA(col, 0.35 * a); stroke(g, pts);
+        const span = part.f1 - part.f0, gap = 0.22, shift = (sec * 0.35) % gap;
+        g.fillStyle = hexA(col, 0.95 * a); g.shadowColor = hexA(col, 0.9 * a); g.shadowBlur = 10 * u * glow;
+        for (let f = part.f0 + shift; f <= part.f1 + 1e-9 && span > 0; f += gap) { const p = geo.at(Math.min(f, geo.n - 1)); g.beginPath(); g.arc(X(p.x), Y(p.y), w * 0.75, 0, Math.PI * 2); g.fill(); }
+        break;
+      }
+      case "constellation": {
+        // a hairline between the places and a small four-pointed star on each, twinkling slowly
+        g.lineWidth = Math.max(1, w * 0.3); g.strokeStyle = hexA(col, 0.7 * a); stroke(g, pts);
+        g.fillStyle = hexA(col, a); g.shadowColor = hexA(col, a); g.shadowBlur = 12 * u * glow;
+        for (let j = Math.ceil(part.f0 - 1e-9); j <= part.f1 + 1e-9; j++) {
+          const p = geo.at(Math.min(j, geo.n - 1)), px = X(p.x), py = Y(p.y), s = w * (2.6 + 0.7 * Math.sin(sec * 2.2 + j * 1.7));
+          g.beginPath();
+          for (let q = 0; q < 8; q++) { const ang = (q * Math.PI) / 4, rr = q % 2 ? s * 0.32 : s; g[q ? "lineTo" : "moveTo"](px + Math.cos(ang) * rr, py + Math.sin(ang) * rr); }
+          g.closePath(); g.fill();
+        }
+        break;
+      }
+      case "electric": {
+        // a zigzag that flickers: the line jumps sideways by a few widths, twelve times a second
+        const tick = Math.floor(sec * 12);
+        for (let s = 0; s < 2; s++) {
+          const off = pts.map((p, k) => {
+            if (k === 0 || k === pts.length - 1) return [p[0], p[1]];
+            const q = pts[k + 1], r = pts[k - 1], dx = q[0] - r[0], dy = q[1] - r[1], L = Math.hypot(dx, dy) || 1;
+            const j = noise(Math.round(p[2] * 60) + tick * 7, s + 3) * w * (s ? 2.6 : 1.4);
+            return [p[0] - (dy / L) * j, p[1] + (dx / L) * j];
+          });
+          g.shadowColor = hexA(col, a); g.shadowBlur = (s ? 22 : 8) * u * glow; g.lineJoin = "miter";
+          g.lineWidth = Math.max(1, w * (s ? 0.5 : 0.8)); g.strokeStyle = s ? hexA(col, 0.55 * a) : `rgba(255,255,255,${0.9 * a})`; stroke(g, off);
+        }
+        g.lineJoin = "round";
         break;
       }
       default: stroke(g, pts);

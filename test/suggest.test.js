@@ -44,3 +44,12 @@ describe("style suggestion", () => {
     expect(t.some(s => ["synthwave", "electronic"].includes(s))).toBe(true);
   });
 });
+
+// A style kept in the code but not offered yet is never suggested.
+import { HIDDEN_STYLES } from "../src/core/theory.js";
+describe("hidden styles", () => {
+  it("are real styles, kept out of the suggestions", () => {
+    for (const s of HIDDEN_STYLES) expect(STYLES[s], s).toBeTruthy();
+    for (const seed of [1, 2, 3, 5, 7, 11, 13]) for (const x of suggestStyles(analyze(synthImage(160, 120, seed)), 28)) expect(HIDDEN_STYLES.has(x.style)).toBe(false);
+  });
+});

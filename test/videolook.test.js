@@ -115,3 +115,40 @@ describe("sound analysis", () => {
     expect(gifRange({ total: 6, tl: [{ t0: 5, section: "climax" }] }, "climax")).toEqual([0, 6]);
   });
 });
+
+// Labels with their own animation, the place the eye is on, three more lines.
+import { PLACE_NOW, LABEL_INS, LABEL_OUTS, LABEL_POS } from "../src/export/video.js";
+describe("labels, the active place and the new lines", () => {
+  it("defaults keep the earlier look and every new choice is a known one", () => {
+    const V = defaultVideo();
+    expect(V.labelIn).toBe("rise"); expect(V.labelOut).toBe("fade"); expect(V.labelInSecs).toBe(0.35); expect(V.labelOutSecs).toBe(0.5);
+    expect(V.labelHold).toBe(0); expect(V.labelPos).toBe("auto"); expect(V.labelSize).toBe(1); expect(V.labelLine).toBe(false); expect(V.labelBgOp).toBe(0.78);
+    expect(V.placeNow).toBe("same"); expect(V.placeNowOp).toBe(1); expect(V.placeFill).toBe(1); expect(V.placeLineW).toBe(1);
+    expect(LABEL_INS[V.labelIn]).toBeTruthy(); expect(LABEL_OUTS[V.labelOut]).toBeTruthy(); expect(LABEL_POS[V.labelPos]).toBeTruthy(); expect(PLACE_NOW[V.placeNow]).toBeTruthy();
+  });
+  it("a saved look keeps the new choices", () => {
+    for (const k of ["labelIn", "labelOut", "labelInSecs", "labelOutSecs", "labelHold", "labelPos", "labelSize", "labelBgOp", "labelLine", "placeNow", "placeNowOp", "placeFill", "placeLineW"]) expect(LOOK_KEYS, k).toContain(k);
+    expect(new Set(LOOK_KEYS).size).toBe(LOOK_KEYS.length);
+  });
+  it("offers the particles, constellation and electric lines", () => {
+    for (const k of ["particles", "constellation", "electric"]) expect(LINE_STYLES[k]).toBeTruthy();
+  });
+});
+
+// Labels dragged on the preview, a sound display with its own shape, more ripples.
+import { RIPPLE_LOOKS, RIPPLE_FILLS, LABEL_BEATS, LABEL_FILLS } from "../src/export/video.js";
+describe("labels that move, the sound display's shape and the new ripples", () => {
+  it("defaults keep the earlier look", () => {
+    const V = defaultVideo();
+    expect(V.labelOff).toEqual({}); expect(V.labelBeat).toBe("off"); expect(V.labelFill).toBe("solid");
+    expect(V.barThick).toBe(1); expect(V.barGain).toBe(1); expect(V.barGap).toBe(1); expect(V.barRound).toBe(false);
+    expect(V.rippleFill).toBe("solid");
+    expect(LABEL_BEATS[V.labelBeat]).toBeTruthy(); expect(LABEL_FILLS[V.labelFill]).toBeTruthy(); expect(RIPPLE_FILLS[V.rippleFill]).toBeTruthy();
+  });
+  it("offers tiles, a grid and a matrix as ripples, and a look keeps the new choices but not where labels were dragged", () => {
+    for (const k of ["lens", "rings", "dots", "squares", "grid", "matrix"]) expect(RIPPLE_LOOKS[k]).toBeTruthy();
+    for (const k of ["labelBeat", "labelBeatAmt", "labelFill", "labelBg2", "barThick", "barGain", "barGap", "barRound", "rippleFill", "rippleColor2"]) expect(LOOK_KEYS, k).toContain(k);
+    // the places of one picture mean nothing on another
+    expect(LOOK_KEYS).not.toContain("labelOff");
+  });
+});

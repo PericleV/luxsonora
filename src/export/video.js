@@ -49,7 +49,12 @@ export const PATCH_MAPS = { auto: "Auto (what shaped its sound)", edges: "Edges"
 export const PATCH_ANIMS = { rise: "Rises", reveal: "Changes its texture", both: "Rises and changes" };
 // the ripple: which track sets it off
 export const RIPPLE_TRACKS = { off: "Off", perc: "Drums", bass: "Bass", lead: "Melody", harm: "Harmony", pad: "Pad" };
-export const RIPPLE_LOOKS = { lens: "Lens", rings: "Rings", dots: "Dots" };
+export const RIPPLE_LOOKS = { lens: "Lens", rings: "Rings", dots: "Dots", squares: "Tiles", grid: "Grid", matrix: "Matrix" };
+// the colour of the ripple: one colour, two along the way out, or all the hues around the eye
+export const RIPPLE_FILLS = { solid: "One colour", gradient: "Gradient", rainbow: "Rainbow" };
+// labels: how the label moves with the music, and how it is coloured
+export const LABEL_BEATS = { off: "Still", both: "Grows", h: "Stretches wide", v: "Stretches tall" };
+export const LABEL_FILLS = { solid: "One colour", gradient: "Gradient", cycle: "A colour each", pulse: "Follows the sound" };
 // the sound display: lying along the frame or standing up its side, and which way its bars grow
 // (its place is dragged on the preview, barXY; by default along the bottom, or up the right side)
 export const BAR_ORIENT = { h: "Horizontal", v: "Vertical" };
@@ -67,7 +72,10 @@ export function defaultVideo() {
     theme: "gold", pathColor: VIDEO_THEMES.gold.path, pointColor: VIDEO_THEMES.gold.point,
     path: "draw", lineShape: "straight", line: "glow", lineWidth: 3, pathDone: 1, pathAhead: 0.25,
     points: "visited", placeDone: 0.7, placeAhead: 0.35, numbers: true, passages: true, eye: "dot",
-    labels: "off", labelText: {}, labelKeep: false,
+    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0",
+    barThick: 1, barGain: 1, barGap: 1, barRound: false,
+    rippleFill: "solid", rippleColor2: "#6D5DF0",
+    placeNow: "same", placeNowOp: 1, placeFill: 1, placeLineW: 1,
     fx: { pulse: true, ripple: false, spotlight: true, glow: true, flash: true }, strength: 0.6, react: 0.4, dim: 0.1,
     grade: "none", gradeAmt: 0.6, vignette: 0.25, grain: 0,
     caption: "title", title: "", subtitle: "info", subText: "", titleColor: "#FFFFFF", subColor: "#FFFFFF", eyeColor: "#FFFFFF", labelColor: "#FFFFFF", labelBg: "#080A0E", font: "geist", titlePos: "tl", titleWhen: "always", titleSecs: 4.5, textSize: 1,
@@ -102,6 +110,12 @@ export const BOTTOM_FILLS = { solid: "One colour", gradient: "Gradient", reactiv
 export const PATH_FILLS = { solid: "One colour", gradient: "Along the path", story: "Follows the story" };
 export const PLACE_STYLES = { ring: "Ring", filled: "Filled", dashed: "Dashed", dot: "Dot", none: "No circle" };
 export const NUMBER_STYLES = { pill: "In a pill", plain: "Plain", none: "None" };
+// the place the eye is on: how it stands out from the others
+export const PLACE_NOW = { same: "Like the others", halo: "Halo", brackets: "Viewfinder", target: "Target" };
+// labels on places: how one appears, how it leaves, where it sits
+export const LABEL_INS = { rise: "Rises in", fade: "Fades in", pop: "Pops", type: "Typed", none: "At once" };
+export const LABEL_OUTS = { fade: "Fades out", sink: "Sinks", shrink: "Shrinks", none: "At once" };
+export const LABEL_POS = { auto: "Above (below near the top)", above: "Above", below: "Below", left: "Left", right: "Right", center: "On the place" };
 export const TEXT_STYLES = { shadow: "Soft shadow", outline: "Outline", box: "Box", none: "Plain" };
 export const TITLE_ANIMS = { fade: "Fade", rise: "Rise", type: "Typed", none: "At once" };
 export const ALIGNS = { auto: "Auto", left: "Left", center: "Centre", right: "Right" };
@@ -278,6 +292,13 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
 }
 
 const FONT_UI = '"Geist", system-ui, -apple-system, "Segoe UI", sans-serif';
+const MATRIX_CHARS = "01アイウエオカキクケコサシスセソ7Z:.=*+-<>¦";
+const FONT_MONO = '"Geist Mono", ui-monospace, Menlo, Consolas, monospace';
+// a fully saturated colour for a hue (0-1), as a hex string
+function hueHex(h) {
+  const f = n => { const k = (n + h * 12) % 12, v = 0.5 - 0.5 * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(v * 255).toString(16).padStart(2, "0"); };
+  return "#" + f(0) + f(8) + f(4);
+}
 // a frame-sized canvas for the ripple's lens
 let RIPPLE_CV = null;
 function rippleCanvas(W, H) {
@@ -378,7 +399,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   // Dots: a grid of dots lights up as the wave passes, like an LED matrix. The band's opacity and
   // the softness of its edges are set apart from the strength (its size and width).
   if (o.ripple && o.ripple !== "off" && !opt.clean && S.onsets && S.onsets[o.ripple]) {
-    const life = 1.4, amt = clamp(o.rippleAmt ?? 0.5), band = clamp(o.rippleBand ?? 0.5), soft = clamp(o.rippleSoft ?? 0.6), look = o.rippleLook || "lens", col = o.rippleColor || "#FFFFFF";
+    const life = 1.4, amt = clamp(o.rippleAmt ?? 0.5), band = clamp(o.rippleBand ?? 0.5), soft = clamp(o.rippleSoft ?? 0.6), look = o.rippleLook || "lens", col = o.rippleColor || "#FFFFFF", col2 = o.rippleColor2 || o.pathColor, rfill = o.rippleFill || "solid";
     const list = S.onsets[o.ripple], cur = tl.length ? tl[Math.max(0, gazeIndex(tl, sec))] : null;
     const cx = cur ? X(cur.x) : W / 2, cy = cur ? Y(cur.y) : H / 2, maxR = Math.hypot(W, H) * (0.25 + 0.35 * amt), ringW = (16 + 28 * amt) * u;
     let lo = 0, hi = list.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid][0] <= sec) lo = mid + 1; else hi = mid; }
@@ -392,6 +413,11 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     // edges fading over `soft` of the half-width (0: hard edges)
     const hw = ringW / 2, feather = Math.max(0.001, soft * hw);
     const prof = d => { const e = Math.abs(d); return e >= hw ? 0 : e <= hw - feather ? 1 : (hw - e) / feather; };
+    // the colour at a distance d from the eye, in the direction ang: one colour, from the first to
+    // the second on the way out, or every hue around the eye
+    const colAt = (d, ang) => (rfill === "gradient" ? mixHex(col, col2, clamp(d / maxR)) : rfill === "rainbow" ? hueHex(((ang / (Math.PI * 2)) % 1 + 1 + sec * 0.05) % 1) : col);
+    // how lit a point is: by the nearest wave's band and its strength
+    const litAt = d => { let v = 0; for (const w of waves) { const pv = prof(d - w.rr) * w.s; if (pv > v) v = pv; } return v; };
     if (waves.length && band > 0) {
       if (look === "lens") {
         // the waves are drawn as a mask on a frame-sized canvas, the magnified (and as dimmed)
@@ -415,33 +441,46 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
           g.save(); g.globalAlpha = Math.min(1, band * 1.6); g.drawImage(rc, bx, by, bw, bh, bx, by, bw, bh); g.restore();
         }
         // a faint line in the middle of each band, gone when the edges are fully soft
-        for (const w of waves) ring(g, cx, cy, w.rr, col, 0.3 * w.s * band * (1 - soft), 1.4 * u);
+        for (const w of waves) ring(g, cx, cy, w.rr, colAt(w.rr, 0), 0.3 * w.s * band * (1 - soft), 1.4 * u);
       } else if (look === "rings") {
         // two or three thin rings per wave; softness widens them into a haze
         for (const w of waves) for (let m = 0; m < 3; m++) {
           const rr = w.rr - m * ringW * 0.45; if (rr <= 0) continue;
           const a = w.s * band * (1 - m * 0.3);
-          if (soft > 0.05) ring(g, cx, cy, rr, col, a * 0.25 * soft, (2 + 10 * soft) * u);
-          ring(g, cx, cy, rr, col, a * 0.8, 1.5 * u);
+          if (soft > 0.05) ring(g, cx, cy, rr, colAt(rr, 0), a * 0.25 * soft, (2 + 10 * soft) * u);
+          ring(g, cx, cy, rr, colAt(rr, 0), a * 0.8, 1.5 * u);
         }
       } else {
-        // dots: a fixed grid; each dot near a wave lights up by how close it is to the wave's
-        // middle, bigger and brighter. Drawn in a few batches by brightness.
-        const step = Math.max(6, (22 - 10 * amt) * u), dr = step * 0.32, R = waves[0].rr + hw;
+        // dots, tiles, a grid and a matrix share one fixed lattice: each cell near a wave lights up
+        // by how close it is to the wave's middle
+        const step = Math.max(6, (look === "squares" ? 34 - 12 * amt : look === "matrix" ? 26 - 8 * amt : look === "grid" ? 44 - 16 * amt : 22 - 10 * amt) * u), R = waves[0].rr + hw;
         const x0 = Math.max(0, cx - R), x1 = Math.min(W, cx + R), y0 = Math.max(0, cy - R), y1 = Math.min(H, cy + R);
-        const buckets = Array.from({ length: 6 }, () => []);
-        for (let y = Math.ceil(y0 / step) * step + step / 2; y < y1; y += step) for (let x = Math.ceil(x0 / step) * step + step / 2; x < x1; x += step) {
-          const d = Math.hypot(x - cx, y - cy); let v = 0;
-          for (const w of waves) { const pv = prof(d - w.rr) * w.s; if (pv > v) v = pv; }
-          if (v > 0.03) buckets[Math.min(5, Math.floor(v * 6))].push(x, y, v);
+        g.save();
+        if (look === "grid") {
+          // the lines of the lattice, each piece lit where the wave is passing
+          g.lineWidth = Math.max(1, 1.4 * u); g.lineCap = "butt";
+          for (let x = Math.ceil(x0 / step) * step; x < x1; x += step) for (let y = Math.floor(y0 / step) * step; y < y1; y += step) {
+            const d = Math.hypot(x - cx, y + step / 2 - cy), v = litAt(d); if (v <= 0.03) continue;
+            g.strokeStyle = hexA(colAt(d, Math.atan2(y - cy, x - cx)), Math.min(1, band * 1.6 * v)); g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + step); g.stroke();
+          }
+          for (let y = Math.ceil(y0 / step) * step; y < y1; y += step) for (let x = Math.floor(x0 / step) * step; x < x1; x += step) {
+            const d = Math.hypot(x + step / 2 - cx, y - cy), v = litAt(d); if (v <= 0.03) continue;
+            g.strokeStyle = hexA(colAt(d, Math.atan2(y - cy, x - cx)), Math.min(1, band * 1.6 * v)); g.beginPath(); g.moveTo(x, y); g.lineTo(x + step, y); g.stroke();
+          }
+        } else {
+          if (look === "matrix") { g.font = `600 ${Math.round(step * 0.82)}px ${FONT_MONO}`; g.textAlign = "center"; g.textBaseline = "middle"; }
+          const tick = Math.floor(sec * 9);
+          for (let y = Math.ceil(y0 / step) * step + step / 2; y < y1; y += step) for (let x = Math.ceil(x0 / step) * step + step / 2; x < x1; x += step) {
+            const d = Math.hypot(x - cx, y - cy), v = litAt(d); if (v <= 0.03) continue;
+            const c = colAt(d, Math.atan2(y - cy, x - cx)), a = Math.min(1, band * 1.5 * v);
+            if (look === "squares") { const sz = step * (0.5 + 0.42 * v); g.fillStyle = hexA(c, a); g.fillRect(x - sz / 2, y - sz / 2, sz, sz); }
+            else if (look === "matrix") {
+              // a character that changes nine times a second; the brightest cells turn white
+              const h = Math.sin((Math.round(x / step) * 12.9898 + Math.round(y / step) * 78.233 + tick * 37.719)) * 43758.5453, ch = MATRIX_CHARS[Math.floor((h - Math.floor(h)) * MATRIX_CHARS.length)];
+              g.fillStyle = v > 0.8 ? `rgba(255,255,255,${a})` : hexA(c, a); g.fillText(ch, x, y);
+            } else { const rad = step * 0.32 * (0.45 + 0.55 * v); g.fillStyle = hexA(c, a); g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill(); }
+          }
         }
-        g.save(); g.fillStyle = col;
-        buckets.forEach((b, k) => {
-          if (!b.length) return;
-          g.globalAlpha = Math.min(1, band * 1.5 * ((k + 0.5) / 6)); g.beginPath();
-          for (let j = 0; j < b.length; j += 3) { const rad = dr * (0.45 + 0.55 * b[j + 2]); g.moveTo(b[j] + rad, b[j + 1]); g.arc(b[j], b[j + 1], rad, 0, Math.PI * 2); }
-          g.fill();
-        });
         g.restore();
       }
     }
@@ -554,21 +593,42 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       const show = o.points !== "off" && !(o.points === "current" && !cur) && !(o.points === "visited" && !reached.length);
       // the first arrival grows the marker in (when it was not shown before)
       const grow = o.points === "all" || first < 0 ? 1 : 0.6 + 0.4 * ease((sec - first) / 0.35), r = R(p) * grow * (cur ? 1 + 0.12 * beat : 1);
-      if (show && a > 0.005) {
+      // the marker's own opacity (the place the eye is on has its own), how much it is filled, how thick its line
+      const am = a * (cur ? clamp(o.placeNowOp ?? 1) : 1), fillK = o.placeFill ?? 1, lineK = o.placeLineW ?? 1;
+      if (show && am > 0.005) {
         const pcol = o.climaxOwn && js.some(j => tl[j].section === "climax") ? o.climaxColor || "#FF6B6B" : o.pointColor, ps = o.placeStyle || "ring";
-        if (ps === "ring" || ps === "filled" || ps === "dashed") { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = hexA(pcol, (ps === "filled" ? 0.42 : 0.18) * a); g.fill(); }
-        if (ps === "dashed") { g.save(); g.setLineDash([6 * u, 5 * u]); ring(g, x, y, r, pcol, 0.95 * a, (cur ? 2.6 : 1.8) * u); g.restore(); }
-        else if (ps === "ring" || ps === "filled") ring(g, x, y, r, pcol, 0.95 * a, (cur ? 2.6 : 1.6) * u);
-        else if (ps === "dot") { g.beginPath(); g.arc(x, y, (cur ? 7 : 5) * u, 0, Math.PI * 2); g.fillStyle = hexA(pcol, a); g.fill(); }
+        if (ps === "ring" || ps === "filled" || ps === "dashed") { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = hexA(pcol, Math.min(0.9, (ps === "filled" ? 0.42 : 0.18) * fillK) * am); g.fill(); }
+        if (ps === "dashed") { g.save(); g.setLineDash([6 * u, 5 * u]); ring(g, x, y, r, pcol, 0.95 * am, (cur ? 2.6 : 1.8) * u * lineK); g.restore(); }
+        else if (ps === "ring" || ps === "filled") ring(g, x, y, r, pcol, 0.95 * am, (cur ? 2.6 : 1.6) * u * lineK);
+        else if (ps === "dot") { g.beginPath(); g.arc(x, y, (cur ? 7 : 5) * u, 0, Math.PI * 2); g.fillStyle = hexA(pcol, am); g.fill(); }
+        // the place the eye is on can stand out: a soft halo, viewfinder corners or a target
+        if (cur && o.placeNow && o.placeNow !== "same") {
+          const kind = o.placeNow, breathe = 1 + 0.035 * Math.sin(sec * 3.2) + 0.08 * beat;
+          g.save(); g.lineCap = "round";
+          if (kind === "halo") {
+            const r1 = r * 1.75 * breathe, gr = g.createRadialGradient(x, y, r * 0.8, x, y, r1);
+            gr.addColorStop(0, hexA(pcol, 0)); gr.addColorStop(0.22, hexA(pcol, 0.6 * am)); gr.addColorStop(1, hexA(pcol, 0));
+            g.fillStyle = gr; g.beginPath(); g.arc(x, y, r1, 0, Math.PI * 2); g.fill();
+          } else if (kind === "brackets") {
+            const h = r * 1.2 * breathe, arm = h * 0.4; g.strokeStyle = hexA(pcol, am); g.lineWidth = 2.8 * u * lineK; g.beginPath();
+            for (const [sx2, sy2] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { g.moveTo(x + sx2 * h, y + sy2 * (h - arm)); g.lineTo(x + sx2 * h, y + sy2 * h); g.lineTo(x + sx2 * (h - arm), y + sy2 * h); }
+            g.stroke();
+          } else if (kind === "target") {
+            const r0 = r * 1.1, r1 = r * 1.38 * breathe; g.strokeStyle = hexA(pcol, am); g.lineWidth = 2.4 * u * lineK; g.beginPath();
+            for (let q = 0; q < 4; q++) { const ang = (q * Math.PI) / 2; g.moveTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0); g.lineTo(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1); }
+            g.stroke(); ring(g, x, y, r1, pcol, 0.35 * am, 1.2 * u * lineK);
+          }
+          g.restore();
+        }
         const nst = o.numbers === false ? "none" : o.numberStyle || "pill";
         if (nst === "plain") {
           const label = (o.points === "all" ? js : reached.length ? reached : js).map(j => j + 1).join("·");
-          g.save(); g.globalAlpha = a; g.font = `600 ${18 * u}px ${FONT_UI}`; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "rgba(0,0,0,0.6)"; g.shadowBlur = 6 * u;
+          g.save(); g.globalAlpha = am; g.font = `600 ${18 * u}px ${FONT_UI}`; g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = "rgba(0,0,0,0.6)"; g.shadowBlur = 6 * u;
           g.fillStyle = pcol; g.fillText(label, x, ps === "dot" ? y - 16 * u : y); g.restore();
         } else if (nst === "pill") {
           const label = (o.points === "all" ? js : reached.length ? reached : js).map(j => j + 1).join("·"); g.font = `600 ${16 * u}px ${FONT_UI}`;
           const tw = Math.max(26 * u, g.measureText(label).width + 14 * u), th = 26 * u;
-          g.globalAlpha = a; pill(g, x - tw / 2, y - th / 2, tw, th); g.fillStyle = pcol; g.fill();
+          g.globalAlpha = am; pill(g, x - tw / 2, y - th / 2, tw, th); g.fillStyle = pcol; g.fill();
           g.fillStyle = "#0B0D11"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(label, x, y + 0.5 * u);
           g.globalAlpha = 1;
         }
@@ -577,8 +637,18 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       if (labelsOn && reached.length) {
         const j = cur ? gz.i : reached[reached.length - 1], text = labelFor(o.labels, j, S.auto, o.labelText);
         if (text) {
-          const la = cur ? ease((sec - tl[gz.i].t0) / 0.35) : lerp(1, o.labelKeep ? doneOp : 0, ease((sec - Math.max(...reached.map(q => tl[q].t1))) / 0.5));
-          if (la > 0.01) labelQueue.push({ text, x, y, r: R(p), a: la * (1 - endA), rise: cur ? 1 - ease((sec - tl[gz.i].t0) / 0.35) : 0 });
+          // it comes in when the eye arrives and leaves when the eye does, or after its own time
+          // (Stays for) if that comes first; kept labels settle at the visited opacity instead
+          const inS = Math.max(0.01, o.labelInSecs ?? 0.35), outS = Math.max(0.01, o.labelOutSecs ?? 0.5), hold = o.labelHold || 0, kin = o.labelIn || "rise", kout = o.labelOut || "fade";
+          const age = sec - tl[j].t0, left = cur ? -1 : sec - Math.max(...reached.map(q => tl[q].t1)), gone = hold > 0 ? Math.max(left, age - hold) : left;
+          const tin = clamp(age / inS), pin = kin === "none" ? 1 : ease(tin), pout = gone > 0 ? (kout === "none" ? 1 : ease(gone / outS)) : 0, rest = o.labelKeep ? doneOp : 0;
+          const la = (kin === "type" ? Math.min(1, tin * 4) : pin) * lerp(1, rest, pout);
+          if (la > 0.01) labelQueue.push({
+            text, x, y, r: R(p), a: la * (1 - endA), key: js[0] + 1, n: labelQueue.length,
+            dy: (kin === "rise" ? (1 - pin) * 10 : 0) + (kout === "sink" && !rest ? pout * 12 : 0),
+            scale: (kin === "pop" ? 0.6 + 0.4 * (1 + 2.2 * (tin - 1) ** 3 + 1.2 * (tin - 1) ** 2) : 1) * (kout === "shrink" && !rest ? 1 - 0.4 * pout : 1),
+            chars: kin === "type" ? tin : 1
+          });
         }
       }
     }
@@ -615,14 +685,56 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       g.restore();
     }
     // labels, over the effects: a pill above the place (below it near the top), rising in
-    g.save(); g.font = `600 ${22 * u * ts}px ${Fnt.css}`; g.textAlign = "center"; g.textBaseline = "middle";
+    const lsz = ts * (o.labelSize ?? 1), lpos = o.labelPos || "auto", M = Math.min(W, H);
+    // the music moves a label: it grows, or stretches wide or tall, with the beat
+    const lbeat = o.labelBeat && o.labelBeat !== "off" ? clamp(valueAt(S.an, S.an.beat, sec)) * (o.labelBeatAmt ?? 0.5) * 0.45 : 0, lfill = o.labelFill || "solid";
+    const lpal = [o.labelBg || "#080a0e", o.labelBg2 || o.pathColor, o.pointColor, o.pathColor];
+    S._labelHits = [];
+    g.save(); g.font = `600 ${22 * u * lsz}px ${Fnt.css}`; g.textBaseline = "middle";
     for (const q of labelQueue) {
-      const text = Fnt.caps ? q.text.toUpperCase() : q.text, tw = g.measureText(text).width + 22 * u * ts, th = 36 * u * ts;
-      let ly = q.y - q.r - th / 2 - 10 * u + q.rise * 10 * u; if (ly - th / 2 < T * 0.5) ly = q.y + q.r + th / 2 + 10 * u;
-      const lx = clamp(q.x, L + tw / 2, W - Rm - tw / 2);
-      g.globalAlpha = q.a; pill(g, lx - tw / 2, ly - th / 2, tw, th); g.fillStyle = hexA(o.labelBg || "#080a0e", 0.78); g.fill();
+      const full = Fnt.caps ? q.text.toUpperCase() : q.text, text = q.chars < 1 ? full.slice(0, Math.max(1, Math.ceil(full.length * q.chars))) : full;
+      const tw = g.measureText(full).width + 22 * u * lsz, th = 36 * u * lsz, gap = (o.labelLine ? 28 : 10) * u;
+      // where it sits: where it was dragged to (kept relative to its place), else above the place
+      // (below it near the top), or on the side that was asked
+      const off = o.labelOff && o.labelOff[q.key];
+      let lx = q.x, ly = q.y - q.r - th / 2 - gap, side = "above";
+      if (off) { lx = q.x + off.dx * M; ly = q.y + off.dy * M; side = Math.abs(off.dx) > Math.abs(off.dy) ? (off.dx < 0 ? "left" : "right") : off.dy > 0 ? "below" : "above"; }
+      else if (lpos === "below" || ((lpos === "auto" || lpos === "above") && ly - th / 2 < T * 0.5)) { ly = q.y + q.r + th / 2 + gap; side = "below"; }
+      else if (lpos === "left") { lx = q.x - q.r - tw / 2 - gap; ly = q.y; side = "left"; }
+      else if (lpos === "right") { lx = q.x + q.r + tw / 2 + gap; ly = q.y; side = "right"; }
+      else if (lpos === "center") { ly = q.y; side = "center"; }
+      // it moves in from the side of the place
+      if (side === "above") ly += q.dy * u; else if (side === "below") ly -= q.dy * u; else if (side === "left") lx += q.dy * u; else if (side === "right") lx -= q.dy * u; else ly += q.dy * u;
+      lx = clamp(lx, tw / 2 + 4 * u, W - tw / 2 - 4 * u); ly = clamp(ly, th / 2 + 4 * u, H - th / 2 - 4 * u);
+      const sx = q.scale * (1 + (o.labelBeat === "both" || o.labelBeat === "h" ? lbeat : 0)), sy = q.scale * (1 + (o.labelBeat === "both" || o.labelBeat === "v" ? lbeat : 0));
+      // its box on the frame, to drag it on the preview
+      S._labelHits.push({ key: q.key, x0: lx - (tw / 2) * sx, x1: lx + (tw / 2) * sx, y0: ly - (th / 2) * sy, y1: ly + (th / 2) * sy, ax: lx, ay: ly, px: q.x, py: q.y });
+      g.globalAlpha = q.a;
+      const inside = Math.abs(lx - q.x) < (tw / 2) * sx + q.r * 0.3 && Math.abs(ly - q.y) < (th / 2) * sy + q.r * 0.3;
+      if (o.labelLine && !inside) {
+        // an arrow from the label to its place, wherever the label is: it leaves the edge of the
+        // label's box on the way to the place and stops at the edge of the circle
+        const ddx = q.x - lx, ddy = q.y - ly, dist = Math.hypot(ddx, ddy) || 1, ux = ddx / dist, uy = ddy / dist;
+        const tb = Math.min(Math.abs(ux) > 1e-6 ? ((tw / 2) * sx) / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-6 ? ((th / 2) * sy) / Math.abs(uy) : Infinity);
+        const ax0 = lx + ux * tb, ay0 = ly + uy * tb, ax1 = q.x - ux * (q.r + 3 * u), ay1 = q.y - uy * (q.r + 3 * u);
+        if ((ax1 - ax0) * ux + (ay1 - ay0) * uy > 6 * u) {
+          const hd = 9 * u * Math.min(1.4, lsz);
+          g.beginPath(); g.moveTo(ax0, ay0); g.lineTo(ax1 - ux * hd * 0.6, ay1 - uy * hd * 0.6); g.lineWidth = 1.6 * u; g.strokeStyle = hexA(o.pointColor, 0.9); g.stroke();
+          g.beginPath(); g.moveTo(ax1, ay1); g.lineTo(ax1 - ux * hd - uy * hd * 0.5, ay1 - uy * hd + ux * hd * 0.5); g.lineTo(ax1 - ux * hd + uy * hd * 0.5, ay1 - uy * hd - ux * hd * 0.5); g.closePath(); g.fillStyle = hexA(o.pointColor, 1); g.fill();
+        }
+      }
+      g.save(); g.translate(lx, ly); g.scale(sx, sy);
+      // its colour: one, a gradient across it, a colour each, or one that follows the sound
+      const bgA = clamp(o.labelBgOp ?? 0.78);
+      if (lfill === "gradient") { const gr = g.createLinearGradient(-tw / 2, 0, tw / 2, 0); gr.addColorStop(0, hexA(lpal[0], bgA)); gr.addColorStop(1, hexA(lpal[1], bgA)); g.fillStyle = gr; }
+      else if (lfill === "cycle") g.fillStyle = hexA(lpal[(q.key - 1) % lpal.length], bgA);
+      else if (lfill === "pulse") g.fillStyle = hexA(mixHex(lpal[0], lpal[1], clamp(valueAt(S.an, S.an.beat, sec) * 1.2)), bgA);
+      else g.fillStyle = hexA(lpal[0], bgA);
+      pill(g, -tw / 2, -th / 2, tw, th); g.fill();
       g.lineWidth = 1.2 * u; g.strokeStyle = hexA(o.pointColor, 0.8); g.stroke();
-      g.fillStyle = o.labelColor || "#fff"; g.fillText(text, lx, ly + 1 * u);
+      g.fillStyle = o.labelColor || "#fff";
+      if (q.chars < 1) { g.textAlign = "left"; g.fillText(text, -tw / 2 + 11 * u * lsz, 1 * u); } else { g.textAlign = "center"; g.fillText(text, 0, 1 * u); }
+      g.restore();
     }
     g.restore();
     if (o.caption === "points" && C.point && sec < last.t1 && endA < 1) S._pointText = { text: C.point(gz.i), a: ease(gz.age / 0.4) * (1 - endA) };
@@ -646,7 +758,10 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   const paint = e => (grad ? grad : fill === "reactive" ? hexA(mixHex(cA, cB, clamp(0.55 * e + 0.45 * punch)), 0.95) : hexA(cA, 0.95));
   const glow = fill === "reactive" ? mixHex(cA, cB, punch) : cA;
   // a bar of height h at x: up from the base, down from it, or centred on it
-  const bar = (x, w, h) => g.fillRect(x, dir === "mirror" ? -h / 2 : -h, w, h);
+  // thickness of its bars or line, how tall the sound makes it (it may go past its own height),
+  // the spacing of the bars, and round ends
+  const bThick = clamp(o.barThick ?? 1, 0.2, 4), bGain = clamp(o.barGain ?? 1, 0.2, 5), bGap = clamp(o.barGap ?? 1, 0, 4), bRound = !!o.barRound;
+  const bar = (x, w, h) => { const y = dir === "mirror" ? -h / 2 : -h; if (bRound && g.roundRect) { g.beginPath(); g.roundRect(x, y, w, h, Math.min(w, h) / 2); g.fill(); } else g.fillRect(x, y, w, h); };
   let bottomH = 0; S._barHit = null;
   if (o.bottom && o.bottom !== "none") {
     g.save(); g.globalAlpha = clamp(o.barOpacity ?? 1);
@@ -660,34 +775,34 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     if (dir === "up") g.translate(0, thick / 2);
     else if (dir === "down") { g.translate(0, -thick / 2); g.scale(1, -1); }
     if (o.bottom === "bars") {
-      const env = S.an && S.an.source === "audio" ? S.an.env : S.env, bw = 6 * u, gap = 4 * u, nb = Math.max(8, Math.floor((bw0 + gap) / (bw + gap)));
+      const env = S.an && S.an.source === "audio" ? S.an.env : S.env, bw = 6 * u * bThick, gap = 4 * u * bGap, nb = Math.max(8, Math.floor((bw0 + gap) / (bw + gap)));
       for (let b = 0; b < nb; b++) {
-        const e = env[Math.min(env.length - 1, Math.floor((b / nb) * env.length))], h = Math.max(3 * u, e * hMax);
+        const e = env[Math.min(env.length - 1, Math.floor((b / nb) * env.length))], h = Math.max(3 * u, e * hMax * bGain);
         // the bars already played take the colour; with "follows the sound", by their own height
         g.fillStyle = (b + 0.5) / nb <= prog ? (fill === "reactive" ? hexA(mixHex(cA, cB, e), 0.95) : paint(e)) : "rgba(255,255,255,0.32)";
         bar(x0 + b * (bw + gap), bw, h);
       }
     } else if (o.bottom === "spectrum") {
-      const bands = bandsAt(S.an, sec), nb = BANDS, step = bw0 / nb, bw = step * 0.62;
+      const bands = bandsAt(S.an, sec), nb = BANDS, step = bw0 / nb, bw = step * clamp(0.62 * bThick, 0.06, 1);
       g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 10 * u;
       for (let b = 0; b < nb; b++) {
         // without the rendered sound: a shape from the loudness, until the analysis is ready
         const e = bands ? bands[b] : level * (0.55 + 0.45 * Math.sin(b * 0.9 + sec * 6)) * (1 - b / nb * 0.6);
-        g.fillStyle = paint(e); bar(x0 + b * step + (step - bw) / 2, bw, Math.max(3 * u, e * hMax * 1.2));
+        g.fillStyle = paint(e); bar(x0 + b * step + (step - bw) / 2, bw, Math.max(3 * u, e * hMax * 1.2 * bGain));
       }
     } else if (o.bottom === "wave") {
       const wv = S.an && S.an.wave ? S.an.wave(sec, 220) : null, mid = dir === "mirror" ? 0 : -hMax / 2;
-      g.lineWidth = 2.4 * u; g.strokeStyle = paint(level); g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 8 * u; g.lineJoin = "round";
+      g.lineWidth = 2.4 * u * bThick; g.lineCap = bRound ? "round" : "butt"; g.strokeStyle = paint(level); g.shadowColor = hexA(glow, 0.8); g.shadowBlur = 8 * u; g.lineJoin = "round";
       g.beginPath();
       for (let i = 0; i < 220; i++) {
-        const sv = wv ? clamp(wv[i] * 2.2, -1, 1) : level * Math.sin(i * 0.35 + sec * 20) * Math.sin((i / 219) * Math.PI);
+        const sv = (wv ? clamp(wv[i] * 2.2, -1, 1) : level * Math.sin(i * 0.35 + sec * 20) * Math.sin((i / 219) * Math.PI)) * bGain;
         const x = x0 + (i / 219) * bw0, y = mid - sv * hMax / 2;
         if (i) g.lineTo(x, y); else g.moveTo(x, y);
       }
       g.stroke();
     } else if (o.bottom === "line") {
-      g.fillStyle = "rgba(255,255,255,0.3)"; bar(x0, bw0, 4 * u);
-      g.fillStyle = paint(level); bar(x0, bw0 * prog, 4 * u);
+      g.fillStyle = "rgba(255,255,255,0.3)"; bar(x0, bw0, 4 * u * bThick);
+      g.fillStyle = paint(level); bar(x0, bw0 * prog, 4 * u * bThick);
     }
     g.restore();
     // the text at the bottom keeps clear of a display left along the bottom
@@ -729,6 +844,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   S.hit = {};
   if (S._barHit && o.bottom && o.bottom !== "none") S.hit.bar = S._barHit;
   if (S._logoHit) S.hit.logo = S._logoHit;
+  if (S._labelHits && S._labelHits.length && o.labels && o.labels !== "off") S.hit.labels = S._labelHits;
   // how the title comes in: fade, rise, typed letter by letter, or at once
   const inP = clamp((sec - 0.2) / 0.9), anim = o.titleAnim || "fade";
   const shownTitle = anim === "type" ? title.slice(0, Math.ceil(title.length * clamp((sec - 0.2) / 1.4))) : title;

@@ -17,7 +17,7 @@ import { pickAudioCodec, encodeAudioData, resampleChannels, tick } from "./audio
 import { pathGeometry, drawPath } from "./paths.js";
 import { FONTS, QUALITY, safeArea, drawSafeGuides, drawVignette, drawGrain, fadeAt } from "./look.js";
 import { analyzeNotes, valueAt, bandsAt, BANDS } from "./reactive.js";
-import { labelFor, placeLabels } from "./labels.js";
+import { labelFor, placeLabels, placeNoteTimes, tickerAt } from "./labels.js";
 
 export const SHAPES = { image: "Like the image", wide: "16:9", square: "1:1", portrait: "4:5", vertical: "9:16" };
 export const VIDEO_THEMES = {
@@ -72,7 +72,7 @@ export function defaultVideo() {
     theme: "gold", pathColor: VIDEO_THEMES.gold.path, pointColor: VIDEO_THEMES.gold.point,
     path: "draw", lineShape: "straight", line: "glow", lineWidth: 3, pathDone: 1, pathAhead: 0.25,
     points: "visited", placeDone: 0.7, placeAhead: 0.35, numbers: true, passages: true, eye: "dot",
-    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0", labelDetail: true,
+    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0", labelDetail: true, labelLive: true,
     barThick: 1, barGain: 1, barGap: 1, barRound: false,
     rippleFill: "solid", rippleColor2: "#6D5DF0",
     placeNow: "same", placeNowOp: 1, placeFill: 1, placeLineW: 1,
@@ -288,7 +288,7 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
   const spb = 60 / sc.bpm, tl = videoTimeline(sc), env = soundEnvelope(sc);
   const geos = {};
   return {
-    sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || placeLabels(sc),
+    sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || placeLabels(sc), noteTimes: placeNoteTimes(sc, spb),
     an: extra.an || analyzeNotes(sc, env), passages: sc.notes.filter(n => n.passage && n.layer === "lead"),
     maps: extra.maps || null, mapOf: sc.points.map(F => autoMap(F)), onsets: onsetsOf(sc, spb),
     geo(shape, tension = 0.5) { const k = shape + "|" + tension; return geos[k] || (geos[k] = pathGeometry(tl, shape === "curved", 18, tension)); }
@@ -647,8 +647,10 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
           const age = sec - tl[j].t0, left = cur ? -1 : sec - Math.max(...reached.map(q => tl[q].t1)), gone = hold > 0 ? Math.max(left, age - hold) : left;
           const tin = clamp(age / inS), pin = kin === "none" ? 1 : ease(tin), pout = gone > 0 ? (kout === "none" ? 1 : ease(gone / outS)) : 0, rest = o.labelKeep ? doneOp : 0;
           const la = (kin === "type" ? Math.min(1, tin * 4) : pin) * lerp(1, rest, pout);
+          // the notes can follow the melody: the last ones played, the newest sliding in
+          const tick = o.labels === "notes" && o.labelLive !== false ? tickerAt(S.noteTimes && S.noteTimes[j], sec) : null;
           if (la > 0.01) labelQueue.push({
-            text, x, y, r: R(p), a: la * (1 - endA), key: js[0] + 1, n: labelQueue.length,
+            text, tick, x, y, r: R(p), a: la * (1 - endA), key: js[0] + 1, n: labelQueue.length,
             dy: (kin === "rise" ? (1 - pin) * 10 : 0) + (kout === "sink" && !rest ? pout * 12 : 0),
             scale: (kin === "pop" ? 0.6 + 0.4 * (1 + 2.2 * (tin - 1) ** 3 + 1.2 * (tin - 1) ** 2) : 1) * (kout === "shrink" && !rest ? 1 - 0.4 * pout : 1),
             chars: kin === "type" ? tin : 1
@@ -702,7 +704,10 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       // typed: the characters appear across the lines, in order
       let left = q.chars < 1 ? Math.max(1, Math.ceil(lines.reduce((a, t) => a + t.length, 0) * q.chars)) : Infinity;
       const shown = lines.map(t => { const s = t.slice(0, Math.max(0, left)); left -= t.length; return s; });
-      let wMax = 0; lines.forEach((t, k) => { g.font = k ? fDet : fHead; wMax = Math.max(wMax, g.measureText(t).width); }); g.font = fHead;
+      // a following label: the notes in fixed slots as wide as the widest name, so it keeps its size
+      const tk = q.tick, slotW = tk ? g.measureText("G#4").width + 12 * ls : 0;
+      if (tk) shown[0] = "";
+      let wMax = tk ? tk.slots * slotW - 12 * ls : 0; lines.forEach((t, k) => { if (tk && !k) return; g.font = k ? fDet : fHead; wMax = Math.max(wMax, g.measureText(t).width); }); g.font = fHead;
       const tw = wMax + 22 * ls, th = nl === 1 ? 36 * ls : (16 + 24 + 19 * (nl - 1)) * ls, gap = (o.labelLine ? 28 : 10) * u;
       const lineY = k => (nl === 1 ? 1 * u : k === 0 ? -th / 2 + 20 * ls : -th / 2 + (8 + 24 + 19 * (k - 1) + 9.5) * ls);
       // where it sits: where it was dragged to (kept relative to its place), else above the place
@@ -746,6 +751,21 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       g.fillStyle = o.labelColor || "#fff"; g.textAlign = q.chars < 1 ? "left" : "center";
       const tx = q.chars < 1 ? -tw / 2 + 11 * ls : 0;
       shown.forEach((t, k) => { if (!t) return; g.font = k ? fDet : fHead; g.globalAlpha = q.a * (k ? 0.82 : 1); g.fillText(t, tx, lineY(k)); });
+      if (tk) {
+        // the row of notes: the newest in full, the older ones fainter; when the row is full a new
+        // note pushes it left and the oldest fades out at the left edge
+        const e = ease(tk.u), nn = tk.names.length, x0 = -tw / 2 + 11 * ls + (slotW - 12 * ls) / 2, y0 = lineY(0);
+        g.save(); g.beginPath(); g.rect(-tw / 2 + 4 * ls, y0 - 16 * ls, tw - 8 * ls, 32 * ls); g.clip();
+        g.font = fHead; g.textAlign = "center";
+        tk.names.forEach((name, i) => {
+          const back = nn - 1 - i, slot = tk.full ? tk.slots - 1 - back + (1 - e) : i;
+          let al = back === 0 ? (tk.full ? e : 0.35 + 0.65 * e) : Math.max(0.3, 0.8 - 0.1 * (back - 1));
+          if (tk.full && back === tk.slots) al *= 1 - e;
+          if (al <= 0.01) return;
+          g.globalAlpha = q.a * al; g.fillText(Fnt.caps ? name.toUpperCase() : name, x0 + slot * slotW, y0);
+        });
+        g.restore(); g.globalAlpha = q.a;
+      }
       g.font = fHead; g.globalAlpha = q.a;
       g.restore();
     }

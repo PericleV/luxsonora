@@ -14,7 +14,7 @@ const ICON_FILM = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5"
 const LOOK_STORE = "sonification.looks";
 // what each kind of label shows
 const LABEL_ABOUT = {
-  notes: "Each place shows the notes its melody plays when the eye gets there, and under them its chord.",
+  notes: "Each place shows the notes its melody plays, and under them its chord. Following the music, the label shows the last notes played and each new one slides in as it sounds; otherwise it shows the first ones.",
   timbre: "Each place shows how it changes the sound against the rest of the picture, and under it the measures behind that: the value here and the picture's mean, as in the Focus point tab.",
   custom: "Write a label for each place, or leave it empty. It shows when the eye gets there."
 };
@@ -136,7 +136,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ${group("labels", "Labels on places", `
       ${seg("xLabels", "Labels")}
       <p class="snote" id="xLabelAbout"></p>
-      <div id="xLabelDetailBox" class="vtoggles">${tog("xLabelDetail", "Details under the label")}</div>
+      <div id="xLabelDetailBox" class="vtoggles">${tog("xLabelLive", "The notes follow the music")}${tog("xLabelDetail", "Details under the label")}</div>
       <div id="xLabelCustom"><ol class="xlabels" id="xLabelList"></ol></div>
       <div id="xLabelOpts">
         ${seg("xLabelIn", "How it appears")}
@@ -368,7 +368,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   $("#xEditReset").addEventListener("click", () => { const D = defaultVideo(); V.edit = defaultEdit(); for (const k of ["grade", "gradeAmt", "vignette", "vigColor", "tintColor", "tintAmt", "grain", "dim"]) V[k] = D[k]; sync(); look(); });
   function syncEdit() { for (const [, d] of EDS) esl[d.key].set(ED[d.key] ?? d.def, false); curveSeg.set(curveCh); drawCurve(); }
   // ---- toggles: [id, object, key]
-  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"], ["#xLabelLine", () => V, "labelLine"], ["#xLabelDetail", () => V, "labelDetail"], ["#xBarRound", () => V, "barRound"],
+  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"], ["#xLabelLine", () => V, "labelLine"], ["#xLabelDetail", () => V, "labelDetail"], ["#xLabelLive", () => V, "labelLive"], ["#xBarRound", () => V, "barRound"],
     ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xLogo", () => V, "logo"], ["#xPatch", () => V, "patch"], ["#xPatchKeep", () => V, "patchKeep"], ["#xLogoAnim", () => V, "logoAnim"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
   $("#xLabelOffReset").addEventListener("click", () => { V.labelOff = {}; vis(); look(); });
@@ -460,7 +460,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#l_xRippleCol2").hidden = (V.rippleFill || "solid") !== "gradient"; $("#l_xRippleCol").hidden = V.rippleFill === "rainbow";
     sl.barGap.el.hidden = V.bottom !== "bars"; sl.barGain.el.hidden = V.bottom === "line"; $("#xBarRound").closest(".vtoggles").hidden = V.bottom === "none";
     $("#xLabelCustom").hidden = V.labels !== "custom"; $("#xLabelOpts").hidden = !V.labels || V.labels === "off";
-    $("#xLabelDetailBox").hidden = V.labels !== "notes" && V.labels !== "timbre";
+    $("#xLabelDetailBox").hidden = V.labels !== "notes" && V.labels !== "timbre"; $("#xLabelLive").closest("label").hidden = V.labels !== "notes";
     $("#xLabelAbout").textContent = LABEL_ABOUT[V.labels] || ""; $("#xLabelAbout").hidden = !LABEL_ABOUT[V.labels];
     sl.placeNowOp.el.hidden = V.points === "off";
     $("#xLineNote").textContent = { particles: "A faint thread with bright dots travelling along it.", constellation: "A hairline between the places and a small star on each.", electric: "A zigzag that flickers. Suits electronic styles.", marching: "Dashes that move forward along the path.", comet: "A tail behind the eye that fades with the distance.", tapered: "Thin where it started, full width at the eye.", brush: "Three thin strokes, like a hand-drawn line." }[V.line || "glow"] || "";

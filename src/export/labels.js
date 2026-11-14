@@ -1,6 +1,8 @@
 // Labels on the places in the video: what the music does there.
 //
-// Notes: the notes the melody plays at the place, and under them its chord.
+// Notes: the notes the melody plays at the place, and under them its chord. While the eye is
+// there they can follow the music: the label shows the last notes played, the newest on the
+// right, and each new note slides in as it sounds (tickerAt).
 // Timbre: how the place changes the sound against the rest of the picture (the two strongest
 // changes, as the Focus point tab names them), and under them the measures behind them: the
 // place's value and the picture's mean.
@@ -33,6 +35,32 @@ export function timbreLabel(F, stats) {
   const src = F.tim.src || {}, mu = (stats && stats.mu) || {};
   const f = x => (typeof x === "number" ? x.toFixed(2) : "?");
   return [head, ...top.map(([d]) => `${DIM_SOURCE[d]} ${f(src[DIM_KEY[d]])} · image mean ${f(mu[DIM_KEY[d]])}`)].join("\n");
+}
+
+// The melody's notes of each place, in seconds: [[{ s, name }]] by point index. Notes struck
+// together (the doubling an octave above at the climax) count once, by the lowest.
+export function placeNoteTimes(sc, spb) {
+  const out = ((sc && sc.points) || []).map(() => []);
+  for (const n of (sc && sc.notes) || []) if (n.layer === "lead" && !n.intro && n.point >= 0 && out[n.point]) out[n.point].push({ s: n.t * spb, midi: n.midi });
+  return out.map(l => {
+    l.sort((a, b) => a.s - b.s || a.midi - b.midi);
+    const keep = [];
+    for (const x of l) if (!keep.length || x.s - keep[keep.length - 1].s > 0.01) keep.push(x);
+    return keep.map(x => ({ s: x.s, name: midiName(x.midi) }));
+  });
+}
+export const TICKER_SLOTS = 6;
+// What a following label shows at `sec`: the notes played so far (the last `slots`, plus the one
+// sliding out once the row is full), newest last; before the first note, that note.
+// u: how far the newest note has come in (0 to 1 over `slide` seconds); full: the row is full, so
+// a new note pushes the others left.
+export function tickerAt(list, sec, slots = TICKER_SLOTS, slide = 0.14) {
+  if (!list || !list.length) return null;
+  let k = 0; while (k < list.length && list[k].s <= sec + 1e-6) k++;
+  const n = Math.min(slots, list.length);
+  if (k === 0) return { names: [list[0].name], slots: n, u: 1, full: false };
+  const full = k > slots, names = list.slice(Math.max(0, k - slots - (full ? 1 : 0)), k).map(x => x.name);
+  return { names, slots: n, u: Math.min(1, Math.max(0, (sec - list[k - 1].s) / slide)), full };
 }
 
 // Every place's labels of each kind: { notes: [...], timbre: [...] }, by point index.

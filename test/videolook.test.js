@@ -1,7 +1,7 @@
 // Video look: path geometry, labels, grades, fades, looks, the sound analysis, GIF ranges.
 import { describe, it, expect } from "vitest";
 import { pathGeometry, LINE_STYLES } from "../src/export/paths.js";
-import { labelFor, notesLabel, timbreLabel, placeLabels, LABEL_MODES } from "../src/export/labels.js";
+import { labelFor, notesLabel, timbreLabel, placeLabels, LABEL_MODES, placeNoteTimes, tickerAt } from "../src/export/labels.js";
 import { gradePixel, GRADES, fadeAt, fadeAudio, LOOKS, LOOK_KEYS, pickLook, PLATFORMS, safeArea } from "../src/export/look.js";
 import { analyzeAudio, analyzeNotes, valueAt, BANDS } from "../src/export/reactive.js";
 import { defaultVideo, frameSize, gifRange, EYES, BOTTOMS, mixHex, COVER_OUTS } from "../src/export/video.js";
@@ -40,6 +40,18 @@ describe("labels", () => {
     expect(timbreLabel({ ...F, tim: { ...F.tim, m: { att: 0, leg: 0, bri: 0.05, res: 0, col: 0 } } }, stats)).toBe("Like the rest of the picture");
     const all = placeLabels({ points: [F, F], stats, modeIv: [0, 2, 4, 5, 7, 9, 11] });
     expect(all.notes.length).toBe(2); expect(all.timbre[1]).toBe(all.timbre[0]);
+  });
+  it("the notes can follow the melody: the last six played, the newest sliding in", () => {
+    const notes = [60, 62, 64, 65, 67, 69, 71, 72].map((m, i) => ({ layer: "lead", t: i, midi: m, point: 0 }));
+    notes.push({ layer: "lead", t: 4, midi: 79, point: 0 }, { layer: "lead", t: 0, midi: 50, point: 0, intro: true }, { layer: "harm", t: 1, midi: 40, point: 0 });
+    const L = placeNoteTimes({ points: [{}, {}], notes }, 0.5);
+    expect(L[0].map(x => x.name)).toEqual(["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]); expect(L[1]).toEqual([]);
+    expect(L[0][4].s).toBe(2);
+    expect(tickerAt(L[0], -1)).toEqual({ names: ["C4"], slots: 6, u: 1, full: false });
+    const a = tickerAt(L[0], 1.07); expect(a.names).toEqual(["C4", "D4", "E4"]); expect(a.full).toBe(false); expect(a.u).toBeCloseTo(0.5, 6);
+    const b = tickerAt(L[0], 3.5); expect(b.names).toEqual(["D4", "E4", "F4", "G4", "A4", "B4", "C5"]); expect(b.full).toBe(true);
+    const c = tickerAt(L[0], 3.0); expect(c.names).toEqual(["C4", "D4", "E4", "F4", "G4", "A4", "B4"]); expect(c.full).toBe(true); expect(c.u).toBe(0);
+    expect(tickerAt([], 1)).toBe(null);
   });
   it("the user's own text by point number (empty shows nothing); details can be left out", () => {
     const auto = { notes: ["E4 G4\nchord I: C E G"], timbre: ["Brighter\nentropy 0.51 · image mean 0.31"] };

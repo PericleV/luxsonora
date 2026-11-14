@@ -21,7 +21,11 @@ export const newId = () => "p" + nextId++;
  *  - count is the number of distinct places (anchors included); returns caps the number
  *    of revisits. A revisit beyond the cap is not recorded: the area is inhibited again
  *    and the search goes on. The path ends when count places are found or the map runs out.
- * p: { count, returns = ∞, inhibition, memory, seed, radius, sizing ("same" | "area") }
+ *  - exact: the number of returns is reached, not only allowed. The scan brings the eye back
+ *    only where the picture does (so there may be fewer than asked); the ones still missing are
+ *    added at the end of the path, to the most striking places in turn (never the one the eye
+ *    is on): a short reprise before the piece closes.
+ * p: { count, returns = ∞, exact = false, inhibition, memory, seed, radius, sizing ("same" | "area") }
  */
 // The size of the spot that draws the eye at pixel i: the pixels around it, joined to it, that
 // keep at least 80% of its attention (a flood fill bounded at three times the radius), as the
@@ -100,6 +104,17 @@ export function gazePath(A, S0, p, anchors = []) {
       inhibit(x, y, rInh);
     }
     if (p.memory > 0) for (let i = 0; i < N; i++) S[i] += p.memory * (S0[i] - S[i]);
+  }
+  if (p.exact && isFinite(maxReturns) && returns < maxReturns) {
+    const places = out.map((q, j) => ({ q, j })).filter(x => x.q.revisitOf === null);
+    if (places.length >= 2) {
+      const order = [...places].sort((a, b) => (b.q.s ?? b.q.w ?? 0) - (a.q.s ?? a.q.w ?? 0) || a.j - b.j);
+      for (let k = 0, tries = 0; returns < maxReturns && tries < 6 * maxReturns + 12; tries++) {
+        const c = order[k++ % order.length], last = out[out.length - 1], lastPlace = last.revisitOf === null ? out.length - 1 : last.revisitOf;
+        if (c.j === lastPlace) continue;
+        out.push({ ...c.q, id: newId(), source: "auto", revisitOf: c.j, index: out.length }); returns++;
+      }
+    }
   }
   return out.map((q, i) => ({ ...q, index: i }));
 }

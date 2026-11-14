@@ -99,3 +99,34 @@ describe("composition with focus points", () => {
     expect(sc.total * 60 / sc.bpm).toBeCloseTo(30, 9);
   });
 });
+
+// Returns: the number asked is the number you get.
+describe("exact returns", () => {
+  it("adds the returns the picture did not bring by itself, never to the place the eye is on", () => {
+    for (const seed of [1, 2, 3, 5, 8]) {
+      const A = analyze(synthImage(160, 120, seed)), SAL = computeSaliency(A, { color: 0.7, texture: 0.5, semantic: 0 }, null);
+      for (const [count, returns] of [[4, 0], [5, 2], [6, 4], [8, 3], [9, 6], [3, 5]]) {
+        // no memory: the scan alone would hardly ever come back
+        const pts = gazePath(A, SAL.map, { ...P0, memory: 0, count, returns, exact: true });
+        const places = pts.filter(p => p.revisitOf === null).length, back = pts.length - places;
+        expect(places).toBe(count); expect(back).toBe(returns); expect(pts.length).toBe(count + returns);
+        pts.forEach((p, i) => {
+          expect(p.index).toBe(i);
+          if (p.revisitOf === null) return;
+          // a return points at a place seen before, at the same spot, and is not a stay on the spot
+          const o = pts[p.revisitOf]; expect(o.revisitOf).toBe(null); expect(p.revisitOf).toBeLessThan(i);
+          expect(p.x).toBe(o.x); expect(p.y).toBe(o.y);
+          const prev = pts[i - 1], prevPlace = prev.revisitOf === null ? i - 1 : prev.revisitOf;
+          expect(prevPlace).not.toBe(p.revisitOf);
+        });
+        // the same picture and settings give the same path
+        expect(gazePath(A, SAL.map, { ...P0, memory: 0, count, returns, exact: true }).map(p => [p.x, p.y, p.revisitOf])).toEqual(pts.map(p => [p.x, p.y, p.revisitOf]));
+      }
+    }
+  });
+  it("without the flag the old meaning holds: at most that many", () => {
+    const A = analyze(synthImage(160, 120, 2)), SAL = computeSaliency(A, { color: 0.7, texture: 0.5, semantic: 0 }, null);
+    const pts = gazePath(A, SAL.map, { ...P0, memory: 0, count: 6, returns: 4 });
+    expect(pts.filter(p => p.revisitOf !== null).length).toBeLessThanOrEqual(4);
+  });
+});

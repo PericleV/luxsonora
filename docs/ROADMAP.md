@@ -160,7 +160,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Export regrouped (the path, the places, labels, with the music); labels with their own way in and out, position, size and a line to the place; the place the eye is on as a halo, a viewfinder or a target; particles, constellation and electric lines; labels dragged anywhere with an arrow that follows, moving with the music and coloured four ways; a sound display with its thickness, amplitude, spacing and round ends; tiles, grid and matrix ripples, in one colour, a gradient or a rainbow
 - [x] A minute of music keeps its substance: two waves and a late climax, long places that develop their motif (sequence, inversion, a close), a suggested number of places that follows the length
 - [x] The frame is the first section of the New song dialog
-- [x] Places and returns counted apart ("8 places + 3 returns"); Looks back in Simple and in New song; a new picture starts on the suggested number of places
+- [x] Points and returns counted apart ("8 points + 3 returns"), one name everywhere (Returns), none by default and an exact number when chosen; a new picture starts on the suggested number of points
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)
 - [x] Twelve more styles (Lo-fi chill, Neoclassical piano, Acoustic folk, Meditation, Post-rock, Chiptune, Trip-hop, Reggae, Baroque, East Asian, Drum and bass, Techno), the styles in five groups, and the three that suit a picture suggested from its analysis
 - [ ] Styles in 3/4 and 6/8 (waltz, folk jigs): the engine is in 4/4

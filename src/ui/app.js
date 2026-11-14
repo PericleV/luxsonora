@@ -52,7 +52,7 @@ import { initExport } from "./exportTab.js";
 const $ = s => document.querySelector(s);
 const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
-  style: "ambient", duration: 30, count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
+  style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
   smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
@@ -182,7 +182,7 @@ function recompute() {
   }
   if (lvl >= LV.SAL) { SAL = attention(computeSaliency(A, { color: P.wColor, texture: P.wTex, semantic: SEM ? P.wSem : 0 }, SEM)); buildSalOverlay(); }
   if (lvl >= LV.PATH) {
-    const pp = { count: P.count, returns: P.returns, inhibition: P.inhibition, memory: P.memory, seed: P.seed, radius: P.radius, sizing: P.circleSize || "same" };
+    const pp = { count: P.count, returns: P.returns, exact: P.returnsExact !== false, inhibition: P.inhibition, memory: P.memory, seed: P.seed, radius: P.radius, sizing: P.circleSize || "same" };
     let raw;
     if (PATH.mode === "manual") raw = PATH.points.map((q, i) => ({ ...q, s: saliencyAt(A, SAL.map, q.x, q.y), source: "manual", revisitOf: null, index: i }));
     else if (P.placement === "scan") raw = scanPath(A, SAL.map, P.count, P.radius, newId);
@@ -632,8 +632,8 @@ function openNewSong(fresh = false) {
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, fresh ? sug : P.count || sug)}">
       <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture and length we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.</p>
-      <div class="srow"><label class="flabel" for="nsBack">Looks back</label><b id="nsBackVal" class="mono"></b></div>
-      <input type="range" id="nsBack" min="0" max="12" step="1" value="${Math.min(12, P.returns ?? 3)}">
+      <div class="srow"><label class="flabel" for="nsBack">Returns</label><b id="nsBackVal" class="mono"></b></div>
+      <input type="range" id="nsBack" min="0" max="12" step="1" value="${fresh ? 0 : Math.min(12, P.returns ?? 0)}">
       <p class="snote" id="nsBackNote"></p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblCircle">Circle size</div><div class="seg" id="nsCircle" role="radiogroup" aria-labelledby="nsLblCircle"></div><p class="snote" id="nsCircleNote"></p></div>
@@ -683,7 +683,7 @@ function openNewSong(fresh = false) {
     $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
     $b("#nsCountVal").textContent = $b("#nsCount").value; fillRange($b("#nsCount"));
     { const c = Number($b("#nsCount").value), k = Number($b("#nsBack").value); $b("#nsBackVal").textContent = k; fillRange($b("#nsBack"));
-      $b("#nsBackNote").textContent = k ? `The eye can also go back to spots it has already seen, and their tune returns. ${c} spots and up to ${k} look${k > 1 ? "s" : ""} back make up to ${c + k} stops on the path.` : `Every stop is a new spot: ${c} stops on the path.`; }
+      $b("#nsBackNote").textContent = k ? `The eye goes back to ${k} of the points it has seen and their tune comes back, like a refrain. ${c} points + ${k} return${k > 1 ? "s" : ""} = ${c + k} stops on the path.` : `The eye never goes back: ${c} points, ${c} stops on the path. Add returns to bring a tune back, like a refrain.`; }
     $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
     $b("#nsCircleNote").textContent = CIRCLE_DESC[circle]; $b("#nsGrooveNote").textContent = GROOVE_DESC[groove];
   };
@@ -718,7 +718,7 @@ function openNewSong(fresh = false) {
     if ($b("#nsFrameBox").open) build();
   }
   const apply = () => {
-    P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value);
+    P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value); P.returnsExact = true;
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
     P.connect = conn; P.orch = orch; P.circleSize = circle;
     if (P.groove !== groove) { P.groove = groove; GROOVE.failed = false; }
@@ -1319,8 +1319,8 @@ function updateReadout() {
   const sc = SCORE, spb = 60 / sc.bpm;
   $("#rKey").textContent = `${pcName(sc.pc)} ${sc.pent ? (sc.major ? "major pentatonic" : "minor pentatonic") : MODES[sc.modeKey].name.split(" ")[0]}`;
   const back = sc.points.filter(F => F.revisitOf !== null && F.revisitOf !== undefined && F.revisitOf >= 0).length, places = sc.points.length - back;
-  $("#rMeta").textContent = `${nf1(sc.bpm)} BPM · ${sc.bars} bars · ${places} place${places === 1 ? "" : "s"}${back ? ` + ${back} return${back === 1 ? "" : "s"}` : ""}`;
-  $("#rMeta").title = back ? `The eye visits ${places} places and goes back to ${back} of them, so the path has ${sc.points.length} stops.` : `The eye visits ${places} places.`;
+  $("#rMeta").textContent = `${nf1(sc.bpm)} BPM · ${sc.bars} bars · ${places} point${places === 1 ? "" : "s"}${back ? ` + ${back} return${back === 1 ? "" : "s"}` : ""}`;
+  $("#rMeta").title = back ? `${places} focus points and ${back} return${back === 1 ? "" : "s"} to points already seen: ${sc.points.length} stops on the path.` : `${places} focus points.`;
   $("#rTime").textContent = `${ftime(Math.min(currentBeat(), sc.total) * spb)} / ${ftime(sc.total * spb)}`;
   const sk = $("#seek"); if (!SEEK.drag) { sk.value = Math.round(clamp(currentBeat() / sc.total) * 1000); sk.style.setProperty("--p", sk.value / 10 + "%"); }
 }
@@ -1348,7 +1348,7 @@ function renderPieceNotes() {
   SL.count.setMax(Math.max(2, Math.min(32, fits)));
   const places = new Set(sc.points.map(q => q.revisitOf ?? q.index)).size, back = sc.points.length - places;
   SL.count.setNote(sc.truncated > 0 ? `At this duration the piece fits at most ${fits} segments (${minB === 1 ? "one beat" : minB + " beats"} each); the first ${sc.points.length} are used.` : PATH.mode !== "manual" && places < P.count ? `The image only offered ${places} distinct places at this inhibition radius.` : "");
-  SL.returns.setNote(PATH.mode === "manual" ? "" : `${places} places, ${back} ${back === 1 ? "return" : "returns"}: ${sc.points.length} segments in the piece.`);
+  SL.returns.setNote(PATH.mode === "manual" || (!back && !P.returns) ? "" : `${places} points + ${back} ${back === 1 ? "return" : "returns"} = ${sc.points.length} stops on the path.${back < P.returns ? " The picture brought the eye back fewer times than asked; move the slider to get the exact number." : ""}`);
   SL.tempoAdj.setNote(`Result: ${nf1(sc.bpm)} BPM, ${sc.bars} whole bars in ${sc.seconds} s.`);
   const ci = sc.arc ? sc.arc.climax : -1;
   SL.arc.setNote(ci >= 0 && sc.arc.amount > 0.25 ? `Climax at focus point ${ci + 1} (${ftime(sc.points[ci].t0 * 60 / sc.bpm)}), the most striking new place of the second half.` : "");
@@ -1977,6 +1977,8 @@ function applySettings(j) {
   // projects from before the generated intro had none, and a one-bar ending
   if (!("intro" in j.settings)) P.intro = "off";
   if (!("circleSize" in j.settings)) P.circleSize = "same";
+  // projects from before the returns were exact keep theirs as they were (up to that many)
+  if (!("returnsExact" in j.settings)) P.returnsExact = false;
   if (!("drums" in j.settings) || !P.drums || typeof P.drums !== "object") P.drums = {};
   if (!("end" in j.settings)) P.end = 1;
   if (EXPORT) EXPORT.sync();
@@ -2114,15 +2116,15 @@ const exportView = () => $("#tab-export") && $("#tab-export").getAttribute("aria
 /* ============ sliders ============ */
 const SLIDERS = {
   sBasic: [
-    { key: "count", label: "Focus points", min: 2, max: 32, step: 1, def: 8, level: LV.PATH, help: "How many different spots the eye visits. Each one shows up as a circle on the picture." },
-    { key: "returns", label: "Looks back", min: 0, max: 12, step: 1, def: 3, level: LV.PATH, help: "How many times the eye can go back to a spot it has already seen. When it does, that spot's tune comes back. These come on top of the focus points: 9 points and 3 looks back make 12 stops on the path. At 0 every stop is a new spot." },
+    { key: "count", label: "Focus points", min: 2, max: 32, step: 1, def: 8, level: LV.PATH, help: "How many spots the eye visits. Each one is a circle on the picture and a part of the song." },
+    { key: "returns", label: "Returns", min: 0, max: 12, step: 1, def: 0, level: LV.PATH, help: "How many times the eye goes back to a point it has already seen. That point's tune comes back, like a refrain, and the return is one more stop on the path (9 points and 3 returns: 12 stops). At 0 the eye never goes back." },
     { key: "tempoAdj", label: "Tempo", adv: true, min: -0.3, max: 0.3, step: 0.01, def: 0, scale: 100, unit: "%", signed: true, level: LV.MUSIC },
     { key: "arc", label: "Build-up", adv: true, min: 0, max: 1, step: 0.01, def: 0.7, scale: 100, unit: "%", level: LV.MUSIC, help: "Turns the journey into a story, with a quiet start, a climax and an ending. At 0% the song stays at one level." },
     { key: "smooth", label: "Smoothness", adv: true, min: 0, max: 1, step: 0.01, def: 0.6, scale: 100, unit: "%", level: LV.MUSIC, help: "How gently one part flows into the next. At 0% the changes are sudden." }
   ],
   sGaze: [
     { key: "inhibition", label: "Inhibition radius", min: 0.06, max: 0.4, step: 0.01, def: 0.18, scale: 100, unit: "%", level: LV.PATH, help: "How far the eye has to move away from spots it has already looked at." },
-    { key: "memory", label: "Memory", min: 0, max: 0.2, step: 0.005, def: 0.05, scale: 100, unit: "%", dec: 1, level: LV.PATH, help: "How soon a spot the eye has seen becomes interesting again, and so how early it looks back." },
+    { key: "memory", label: "Memory", min: 0, max: 0.2, step: 0.005, def: 0.05, scale: 100, unit: "%", dec: 1, level: LV.PATH, help: "How soon a spot the eye has seen becomes interesting again, and so how early a return comes." },
     { key: "radius", label: "Focus radius", min: 0.02, max: 0.3, step: 0.005, def: DEFAULT_RADIUS, scale: 100, unit: "%", dec: 1, level: LV.PATH, help: "The base size of the circles the app places (with From the area, each circle is between 40% and 220% of it). You can resize each one on the picture." },
     { key: "seed", label: "Variation", min: 0, max: 99, step: 1, def: 0, level: LV.PATH, help: "Try a different path for the same picture. Each number always gives the same path, and 0 is the original." }
   ],
@@ -2157,6 +2159,8 @@ const SLIDERS = {
   ]
 };
 function onParam(def) {
+  // a number of returns chosen now is the number you get
+  if (def.key === "returns") P.returnsExact = true;
   if (def.level === LV.AUDIO) { applyMixLive(); return; }
   invalidate(def.level);
 }

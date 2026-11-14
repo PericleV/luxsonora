@@ -147,7 +147,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Composition rules, each one switchable in Advanced: modulation at the climax on the circle of fifths (from the climax's colour), contrast-driven chord moves, question-and-answer phrase cadences, the Picardy third, leap recovery, no parallel fifths or octaves, the melody's peak at the climax
 - [x] Performance (dynamics from the picture, accents, phrasing, CC11 expression, CC1 vibrato, humanize), composition settings in Advanced, every track's instrument in one list, each style's band in Add layer, MIDI for a DAW
 - [x] Your own rules on the places, in Advanced (they had their own Expert mode at first) (add an instrument, silence a track, a chord, the melody's octave, dynamics; by place, part, colour, drawn zone or time)
-- [x] Every composition rule switchable in Advanced (22 in 5 groups); New song shows the melody, the connections and the orchestration's instruments; Save project and Load project in the top bar
+- [x] Every composition rule switchable in Advanced (23 in 5 groups); New song shows the melody, the connections and the orchestration's instruments; Save project and Load project in the top bar
 - [x] Circles sized from their area; added layers kept musical (no rattling ostinato, no gong); why these styles, in sentences; video place textures, a ripple driven by a track, the path shown over a chosen time; place textures with an opacity and a soft edge; circle size and groove in New song; the layer volume kept on narrow windows, and lane colours that follow each layer; the ripple in three looks (lens, rings, dots) with its band's opacity and soft edges
 - [x] The session survives a reload (phones closing the tab in the background): saved in the browser after each change, restored on load; less memory on phones
 - [x] Resizable layout: the panel, the timeline and the layer names, dragged or with the keyboard, remembered
@@ -158,6 +158,8 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Two modes, Simple and Advanced (Expert joined Advanced), named in a bar above every tab
 - [x] Frame the picture first: the whole image or a part, free or 1:1, 4:5, 5:4, 16:9, 9:16
 - [x] Export regrouped (the path, the places, labels, with the music); labels with their own way in and out, position, size and a line to the place; the place the eye is on as a halo, a viewfinder or a target; particles, constellation and electric lines; labels dragged anywhere with an arrow that follows, moving with the music and coloured four ways; a sound display with its thickness, amplitude, spacing and round ends; tiles, grid and matrix ripples, in one colour, a gradient or a rainbow
+- [x] A minute of music keeps its substance: two waves and a late climax, long places that develop their motif (sequence, inversion, a close), a suggested number of places that follows the length
+- [x] The frame is the first section of the New song dialog
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)
 - [x] Twelve more styles (Lo-fi chill, Neoclassical piano, Acoustic folk, Meditation, Post-rock, Chiptune, Trip-hop, Reggae, Baroque, East Asian, Drum and bass, Techno), the styles in five groups, and the three that suit a picture suggested from its analysis
 - [ ] Styles in 3/4 and 6/8 (waltz, folk jigs): the engine is in 4/4

@@ -595,3 +595,11 @@ button,.btn,[role=tab],[role=radio],select,label.toggle{touch-action:manipulatio
 
 /* ---------- export: a sub-heading inside a group ---------- */
 .xgroup .xsub{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-weight:600;color:var(--text)}
+
+/* ---------- New song: the frame, first ---------- */
+.nsframe{border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px}
+.nsframe > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+.nsframe > summary::-webkit-details-marker{display:none}
+.nsframe > summary::before{content:"";width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;opacity:.7;transition:transform .12s}
+.nsframe[open] > summary::before{transform:rotate(90deg)}
+.nsframe > summary span{font-weight:400;color:var(--text-2)}

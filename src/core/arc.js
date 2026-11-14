@@ -8,6 +8,10 @@
 //   D = lerp(NEUTRAL, 0.7·template + 0.3·local, amount).
 // The climax is the segment, with its centre between 50% and 85% of the body, that scores
 // highest on weight + saccade + new place: the most striking new place of the second half.
+// A long piece (16 bars or more) is shaped in two waves, so its second half is not one long
+// release: the climax is sought later (70-90% of the body), and before it the tension rises to a
+// first, smaller peak (0.8 at 42% of the way to the climax), eases to 0.5 (a breather, where
+// the added instruments thin out) and builds again to the climax.
 // With amount = 0 every segment has the neutral tension and the same section (development).
 // A point can carry the user's choice (mood: calm, build, climax, release), which overrides both.
 import { clamp, lerp } from "./util.js";
@@ -25,14 +29,17 @@ export function dramaticArc(segs, body, amount = 0.7) {
   const centre = segs.map(s => (s.t0 + s.t1) / 2 / body);
   const sacc = segs.map((s, i) => (i ? Math.hypot(s.x - segs[i - 1].x, s.y - segs[i - 1].y) : 0));
   const score = i => (segs[i].w ?? 0.5) + 0.5 * clamp(sacc[i] / 0.5) + (segs[i].revisit ? 0 : 0.2);
+  const long = body >= 64 - 1e-9, lo = long ? 0.7 : 0.5, hi = long ? 0.9 : 0.85, mid = long ? 0.8 : 0.7;
   let climax = -1;
-  for (let i = 0; i < n; i++) if (centre[i] >= 0.5 && centre[i] <= 0.85 && (climax < 0 || score(i) > score(climax))) climax = i;
-  if (climax < 0) { climax = 0; for (let i = 1; i < n; i++) if (Math.abs(centre[i] - 0.7) < Math.abs(centre[climax] - 0.7)) climax = i; }
+  for (let i = 0; i < n; i++) if (centre[i] >= lo && centre[i] <= hi && (climax < 0 || score(i) > score(climax))) climax = i;
+  if (climax < 0) { climax = 0; for (let i = 1; i < n; i++) if (Math.abs(centre[i] - mid) < Math.abs(centre[climax] - mid)) climax = i; }
   // a point the user marked as the climax is the climax
   const chosen = segs.findIndex(s => s.mood === "climax");
   if (chosen >= 0) climax = chosen;
   const p = clamp(centre[climax], 0.05, 0.95);
-  const template = c => (c <= p ? 0.25 + 0.75 * smooth(c / p) : 1 - 0.65 * smooth((c - p) / (1 - p)));
+  // before the climax: one rise, or in a long piece a first peak, a breather and the final build
+  const rise = c => { const f = c / p; return !long ? 0.25 + 0.75 * smooth(f) : f <= 0.42 ? 0.25 + 0.55 * smooth(f / 0.42) : f <= 0.6 ? 0.8 - 0.3 * smooth((f - 0.42) / 0.18) : 0.5 + 0.5 * smooth((f - 0.6) / 0.4); };
+  const template = c => (c <= p ? rise(c) : 1 - 0.65 * smooth((c - p) / (1 - p)));
   const tension = segs.map((s, i) => {
     const local = clamp(0.5 * (s.w ?? 0.5) + 0.5 * clamp(sacc[i] / 0.5) - (s.revisit ? 0.15 : 0));
     const raw = i === climax ? 1 : 0.7 * template(centre[i]) + 0.3 * local;

@@ -28,6 +28,7 @@ export const RULES_INFO = {
   stale: { group: "voices", name: "No stale notes", desc: "An accompaniment note held into a chord it rubs against ends at the change." },
   lowClear: { group: "voices", name: "Clear low register", desc: "Two instruments a second apart below E3, or a third apart below C3, turn to mud: the one that can move goes up an octave. The bass, the pad and the pulse stay." },
   rightOfWay: { group: "voices", name: "Melody has right of way", desc: "A note of an added instrument that is off the chord and a semitone from the melody note sounding with it moves to a chord tone clear of the melody." },
+  develop: { group: "melody", name: "Long places develop their motif", desc: "A place of two bars or more plays its motif, then its sequence, its inversion and a close that comes home, a statement a bar, instead of holding a few notes for bars." },
   strays: { group: "voices", name: "No stray notes", desc: "An added instrument's lone note, far from the rest of its part, is left out (an ornament keeps it, softer, with a grace note); an instrument with almost nothing to play in this picture is replaced by the next one in the style's list, or stays out." },
   approach: { group: "voices", name: "Bass approach notes", desc: "In the styles that use them, the bass walks into the next chord by a step." },
   stopDown: { group: "genre", name: "Break before the climax", desc: "In trailer styles (epic, metal) everything stops for half a beat right before the climax." },

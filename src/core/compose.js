@@ -122,12 +122,25 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     // glide: notes that start a point move their filter and pan from the previous point's values
     const D = arc.tension[idx] ?? 0.6, section = arc.section[idx] ?? "development", dyn = dynamics(D);
     const glide = (layer, j) => (glideSec > 0 && prevTim && j === 0 ? { cut0: prevTim[layer].cut, q0: prevTim[layer].q, pan0: layer === "lead" ? prevPan : layer === "harm" ? prevPan * 0.4 : 0, sec: glideSec } : null);
-    const bounds = gridSplit(dur, w), lead = [];
-    iv.forEach((o, j) => {
-      const m = degMidi(deg + o, melIv, baseLead), nd = bounds[j + 1] - bounds[j];
-      notes.push({ layer: "lead", t: t + bounds[j], dur: nd * 0.92, midi: m, vel: clampInt(Math.round((j === 0 ? vel : vel * 0.85) * dyn), 1, 127), tim: tim.lead, pan, point: idx, glide: glide("lead", j) });
-      lead.push(m);
-    });
+    // a place of two bars or more develops its motif (a statement a bar: the motif, its sequence
+    // a step toward the next place, its inversion, a close that comes home) instead of stretching
+    // its few notes over the whole place; a shorter place plays the motif once, as before
+    const nextF = used[idx + 1], toward = nextF ? (nextF.y < f.y - 0.02 ? 1 : nextF.y > f.y + 0.02 ? -1 : 0) : -1;
+    const phrase = ruleOn(P, "develop") ? developMotif(iv, w, dur, toward, maxNotes) : null, lead = [];
+    if (phrase) {
+      phrase.forEach((x, j) => {
+        const m = degMidi(deg + x.o, melIv, baseLead);
+        notes.push({ layer: "lead", t: t + x.t, dur: x.dur * 0.92, midi: m, vel: clampInt(Math.round((j === 0 ? vel : vel * 0.85) * x.k * dyn), 1, 127), tim: tim.lead, pan, point: idx, glide: glide("lead", j), ...(x.kind !== "motif" ? { dev: x.kind } : {}) });
+        lead.push(m);
+      });
+    } else {
+      const bounds = gridSplit(dur, w);
+      iv.forEach((o, j) => {
+        const m = degMidi(deg + o, melIv, baseLead), nd = bounds[j + 1] - bounds[j];
+        notes.push({ layer: "lead", t: t + bounds[j], dur: nd * 0.92, midi: m, vel: clampInt(Math.round((j === 0 ? vel : vel * 0.85) * dyn), 1, 127), tim: tim.lead, pan, point: idx, glide: glide("lead", j) });
+        lead.push(m);
+      });
+    }
     lastLead = lead[lead.length - 1];
 
     // harmony
@@ -794,6 +807,38 @@ export function melodyRightOfWay(notes, extra, slotAt) {
     const ms = near(n); if (!ms.some(m => rub(n.midi, m.midi))) continue;
     for (const d of [-1, 1, -2, 2, -3, 3, -4, 4]) { const x = n.midi + d; if (S.pcs.has(pcx(x)) && !ms.some(m => rub(x, m.midi))) { n.midi = x; n.yielded = true; break; } }
   }
+}
+
+/*
+ * The melody of a long place: its motif developed over the bars it lasts, instead of a few notes
+ * held for bars. Returns null for a place under two bars (the motif is played once, as it always
+ * was), else notes [{ t, dur, o (scale steps from the place's own degree), k (loudness), kind }]:
+ *   bar 1        the motif
+ *   middle bars  its sequence (the same shape a scale step further toward the next place, one
+ *                more step each time) and its inversion (turned upside down around its first
+ *                note), in turn
+ *   last bar     the close: the head of the motif, then a long note that comes home to the
+ *                place's own degree
+ * iv: the motif's degrees, w: the weights of its notes, toward: +1 when the next place is higher
+ * in the picture, −1 lower, 0 level.
+ */
+export function developMotif(iv, w, dur, toward = 0, maxNotes = Infinity) {
+  const bars = Math.floor((dur + 1e-9) / 4);
+  if (bars < 2 || !iv.length) return null;
+  const out = [], dir = toward || 1;
+  for (let s = 0; s < bars; s++) {
+    const t0 = s * 4, len = s === bars - 1 ? dur - t0 : 4, last = s === bars - 1;
+    let degs = iv.slice(), ws = w.slice(), kind = "motif", k = 1;
+    if (last) {
+      // the close: at most the first two notes, then home, held for half of what is left
+      const head = iv.slice(0, Math.min(2, iv.length)); degs = [...head, 0]; ws = [...head.map(() => 1), Math.max(2, head.length * 2)]; kind = "close"; k = 0.94;
+    } else if (s > 0 && s % 2 === 1) { const sh = dir * Math.ceil(s / 2); degs = iv.map(x => x + sh); kind = "sequence"; k = 0.96; }
+    else if (s > 0) { degs = iv.map(x => iv[0] - (x - iv[0])); kind = "inversion"; k = 0.92; }
+    const cap = Math.max(1, Math.floor(len / 0.25)); if (degs.length > cap) { degs = degs.slice(0, cap); ws = ws.slice(0, cap); }
+    const b = gridSplit(len, ws);
+    degs.forEach((o, j) => out.push({ t: t0 + b[j], dur: b[j + 1] - b[j], o, k, kind }));
+  }
+  return out.length > maxNotes ? null : out;
 }
 
 export function clipAtChanges(notes, slots, extra = [], body = Infinity) {

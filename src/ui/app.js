@@ -1,5 +1,5 @@
 // User interface: state, level-based recomputation, stage, inspector, timeline, playback, export.
-import { clamp, lerp } from "../core/util.js";
+import { clamp, clampInt, lerp } from "../core/util.js";
 import { analyze } from "../core/analyze.js";
 import { computeSaliency } from "../core/saliency.js";
 import { gazePath, readPoints, coverage, backgroundZone, saliencyAt, newId, DEFAULT_RADIUS } from "../core/focus.js";
@@ -160,7 +160,7 @@ async function loadFile(file) {
     $("#demo").value = "";
     ORIG = { file };
     setBase(base, info);
-    NEW_SONG_PENDING = "frame"; // once the image is analysed: frame it, then the New song dialog
+    NEW_SONG_PENDING = true; // once the image is analysed, the New song dialog opens
     if (info.large) flash(`Large image (${info.mp.toFixed(0)} MP, ${mb.toFixed(0)} MB): it was reduced to ${base.w} × ${base.h} for display and analysis.`);
     if (info.pages > 1) flash(`This TIFF has ${info.pages} pages; the first one is used.`);
   } catch (e) {
@@ -209,8 +209,7 @@ function recompute() {
   refreshStatus();
   checkRecipe();
   scheduleSave();
-  // a new picture: first its frame (whole or a part), then the New song dialog
-  if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { const step = NEW_SONG_PENDING; NEW_SONG_PENDING = false; if (step === "frame") openFrame(true); else openNewSong(true); }
+  if (NEW_SONG_PENDING && A && !document.querySelector(".dlg-backdrop")) { NEW_SONG_PENDING = false; openNewSong(true); }
   // Play pressed while a neural model was still working: start now that the piece is final
   if (WAIT_PLAY && SCORE && !jobsPending() && !dirty) { WAIT_PLAY = false; startPlayback(Player.pausedBeat >= SCORE.total ? 0 : Player.pausedBeat); }
   updatePlayBtn();
@@ -482,9 +481,10 @@ function attention(contrast) {
 }
 
 /* ============ Frame the picture: the whole image or a part of it ============ */
-// The first step after a picture is opened: keep it whole or drag a frame on it, free or at a
-// fixed shape (1:1, 4:5, 5:4, 16:9, 9:16). The frame becomes the analysis source's crop, so the
-// eye, the notes and the video all read only that part. It can be opened again from the Image card.
+// Keep the picture whole or drag a frame on it, free or at a fixed shape (1:1, 4:5, 5:4, 16:9,
+// 9:16). The frame becomes the analysis source's crop, so the eye, the notes and the video all read
+// only that part. It is the first thing in the New song dialog (so you know what will be
+// analysed) and can be opened on its own from the Image card.
 const FRAME_SHAPES = [["whole", "Whole image", 0], ["free", "Free", 0], ["1:1", "1:1", 1], ["4:5", "4:5", 4 / 5], ["5:4", "5:4", 5 / 4], ["16:9", "16:9", 16 / 9], ["9:16", "9:16", 9 / 16]];
 // the whole working image as it is displayed, before any crop
 function framePreview(max = 900) {
@@ -495,32 +495,31 @@ function framePreview(max = 900) {
   c.getContext("2d").putImageData(new ImageData(processImage(data, w, h, BASE.ch, BASE.kind, range, P.src), w, h), 0, 0);
   return c;
 }
-function openFrame(thenNewSong = false) {
-  if (!BASE) return;
+// The frame as the source's crop, and whether it differs from the one in use.
+const frameCrop = (R, whole) => { const r4 = v => Math.round(v * 1e4) / 1e4; return whole ? { l: 0, r: 0, t: 0, b: 0 } : { l: r4(R.x0), r: r4(1 - R.x1), t: r4(R.y0), b: r4(1 - R.y1) }; };
+// Uses a frame: another part of the picture, so the places start again. Returns whether it changed.
+function applyFrame(crop) {
+  if (!["l", "r", "t", "b"].some(q => Math.abs(crop[q] - P.src.crop[q]) > 1e-4)) return false;
+  Object.assign(P.src.crop, crop); PATH.mode = "auto"; PATH.points = []; SEL = 0; HIST = []; FUT = [];
+  for (const q of ["l", "r", "t", "b"]) if (SRC_CTL["srcCrop." + q]) SRC_CTL["srcCrop." + q].set(P.src.crop[q], false);
+  applySource(); renderImageInfo();
+  return true;
+}
+// The editor itself, inside `host`: the shape chips, the picture with the frame, its size.
+// onCommit(): called when a drag ends or a shape is picked. maxH: the tallest the picture is drawn.
+function frameEditor(host, { onCommit = () => {}, maxH = 460 } = {}) {
   const img = framePreview(), c0 = P.src.crop, MIN = 0.08;
   let R = { x0: c0.l, y0: c0.t, x1: 1 - c0.r, y1: 1 - c0.b }, shape = c0.l || c0.r || c0.t || c0.b ? "free" : "whole";
-  const { body, close } = openInfo(thenNewSong ? "First, frame the picture" : "Frame the picture", `<div class="dlg-info frame">
-    <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. The eye, the notes and the video read only what is inside.</p>
-    <div class="chips" role="radiogroup" aria-label="Shape of the frame" id="frShapes">${FRAME_SHAPES.map(([k, n]) => `<button type="button" class="chip" role="radio" aria-checked="false" data-k="${k}">${n}</button>`).join("")}</div>
-    <div class="frwrap"><canvas id="frCv" aria-label="The picture with the frame; drag its corners, its edges or the whole frame"></canvas></div>
-    <p class="snote mono" id="frInfo" role="status"></p>
-    <div class="ns-actions"><button type="button" class="btn btn-primary" id="frOk"></button><button type="button" class="btn" id="frWhole">Use the whole image</button></div></div>`, "dlg-frame");
-  const $b = s => body.querySelector(s), cv = $b("#frCv"), g = cv.getContext("2d");
+  host.innerHTML = `<div class="chips" role="radiogroup" aria-label="Shape of the frame">${FRAME_SHAPES.map(([k, n]) => `<button type="button" class="chip" role="radio" aria-checked="false" data-k="${k}">${n}</button>`).join("")}</div>
+    <div class="frwrap"><canvas aria-label="The picture with the frame; drag its corners, its edges or the whole frame"></canvas></div>
+    <p class="snote mono fr-info" role="status"></p>`;
+  const cv = host.querySelector("canvas"), g = cv.getContext("2d"), info = host.querySelector(".fr-info");
   // the frame's shape in fractions of the image: width / height of the frame × the image's own shape
   const kOf = key => { const r = (FRAME_SHAPES.find(x => x[0] === key) || [])[2] || 0; return r ? (r * BASE.h) / BASE.w : 0; };
   const clampR = () => { R.x0 = clamp(R.x0); R.y0 = clamp(R.y0); R.x1 = clamp(R.x1); R.y1 = clamp(R.y1); };
-  const setShape = key => {
-    shape = key; const k = kOf(key);
-    if (key === "whole") R = { x0: 0, y0: 0, x1: 1, y1: 1 };
-    else if (k) {
-      // the largest frame of that shape, centred where the frame is now
-      const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2; let w = 1, h = 1 / k; if (h > 1) { h = 1; w = k; }
-      const x0 = clamp(cx - w / 2, 0, 1 - w), y0 = clamp(cy - h / 2, 0, 1 - h); R = { x0, y0, x1: x0 + w, y1: y0 + h };
-    }
-    draw();
-  };
+  const isWhole = () => R.x0 < 1e-4 && R.y0 < 1e-4 && R.x1 > 1 - 1e-4 && R.y1 > 1 - 1e-4;
   const draw = () => {
-    const wrap = cv.parentElement, maxW = Math.max(200, wrap.clientWidth), maxH = Math.max(160, Math.min(window.innerHeight * 0.5, 460)), sc = Math.min(maxW / img.width, maxH / img.height), w = Math.round(img.width * sc), h = Math.round(img.height * sc), dpr = window.devicePixelRatio || 1;
+    const wrap = cv.parentElement, maxW = Math.max(200, wrap.clientWidth - 12), mh = Math.max(140, Math.min(window.innerHeight * 0.5, maxH)), sc = Math.min(maxW / img.width, mh / img.height), w = Math.round(img.width * sc), h = Math.round(img.height * sc), dpr = window.devicePixelRatio || 1;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.drawImage(img, 0, 0, w, h);
     const x0 = R.x0 * w, y0 = R.y0 * h, x1 = R.x1 * w, y1 = R.y1 * h;
@@ -530,11 +529,19 @@ function openFrame(thenNewSong = false) {
     g.stroke();
     g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(x0 + 1, y0 + 1, Math.max(0, x1 - x0 - 2), Math.max(0, y1 - y0 - 2));
     g.fillStyle = "#fff"; for (const [x, y] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) g.fillRect(clamp(x - 5, 0, w - 10), clamp(y - 5, 0, h - 10), 10, 10);
-    const whole = R.x0 < 1e-4 && R.y0 < 1e-4 && R.x1 > 1 - 1e-4 && R.y1 > 1 - 1e-4, pw = Math.round((R.x1 - R.x0) * INFO.w), ph = Math.round((R.y1 - R.y0) * INFO.h);
-    $b("#frInfo").textContent = whole ? `The whole image, ${INFO.w} × ${INFO.h} px` : `${pw} × ${ph} px of ${INFO.w} × ${INFO.h} (${Math.round((R.x1 - R.x0) * (R.y1 - R.y0) * 100)}% of the picture)`;
-    $b("#frOk").textContent = whole ? (thenNewSong ? "Continue with the whole image" : "Use the whole image") : thenNewSong ? "Continue with this frame" : "Use this frame";
-    $b("#frWhole").hidden = whole;
-    body.querySelectorAll("#frShapes .chip").forEach(b => b.setAttribute("aria-checked", String(b.dataset.k === shape)));
+    const pw = Math.round((R.x1 - R.x0) * INFO.w), ph = Math.round((R.y1 - R.y0) * INFO.h);
+    info.textContent = isWhole() ? `The whole image, ${INFO.w} × ${INFO.h} px` : `${pw} × ${ph} px of ${INFO.w} × ${INFO.h} (${Math.round((R.x1 - R.x0) * (R.y1 - R.y0) * 100)}% of the picture)`;
+    host.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-checked", String(b.dataset.k === shape)));
+  };
+  const setShape = key => {
+    shape = key; const k = kOf(key);
+    if (key === "whole") R = { x0: 0, y0: 0, x1: 1, y1: 1 };
+    else if (k) {
+      // the largest frame of that shape, centred where the frame is now
+      const cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2; let w = 1, h = 1 / k; if (h > 1) { h = 1; w = k; }
+      const x0 = clamp(cx - w / 2, 0, 1 - w), y0 = clamp(cy - h / 2, 0, 1 - h); R = { x0, y0, x1: x0 + w, y1: y0 + h };
+    }
+    draw();
   };
   // dragging: a corner or an edge resizes (keeping the shape when one is chosen), inside moves
   let drag = null;
@@ -567,8 +574,8 @@ function openFrame(thenNewSong = false) {
       if (k) {
         if (dx && dy) { w = Math.min(w, h * k); } else if (dy) w = h * k;
         // an edge keeps the frame centred across; a corner grows from the opposite corner
-        const cx = (A0.x0 + A0.x1) / 2, cy = (A0.y0 + A0.y1) / 2, maxW = dx ? roomX : 2 * Math.min(cx, 1 - cx), maxH = dy ? roomY : 2 * Math.min(cy, 1 - cy);
-        w = Math.min(w, maxW, maxH * k); h = w / k;
+        const cx = (A0.x0 + A0.x1) / 2, cy = (A0.y0 + A0.y1) / 2, maxW2 = dx ? roomX : 2 * Math.min(cx, 1 - cx), maxH2 = dy ? roomY : 2 * Math.min(cy, 1 - cy);
+        w = Math.min(w, maxW2, maxH2 * k); h = w / k;
         const x0 = dx ? (dx > 0 ? ax : ax - w) : cx - w / 2, y0 = dy ? (dy > 0 ? ay : ay - h) : cy - h / 2;
         R = { x0, y0, x1: x0 + w, y1: y0 + h };
       } else {
@@ -579,46 +586,52 @@ function openFrame(thenNewSong = false) {
     }
     clampR(); draw();
   });
-  const end = () => { if (!drag) return; drag = null; if (R.x1 - R.x0 < MIN || R.y1 - R.y0 < MIN) setShape(shape === "free" ? "whole" : shape); };
+  const end = () => { if (!drag) return; drag = null; if (R.x1 - R.x0 < MIN || R.y1 - R.y0 < MIN) setShape(shape === "free" ? "whole" : shape); onCommit(); };
   cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
-  $b("#frShapes").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) setShape(b.dataset.k); });
-  const apply = whole => {
-    const r4 = v => Math.round(v * 1e4) / 1e4, crop = whole ? { l: 0, r: 0, t: 0, b: 0 } : { l: r4(R.x0), r: r4(1 - R.x1), t: r4(R.y0), b: r4(1 - R.y1) };
-    const changed = ["l", "r", "t", "b"].some(q => Math.abs(crop[q] - P.src.crop[q]) > 1e-4);
-    close();
-    if (changed) {
-      // another part of the picture: the places start again
-      Object.assign(P.src.crop, crop); PATH.mode = "auto"; PATH.points = []; SEL = 0; HIST = []; FUT = [];
-      for (const q of ["l", "r", "t", "b"]) if (SRC_CTL["srcCrop." + q]) SRC_CTL["srcCrop." + q].set(P.src.crop[q], false);
-      if (thenNewSong) NEW_SONG_PENDING = true;
-      applySource(); renderImageInfo();
-    } else if (thenNewSong) openNewSong(true);
-  };
-  $b("#frOk").addEventListener("click", () => apply(false));
-  $b("#frWhole").addEventListener("click", () => apply(true));
+  host.querySelector(".chips").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { setShape(b.dataset.k); onCommit(); } });
   draw(); requestAnimationFrame(draw);
+  return { isWhole, crop: () => frameCrop(R, isWhole()), setWhole: () => setShape("whole"), draw };
+}
+// On its own (the Image card): the editor with its two buttons.
+function openFrame() {
+  if (!BASE) return;
+  const { body, close } = openInfo("Frame the picture", `<div class="dlg-info frame">
+    <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. The eye, the notes and the video read only what is inside.</p>
+    <div id="frHost"></div>
+    <div class="ns-actions"><button type="button" class="btn btn-primary" id="frOk"></button><button type="button" class="btn" id="frWhole">Use the whole image</button></div></div>`, "dlg-frame");
+  const $b = s => body.querySelector(s);
+  const label = () => { const w = ed.isWhole(); $b("#frOk").textContent = w ? "Use the whole image" : "Use this frame"; $b("#frWhole").hidden = w; };
+  const ed = frameEditor($b("#frHost"), { onCommit: () => label() });
+  label();
+  $b("#frOk").addEventListener("click", () => { const c = ed.crop(); close(); applyFrame(c); });
+  $b("#frWhole").addEventListener("click", () => { close(); applyFrame({ l: 0, r: 0, t: 0, b: 0 }); });
 }
 
 /* ============ New song: the guided start (genre, duration, points; automatic or by hand) ============ */
 let NEW_SONG_PENDING = false;
 // a suggested number of places from the image: richer images get more (4-14), within what the duration fits
-function suggestedCount() {
+function suggestedCount(dur = P.duration) {
   if (!A) return 8;
   const rich = clamp(0.5 * A.global.entropy + 0.5 * A.global.edgeN);
-  return Math.round(4 + 10 * rich);
+  // a longer piece has room for more places (a minute: about 40% more than half a minute), a short one for fewer
+  return clampInt(Math.round((4 + 10 * rich) * Math.sqrt((dur || 30) / 30)), 2, 24);
 }
 // the orange part of a plain range input, up to its thumb (the shared sliders do this themselves)
 function fillRange(r) { const lo = Number(r.min) || 0, hi = Number(r.max) || 100; r.style.setProperty("--p", (((Number(r.value) - lo) / (hi - lo || 1)) * 100).toFixed(2) + "%"); }
 function openNewSong(fresh = false) {
-  const name = INFO ? INFO.name : "this image", sug = suggestedCount(), data = BASE && BASE.kind === "data";
+  const name = INFO ? INFO.name : "this image", data = BASE && BASE.kind === "data";
+  let sug = suggestedCount();
   const groups = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}"${k === P.style ? " selected" : ""}>${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
   const places = Object.entries(PLACEMENTS).map(([k, v]) => `<option value="${k}"${k === (data ? "details" : P.placement) ? " selected" : ""}>${esc(v.name)}${v.group === "Neural" ? " (neural)" : ""}</option>`).join("");
   const { body, close } = openInfo(`New song from “${name}”`, `<div class="dlg-info newsong">
+    <details class="field nsframe" id="nsFrameBox" open><summary class="flabel">The picture: <span id="nsFrameSum"></span></summary>
+      <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. Everything below reads only what is inside.</p>
+      <div class="frame" id="nsFrame"></div></details>
     <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblDur">Duration</div><div class="seg" id="nsDur" role="radiogroup" aria-labelledby="nsLblDur"></div></div>
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, P.count || sug)}">
-      <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.${P.returns > 0 ? ` The eye may also look back at up to ${P.returns} of them.` : ""}</p></div>
+      <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture and length we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.${P.returns > 0 ? ` The eye may also look back at up to ${P.returns} of them.` : ""}</p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblCircle">Circle size</div><div class="seg" id="nsCircle" role="radiogroup" aria-labelledby="nsLblCircle"></div><p class="snote" id="nsCircleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblMel">Melody</div><div class="seg" id="nsMel" role="radiogroup" aria-labelledby="nsLblMel"></div><p class="snote" id="nsMelNote"></p></div>
@@ -671,14 +684,33 @@ function openNewSong(fresh = false) {
   };
   makeSeg($b("#nsCircle"), [["area", "From the area"], ["same", "Same for all"]], circle, v => { circle = v; note(); });
   makeSeg($b("#nsGroove"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], groove, v => { groove = v; note(); });
-  makeSeg($b("#nsDur"), DURATIONS.map(d => [String(d), `${d} s`]), String(dur), v => { dur = Number(v); });
+  // the suggested number of places follows the length chosen and the frame
+  const reSug = () => { sug = suggestedCount(dur); $b("#nsSug").textContent = sug; };
+  makeSeg($b("#nsDur"), DURATIONS.map(d => [String(d), `${d} s`]), String(dur), v => { dur = Number(v); reSug(); });
   makeSeg($b("#nsMel"), [["classic", "Classic"], ["story", "Story (AI)"], ["improv", "Improvise (AI)"]], mel, v => { mel = v; note(); });
   makeSeg($b("#nsConn"), Object.entries(CONNECT), conn, v => { conn = v; note(); });
   makeSeg($b("#nsOrch"), Object.entries(ORCHESTRATION).filter(([k]) => k !== "custom" || P.orch === "custom"), orch, v => { orch = v; note(); });
   ["#nsStyle", "#nsPlace"].forEach(s => $b(s).addEventListener("change", note));
   $b("#nsCount").addEventListener("input", note);
   $b("#nsSug").addEventListener("click", () => { $b("#nsCount").value = sug; note(); });
-  note();
+  note(); reSug();
+  // the frame, first: changing it reads the picture again, then the suggestions here follow
+  if (BASE) {
+    const sum = () => { const c = P.src.crop, whole = !(c.l || c.r || c.t || c.b); $b("#nsFrameSum").textContent = whole ? "the whole image" : `a part of it, ${Math.round((1 - c.l - c.r) * INFO.w)} × ${Math.round((1 - c.t - c.b) * INFO.h)} px`; };
+    let ed = null;
+    const build = () => { if (!ed) ed = frameEditor($b("#nsFrame"), { maxH: 260, onCommit: async () => {
+      const before = A; if (!applyFrame(ed.crop())) return;
+      sum();
+      // wait for the new analysis (a few frames), then refresh what depends on it
+      for (let k = 0; k < 120 && A === before; k++) await new Promise(r => requestAnimationFrame(r));
+      if (!body.isConnected) return;
+      if (A) { const best = suggestStyles(A)[0]; if (fresh && best) $b("#nsStyle").value = best.style; }
+      reSug(); note();
+    } }); else ed.draw(); };
+    sum();
+    $b("#nsFrameBox").addEventListener("toggle", () => { if ($b("#nsFrameBox").open) build(); });
+    if ($b("#nsFrameBox").open) build();
+  }
   const apply = () => {
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value);
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
@@ -1710,7 +1742,7 @@ const SRC_SLIDERS = {
 };
 const SRC_CTL = {};
 function initSourceControls() {
-  { const fb = $("#frameBtn"); if (fb) fb.addEventListener("click", () => openFrame(false)); }
+  { const fb = $("#frameBtn"); if (fb) fb.addEventListener("click", () => openFrame()); }
   for (const host of Object.keys(SRC_SLIDERS)) {
     const el = $("#" + host), target = host === "srcCrop" ? P.src.crop : P.src;
     for (const d of SRC_SLIDERS[host]) { const sl = makeSlider({ ...d, key: d.key }, target, () => scheduleSource()); SRC_CTL[host + "." + d.key] = sl; el.appendChild(sl.el); }

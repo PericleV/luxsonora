@@ -8,7 +8,7 @@ import { gazePath, readPoints, coverage, backgroundZone, DEFAULT_RADIUS } from "
 import { compose } from "../src/core/compose.js";
 import { STYLES } from "../src/core/theory.js";
 import { LIBRARY } from "../src/core/instruments.js";
-import { genreCore, genreLayers, pictureOf, characterOf, GEN_MODES } from "../src/core/gen.js";
+import { genreCore, genreLayers, pictureOf, characterOf, GEN_MODES, genOf, pictureBandOf } from "../src/core/gen.js";
 import { rawNotes, rawPath, snap, RAW_READS, rawTrackList, nextTrackId, DRUMS_KEY } from "../src/core/raw.js";
 
 const P0 = { style: "rock", duration: 30, count: 8, returns: 0, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7, samples: true, orch: "small" };
@@ -28,14 +28,19 @@ const strip = sc => sc.notes.map(n => [n.layer, Math.round(n.t * 1e4), Math.roun
 const names = sc => ["lead", "harm", "bass", "pad"].map(l => sc.inst[l].name).concat((sc.extra || []).map(L => L.name));
 
 describe("song generation modes", () => {
-  it("three modes", () => { expect(Object.keys(GEN_MODES)).toEqual(["classic", "genre", "raw"]); });
+  it("two modes, and the picture may choose the band of a composed piece; old projects keep their meaning", () => {
+    expect(Object.keys(GEN_MODES)).toEqual(["composed", "raw"]);
+    expect([genOf({ gen: "classic" }), genOf({ gen: "genre" }), genOf({ gen: "raw" }), genOf({})]).toEqual(["composed", "composed", "raw", "composed"]);
+    expect([pictureBandOf({ gen: "genre" }), pictureBandOf({ gen: "composed", pictureBand: true }), pictureBandOf({ gen: "composed" }), pictureBandOf({ gen: "raw", pictureBand: true })]).toEqual([true, true, false, false]);
+    expect(strip(run({ ...P0, gen: "composed", pictureBand: true, orch: "full" }))).toEqual(strip(run({ ...P0, gen: "genre", orch: "full" })));
+  });
   it("Classic is the piece as it was", () => {
-    expect(strip(run({ ...P0, gen: "classic" }))).toEqual(strip(run({ ...P0 })));
+    expect(strip(run({ ...P0, gen: "composed" }))).toEqual(strip(run({ ...P0 })));
   });
   it("By genre: the picture chooses instruments from the genre, the same picture the same ones, none twice", () => {
     const seen = new Set();
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const a = run({ ...P0, gen: "genre", orch: "full" }, seed), b = run({ ...P0, gen: "genre", orch: "full" }, seed);
+      const a = run({ ...P0, gen: "composed", pictureBand: true, orch: "full" }, seed), b = run({ ...P0, gen: "composed", pictureBand: true, orch: "full" }, seed);
       expect(names(a)).toEqual(names(b));
       seen.add(names(a).join("|"));
       expect(a.extra.length).toBeGreaterThanOrEqual(3);
@@ -55,7 +60,7 @@ describe("song generation modes", () => {
     }
   });
   it("By genre keeps your own instrument", () => {
-    const sc = run({ ...P0, gen: "genre", instruments: { lead: { preset: "s.flute" } } });
+    const sc = run({ ...P0, gen: "composed", pictureBand: true, instruments: { lead: { preset: "s.flute" } } });
     expect(sc.inst.lead.name).toBe(LIBRARY["s.flute"].name);
   });
   it("every style's pools name real instruments", () => {
@@ -69,9 +74,9 @@ describe("song generation modes", () => {
 
 describe("by genre leaves out what the genre does not have", () => {
   it("a jazz combo has no pad", () => {
-    const sc = run({ ...P0, style: "jazz", gen: "genre" });
+    const sc = run({ ...P0, style: "jazz", gen: "composed", pictureBand: true });
     expect(sc.omit).toEqual(["pad"]); expect(sc.notes.some(n => n.layer === "pad")).toBe(false);
-    expect(run({ ...P0, style: "jazz", gen: "classic" }).notes.some(n => n.layer === "pad")).toBe(true);
+    expect(run({ ...P0, style: "jazz", gen: "composed" }).notes.some(n => n.layer === "pad")).toBe(true);
   });
 });
 

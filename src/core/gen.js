@@ -1,8 +1,8 @@
-// How a song is made: Classic (each style always has the same tracks), By genre (the genre and
-// the picture choose the tracks and their instruments) or Raw (the notes read straight from the
-// picture, raw.js).
+// How a song is made: Composed (the genre's harmony, rules and band) or Raw (the notes read
+// straight from the picture, raw.js). A composed piece plays the genre's usual band, or, with
+// "The picture chooses the band" on (P.pictureBand), the band this picture calls for.
 //
-// By genre: every style has a pool of instruments for its five tracks and a band for the added
+// The picture chooses the band: every style has a pool of instruments for its five tracks and a band for the added
 // ones (arrange.js STYLE_BAND), checked against what the genre usually plays (bossa nova: nylon
 // guitar, flute, muted trumpet, sax; reggae: organ bubble, skank guitar, clavinet, horns; trip
 // hop: Rhodes, strings, muted trumpet; synthwave: pads, arpeggios, a sax on top; post-rock:
@@ -27,12 +27,19 @@ import { clamp } from "./util.js";
 import { LIBRARY, styleDefault } from "./instruments.js";
 import { STYLE_BAND, STYLE_ROLES, ROLES, roleInstrument } from "./arrange.js";
 
-export const GEN_MODES = { classic: "Classic", genre: "By genre", raw: "Raw" };
+export const GEN_MODES = { composed: "Composed", raw: "Raw" };
 export const GEN_DESC = {
-  classic: "The style always plays with the same tracks and instruments, and the picture shapes the music they play.",
-  genre: "The genre and the picture choose the tracks and their instruments: a busy, sharp picture takes plucked and percussive sounds, a calm one held sounds, a light one brighter ones. Two pictures in the same style can sound like different bands.",
+  composed: "The genre's harmony, rhythm and rules, with the picture shaping the melody, the chords and the sound.",
   raw: "No harmony and no rules: the notes are read straight from the picture along the eye's path. Each track reads one thing (the height, the brightness, the colour, the edges...). Choose the tempo, the scale and what each track reads."
 };
+export const BAND_DESC = {
+  off: "The genre's usual band: the same tracks and instruments for every picture in this genre.",
+  on: "The picture chooses among the instruments typical of the genre: a busy, sharp picture takes plucked and percussive sounds, a calm one held sounds, a light one brighter ones. A track the genre seldom has is left out (a jazz combo plays without a pad)."
+};
+// The mode of a project's settings, and whether the picture chooses the band; projects saved with
+// the three modes of before ("classic", "genre", "raw") keep their meaning.
+export const genOf = P => (P && P.gen === "raw" ? "raw" : "composed");
+export const pictureBandOf = P => !!P && P.gen !== "raw" && (P.pictureBand === true || P.gen === "genre");
 
 // The instruments each style can use on its five tracks, with how typical each is of the genre
 // (1: what the genre is built on; 0.3: heard in it now and then). The style's own instrument

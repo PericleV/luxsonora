@@ -8,7 +8,7 @@ import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
-import { GEN_MODES, GEN_DESC, genreCore, genreLayers, styleKey, GENRE_OMIT } from "../core/gen.js";
+import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT } from "../core/gen.js";
 import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable } from "../core/raw.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
@@ -34,7 +34,7 @@ const APP_VERSION = pkg.version, APP_NAME = "Lux Sonora", APP_NAMES = ["Lux Sono
 import { improvMelody } from "../ml/improv.js";
 import { grooveFor, applyGroove, grooveKey } from "../ml/groove.js";
 import { prepareSamples, kitSpecs, STYLE_KIT, onSampleStatus, instrumentCatalog } from "../audio/samples.js";
-import { addToLibrary, LIBRARY } from "../core/instruments.js";
+import { addToLibrary, LIBRARY, styleDefault } from "../core/instruments.js";
 import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument, STYLE_BAND, roleFor, autoLayers, richnessOf } from "../core/arrange.js";
 import { KITS, kitCatalog, DRUM_PIECES, pieceSpecs } from "../audio/samples.js";
 import { defaultEq, styleFx } from "../audio/fx.js";
@@ -56,7 +56,7 @@ const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
   style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
-  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "classic", rawBpm: 0, rawScale: true, rawTracks: [], layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, rawBpm: 0, rawScale: true, rawTracks: [], layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
   // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
@@ -357,7 +357,7 @@ function renderOrch() {
   if (ORCH_SEG) ORCH_SEG.set(P.orch || "small");
   const host = $("#orchNote"); if (!host || !SCORE) return;
   const xs = SCORE.extra || [];
-  host.textContent = (xs.length ? `Five tracks and ${xs.length} added${P.gen === "genre" && P.orch !== "custom" ? ", chosen by the genre and the picture" : ""}: ${xs.map(L => `${ROLES[L.role].name.toLowerCase()} (${L.name})`).join(", ")}.` : "Five tracks: melody, harmony, bass, pad and rhythm. Medium adds 2 or 3 tracks and Full 4 to 6, on top of these five; Add layer picks one yourself.")
+  host.textContent = (xs.length ? `Five tracks and ${xs.length} added${pictureBandOf(P) && P.orch !== "custom" ? ", chosen by the genre and the picture" : ""}: ${xs.map(L => `${ROLES[L.role].name.toLowerCase()} (${L.name})`).join(", ")}.` : "Five tracks: melody, harmony, bass, pad and rhythm. Medium adds 2 or 3 tracks and Full 4 to 6, on top of these five; Add layer picks one yourself.")
     + " Choose each track's instrument with ▾ on its lane under the picture.";
 }
 function initOrch() {
@@ -605,7 +605,8 @@ function openNewSong(fresh = false) {
       <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. Everything below reads only what is inside.</p>
       <div class="frame" id="nsFrame"></div></details>
     <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
-    <div class="field"><div class="flabel" id="nsLblGen">How the song is made</div><div class="seg" id="nsGen" role="radiogroup" aria-labelledby="nsLblGen"></div><p class="snote" id="nsGenNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblGen">How the song is made</div><div class="seg" id="nsGen" role="radiogroup" aria-labelledby="nsLblGen"></div><p class="snote" id="nsGenNote"></p>
+      <div class="no-raw"><label class="toggle"><input type="checkbox" id="nsBand"${pictureBandOf(P) ? " checked" : ""}><span>The picture chooses the band</span></label><p class="snote" id="nsBandNote"></p></div></div>
     <div class="field"><div class="flabel" id="nsLblDur">Duration</div><div class="seg" id="nsDur" role="radiogroup" aria-labelledby="nsLblDur"></div></div>
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, fresh ? sug : P.count || sug)}">
@@ -630,7 +631,7 @@ function openNewSong(fresh = false) {
   if (fresh && A) { const best = suggestStyles(A)[0]; if (best) $b("#nsStyle").value = best.style; }
   $b("#nsSuggest").addEventListener("click", e => { const x = e.target.closest("[data-style]"); if (!x) return; $b("#nsStyle").value = x.dataset.style; note(); });
   let dur = P.duration, mel = P.melody || "classic", conn = P.connect || "light", orch = P.orch === "custom" ? "custom" : P.orch || "small";
-  let circle = P.circleSize || "area", groove = P.groove === "neural" ? "neural" : "straight", gen = P.gen || "classic";
+  let circle = P.circleSize || "area", groove = P.groove === "neural" ? "neural" : "straight", gen = genOf(P), band = pictureBandOf(P);
   const CIRCLE_DESC = {
     area: "Each circle takes the size of the spot that draws the eye there: small for a sharp detail, large for a wide, even area. The circle is what that place reads, so its size shapes the sound too.",
     same: "Every circle has the same size, set by Radius in the Piece tab."
@@ -653,11 +654,11 @@ function openNewSong(fresh = false) {
   const orchNote = () => {
     const st = $b("#nsStyle").value, n = Number($b("#nsCount").value);
     if (orch === "custom") return "Your own list of instruments stays as it is.";
-    const samples = P.samples !== false, core = gen === "genre" && A ? genreCore(st, A, { samples, melody: mel }) : null;
+    const samples = P.samples !== false, core = band && gen !== "raw" && A ? genreCore(st, A, { samples, melody: mel }) : null;
     const coreTxt = core && Object.values(core).some(Boolean) ? ` For this picture: ${["lead", "harm", "bass", "pad"].filter(l => core[l]).map(l => `${LAYER_NAME[l].toLowerCase()} on ${LIBRARY[core[l]].name}`).join(", ")}.` : "";
     if (orch === "small") return "Five tracks: melody, harmony, bass, a pad underneath and the drums (or the style's percussion)." + coreTxt;
-    const xs = !A ? [] : gen === "genre" ? genreLayers(st, orch, A, { samples, richness: richnessOf(A, n) }).pick : autoLayers(st, orch, richnessOf(A, n), samples);
-    return `The five tracks, plus ${xs.length} more ${gen === "genre" ? "chosen for this picture from" : "from"} the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds; one with almost nothing to play in this picture is swapped for the next in the band.${coreTxt}`;
+    const xs = !A ? [] : band ? genreLayers(st, orch, A, { samples, richness: richnessOf(A, n) }).pick : autoLayers(st, orch, richnessOf(A, n), samples);
+    return `The five tracks, plus ${xs.length} more ${band ? "chosen for this picture from" : "from"} the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds; one with almost nothing to play in this picture is swapped for the next in the band.${coreTxt}`;
   };
   const note = () => {
     $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
@@ -666,9 +667,10 @@ function openNewSong(fresh = false) {
       $b("#nsBackNote").textContent = k ? `The eye goes back to ${k} of the points it has seen and their tune comes back, like a refrain. ${c} points + ${k} return${k > 1 ? "s" : ""} = ${c + k} stops on the path.` : `The eye never goes back: ${c} points, ${c} stops on the path. Add returns to bring a tune back, like a refrain.`; }
     $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
     $b("#nsCircleNote").textContent = CIRCLE_DESC[circle]; $b("#nsGrooveNote").textContent = GROOVE_DESC[groove];
-    $b("#nsGenNote").textContent = GEN_DESC[gen]; body.querySelector(".newsong").classList.toggle("gen-raw", gen === "raw");
+    $b("#nsGenNote").textContent = GEN_DESC[gen]; $b("#nsBandNote").textContent = BAND_DESC[band ? "on" : "off"]; body.querySelector(".newsong").classList.toggle("gen-raw", gen === "raw");
   };
   makeSeg($b("#nsGen"), Object.entries(GEN_MODES), gen, v => { gen = v; note(); });
+  $b("#nsBand").addEventListener("change", e => { band = e.target.checked; note(); });
   makeSeg($b("#nsCircle"), [["area", "From the area"], ["same", "Same for all"]], circle, v => { circle = v; note(); });
   makeSeg($b("#nsGroove"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], groove, v => { groove = v; note(); });
   // the suggested number of places follows the length chosen and the frame
@@ -703,7 +705,7 @@ function openNewSong(fresh = false) {
     if ($b("#nsStyle").value !== P.style) resetInstrumentChoice();
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value); P.returnsExact = true;
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
-    P.connect = conn; P.orch = orch; P.circleSize = circle; P.gen = gen;
+    P.connect = conn; P.orch = orch; P.circleSize = circle; P.gen = gen; P.pictureBand = band;
     if (P.groove !== groove) { P.groove = groove; GROOVE.failed = false; }
     SL.reverb.set(STYLES[P.style].reverb, false); ATTN.failed = false;
   };
@@ -1984,6 +1986,8 @@ function applySettings(j) {
   // projects from before the generated intro had none, and a one-bar ending
   if (!("intro" in j.settings)) P.intro = "off";
   if (!("circleSize" in j.settings)) P.circleSize = "same";
+  // the three modes of before: By genre is Composed with the picture choosing the band
+  if (j.settings.gen === "genre" || j.settings.gen === "classic") { P.pictureBand = j.settings.gen === "genre"; P.gen = "composed"; }
   // the detected names are gone from the labels: those projects show the notes
   if (P.video && P.video.labels === "auto") P.video.labels = "notes";
   // projects from before the returns were exact keep theirs as they were (up to that many)
@@ -2092,8 +2096,23 @@ function resetInstrumentChoice() { P.instruments = {}; P.kit = "style"; }
 /* ============ how the song is made: Classic, By genre, Raw (core/gen.js, core/raw.js) ============ */
 let GEN_SEG = null, RAW_TEMPO = null;
 function setGen(v) { P.gen = v; document.body.classList.toggle("gen-raw", v === "raw"); invalidate(LV.MUSIC); }
+// What the picture chose, against the genre's usual band (your own instruments aside)
+function bandSummary(sc) {
+  if (!sc || sc.raw || !pictureBandOf(P)) return "";
+  const parts = [];
+  for (const l of ["lead", "harm", "bass", "pad"]) {
+    if ((sc.omit || []).includes(l) || (P.instruments[l] && P.instruments[l].preset)) continue;
+    const usual = styleDefault(P.style, l, P.melody, P.samples === true), now = sc.inst[l];
+    if (usual && now && usual.name !== now.name) parts.push(`${LAYER_NAME[l].toLowerCase()} on ${now.name} instead of ${usual.name}`);
+  }
+  for (const l of sc.omit || []) parts.push(`no ${LAYER_NAME[l].toLowerCase()} (${STYLES[P.style].name} seldom has one)`);
+  const xs = (sc.extra || []).filter(L => !L.only);
+  if (xs.length && P.orch !== "custom") parts.push(`added: ${xs.map(L => L.name).join(", ")}`);
+  return parts.length ? `This picture chose: ${parts.join("; ")}.` : "This picture keeps the genre's usual band.";
+}
 function initGen() {
-  GEN_SEG = makeSeg($("#genSeg"), Object.entries(GEN_MODES), P.gen || "classic", setGen);
+  GEN_SEG = makeSeg($("#genSeg"), Object.entries(GEN_MODES), genOf(P), setGen);
+  $("#bandPick").addEventListener("change", e => { P.pictureBand = e.target.checked; if (P.gen !== "raw") P.gen = "composed"; invalidate(LV.MUSIC); });
   const keyOpts = `<option value="auto">From the picture</option>${NOTE_SH.map((n, i) => `<option value="${i}">${n}${[1, 3, 6, 8, 10].includes(i) ? " / " + NOTE_FL[i] : ""}</option>`).join("")}`;
   $("#rawBox").innerHTML = `
     <div class="field"><div class="flabel" id="lblRawTempo">Tempo</div><div class="seg seg-sm" id="rawTempoSeg" role="radiogroup" aria-labelledby="lblRawTempo"></div>
@@ -2126,7 +2145,9 @@ function initGen() {
 function renderRaw() {
   if (!GEN_SEG) return;
   const raw = P.gen === "raw";
-  GEN_SEG.set(P.gen || "classic"); $("#genNote").textContent = GEN_DESC[P.gen || "classic"] || "";
+  GEN_SEG.set(genOf(P)); $("#genNote").textContent = GEN_DESC[genOf(P)] || "";
+  $("#bandPick").checked = pictureBandOf(P);
+  $("#bandNote").textContent = [BAND_DESC[pictureBandOf(P) ? "on" : "off"], bandSummary(SCORE)].filter(Boolean).join(" ");
   document.body.classList.toggle("gen-raw", raw);
   // the controls a raw piece does not use (its tempo and key are in the Raw panel)
   for (const k of ["tempoAdj", "arc", "smooth", "timbre"]) if (SL[k]) SL[k].el.classList.add("no-raw");

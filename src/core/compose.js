@@ -14,7 +14,7 @@ import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
 import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
-import { genreCore, genreLayers, styleKey, GENRE_OMIT } from "./gen.js";
+import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf } from "./gen.js";
 import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY } from "./raw.js";
 
 export const SCORE_VERSION = 2;
@@ -31,14 +31,14 @@ function gridSplit(dur, w) {
 }
 
 // lum: optional luminance image { w, h, data } for texture wavetables (defaults to the analysed image)
-// P.gen: "classic" (the style's own tracks), "genre" (the genre and the picture choose them,
-// gen.js) or "raw" (the notes read straight from the picture, raw.js).
+// P.gen: "composed" or "raw" (the notes read straight from the picture, raw.js); a composed piece
+// with P.pictureBand on lets the picture choose its band (gen.js).
 export function compose(args) {
   const P = args.P;
   if (P.gen !== "raw") {
     const sc = composeMusic(args);
     // By genre: a track the genre does not usually have is left out
-    const omit = P.gen === "genre" ? GENRE_OMIT[P.style] || [] : [];
+    const omit = pictureBandOf(P) ? GENRE_OMIT[P.style] || [] : [];
     if (omit.length) { sc.notes = sc.notes.filter(n => !omit.includes(n.layer)); sc.omit = omit; }
     return sc;
   }
@@ -46,7 +46,7 @@ export function compose(args) {
   // rules, no added tracks), then its own tracks read the picture; the five tracks stay silent
   // (the rhythm track plays the drum kit when a raw track asks for it)
   const fixed = P.rawBpm > 0;
-  const Pr = { ...P, gen: "classic", intro: "off", connect: "off", melody: "classic", groove: "straight", expert: [], orch: "small", layers: [], bpmFix: fixed ? P.rawBpm : 0, tempoAdj: fixed ? 0 : P.tempoAdj };
+  const Pr = { ...P, gen: "composed", pictureBand: false, intro: "off", connect: "off", melody: "classic", groove: "straight", expert: [], orch: "small", layers: [], bpmFix: fixed ? P.rawBpm : 0, tempoAdj: fixed ? 0 : P.tempoAdj };
   const sc = composeMusic({ ...args, P: Pr });
   const list = rawTrackList(P, styleKey(P.style, "lead", "classic", P.samples === true));
   const tonal = list.filter(t => t.preset !== DRUMS_KEY);
@@ -89,7 +89,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   const melIv = pent ? (major ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]) : !scale && st.melScale ? st.melScale : modeIv, n = melIv.length;
   const baseLead = 60 + pcOff + 12 * octave, stats = imageStats(A), maxE = stats.maxE;
   // By genre: the picture chooses the five tracks' instruments from the genre's pool
-  const genre = P.gen === "genre", core = genre ? genreCore(P.style, A, { samples: P.samples === true, melody: P.melody }) : null;
+  const genre = pictureBandOf(P), core = genre ? genreCore(P.style, A, { samples: P.samples === true, melody: P.melody }) : null;
   const inst = resolveInstruments(P.style, P.instruments, P.melody, P.samples === true, core);
   const texImg = lum || { w: A.W, h: A.H, data: A.L };
   const usesWave = ["lead", "harm", "bass", "pad"].some(l => inst[l].type === "wave");

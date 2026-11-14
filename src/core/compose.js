@@ -14,6 +14,8 @@ import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
 import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
+import { genreCore, genreLayers, styleKey, GENRE_OMIT } from "./gen.js";
+import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY } from "./raw.js";
 
 export const SCORE_VERSION = 2;
 
@@ -29,7 +31,36 @@ function gridSplit(dur, w) {
 }
 
 // lum: optional luminance image { w, h, data } for texture wavetables (defaults to the analysed image)
-export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = null }) {
+// P.gen: "classic" (the style's own tracks), "genre" (the genre and the picture choose them,
+// gen.js) or "raw" (the notes read straight from the picture, raw.js).
+export function compose(args) {
+  const P = args.P;
+  if (P.gen !== "raw") {
+    const sc = composeMusic(args);
+    // By genre: a track the genre does not usually have is left out
+    const omit = P.gen === "genre" ? GENRE_OMIT[P.style] || [] : [];
+    if (omit.length) { sc.notes = sc.notes.filter(n => !omit.includes(n.layer)); sc.omit = omit; }
+    return sc;
+  }
+  // Raw: the piece is composed for its places, times and key (no intro, no connections, no
+  // rules, no added tracks), then its own tracks read the picture; the five tracks stay silent
+  // (the rhythm track plays the drum kit when a raw track asks for it)
+  const fixed = P.rawBpm > 0;
+  const Pr = { ...P, gen: "classic", intro: "off", connect: "off", melody: "classic", groove: "straight", expert: [], orch: "small", layers: [], bpmFix: fixed ? P.rawBpm : 0, tempoAdj: fixed ? 0 : P.tempoAdj };
+  const sc = composeMusic({ ...args, P: Pr });
+  const list = rawTrackList(P, styleKey(P.style, "lead", "classic", P.samples === true));
+  const tonal = list.filter(t => t.preset !== DRUMS_KEY);
+  for (const t of tonal) sc.inst[t.id] = { ...LIBRARY[t.preset] };
+  sc.extra = tonal.map(t => ({ id: t.id, role: READ_ROLE[t.read], preset: t.preset, name: LIBRARY[t.preset].name, read: t.read, gain: 0.8 }));
+  for (const F of sc.points) delete F.timX;
+  const tracks = list.map(t => ({ id: t.preset === DRUMS_KEY ? "perc" : t.id, read: t.read, preset: t.preset }));
+  sc.notes = rawNotes(sc, args.A, tracks, { scale: P.rawScale !== false });
+  sc.raw = { tracks, scale: P.rawScale !== false, bpm: fixed ? P.rawBpm : null };
+  sc.omit = ["lead", "harm", "bass", "pad", ...(list.some(t => t.preset === DRUMS_KEY) ? [] : ["perc"])];
+  sc.cadence = null; sc.modulation = null; sc.picardy = false;
+  return sc;
+}
+function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = null }) {
   const st = STYLES[P.style], g = A.global, ws = sem ? P.wSem : 0;
   // Advanced: composition can make the chords change faster or slower than the style's grid
   const R0 = RULES[P.style] || RULES.ambient, cr = P.chordRate ?? 1;
@@ -46,7 +77,8 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const pc = P.keyMode === "manual" ? ((P.keyPc % 12) + 12) % 12 : autoPc;
   const pcOff = pc > 5 ? pc - 12 : pc;
   const smooth = clamp(P.smooth ?? 0), range = P.range ?? 2, octave = P.octave ?? 0;
-  const bpmStyle = lerp(st.tempo[0], st.tempo[1], clamp(energy)) * (1 + P.tempoAdj);
+  // a tempo set by hand (Raw) is used as it is, before the whole bars round it
+  const bpmStyle = P.bpmFix > 0 ? P.bpmFix : lerp(st.tempo[0], st.tempo[1], clamp(energy)) * (1 + P.tempoAdj);
   // weight w (editable; defaults to the saliency at the point) sets the share of time
   const weightOf = f => (f.w ?? f.s);
   const plan = planTime(P.duration, bpmStyle, points.map(f => 1 + 3 * weightOf(f)), R.grid ?? 1, P.intro ?? "off", P.end ?? 1);
@@ -56,7 +88,9 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const pent = scale ? (scale === "majpent" || scale === "minpent") : st.pent;
   const melIv = pent ? (major ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]) : !scale && st.melScale ? st.melScale : modeIv, n = melIv.length;
   const baseLead = 60 + pcOff + 12 * octave, stats = imageStats(A), maxE = stats.maxE;
-  const inst = resolveInstruments(P.style, P.instruments, P.melody, P.samples === true);
+  // By genre: the picture chooses the five tracks' instruments from the genre's pool
+  const genre = P.gen === "genre", core = genre ? genreCore(P.style, A, { samples: P.samples === true, melody: P.melody }) : null;
+  const inst = resolveInstruments(P.style, P.instruments, P.melody, P.samples === true, core);
   const texImg = lum || { w: A.W, h: A.H, data: A.L };
   const usesWave = ["lead", "harm", "bass", "pad"].some(l => inst[l].type === "wave");
   const makeWave = (x, y, r, ori) => { const wv = textureWave(texImg, x, y, r, ori); wv.key = hashBytes(new Uint8Array(wv.imag.buffer)) + hashBytes(new Uint8Array(wv.real.buffer)); return wv; };
@@ -324,7 +358,9 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
   const places = new Set(used.map(f => f.revisitOf ?? f.index)).size;
   // the orchestration's layers, and the instruments the Expert rules add (they play only at their places)
   const expertL = expertLayers(P.expert).filter(L => ROLES[L.role]);
-  let autoL = P.orch === "custom" ? (P.layers || []).filter(L => ROLES[L.role]) : autoLayers(P.style, P.orch || "small", richnessOf(A, places), P.samples === true);
+  // By genre: the added tracks are the band's players that fit the picture best
+  const gl = genre && P.orch !== "custom" ? genreLayers(P.style, P.orch || "small", A, { samples: P.samples === true, avoid: ["lead", "harm", "bass", "pad"].map(l => inst[l].name), richness: richnessOf(A, places) }) : null;
+  let autoL = P.orch === "custom" ? (P.layers || []).filter(L => ROLES[L.role]) : gl ? gl.pick : autoLayers(P.style, P.orch || "small", richnessOf(A, places), P.samples === true);
   const setInst = L => {
     const base = (L.preset && LIBRARY[L.preset]) || LIBRARY[roleInstrument(P.style, L.role, P.samples === true)] || LIBRARY["x.softlead"];
     inst[L.id] = { ...base, ...(L.edits || {}) };
@@ -341,8 +377,9 @@ export function compose({ A, sal, points, cl, motifs, P, sem, cov = null, lum = 
     for (let pass = 0; pass < 5; pass++) {
       const thin = thinLayers(autoL, xs, plan.body); if (!thin.length) break;
       for (const L of thin) {
-        const role = pool.shift(), used = new Set(autoL.filter(x => x !== L).map(x => x.preset));
-        if (role) { const N = layerFor(P.style, role, L.id, P.samples === true, used); autoL = autoL.map(x => (x === L ? N : x)); setInst(N); }
+        const role = gl ? null : pool.shift(), used = new Set(autoL.filter(x => x !== L).map(x => x.preset)), next = gl && gl.rest.shift();
+        if (next) { const N = { ...next, id: L.id }; autoL = autoL.map(x => (x === L ? N : x)); setInst(N); }
+        else if (role) { const N = layerFor(P.style, role, L.id, P.samples === true, used); autoL = autoL.map(x => (x === L ? N : x)); setInst(N); }
         else { autoL = autoL.filter(x => x !== L); delete inst[L.id]; for (const F of out) if (F.timX) delete F.timX[L.id]; }
       }
       xs = autoL.length + expertL.length ? writeExtra([...autoL, ...expertL]) : [];

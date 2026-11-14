@@ -79,6 +79,7 @@ const SAMPLED = {
   "s.fiddle": SF("Fiddle", "fiddle", "pad", { a: 0.04, r: 0.3, col: 0.6, vib: 14 }),
   "s.accordion": SF("Accordion", "accordion", "pad", { a: 0.05, r: 0.3, col: 0.5 }),
   "s.koto": SF("Koto", "koto", "pluck", { d: 1.8, r: 0.5, col: 0.55 }),
+  "s.shamisen": SF("Shamisen", "shamisen", "pluck", { d: 1.1, r: 0.3, col: 0.6 }),
   "s.shakuhachi": SF("Shakuhachi", "shakuhachi", "pad", { a: 0.06, r: 0.5, col: 0.15, vib: 16 }),
   "s.kalimba": SF("Kalimba", "kalimba", "fm", { d: 1.2, s: 0.1, r: 0.6, ratio: 4 }),
   "s.harpsichord": SF("Harpsichord", "harpsichord", "pluck", { d: 1.4, r: 0.3, col: 0.75 }),
@@ -160,10 +161,12 @@ export function styleDefault(style, layer, melody = "classic", samples = false) 
   if (melody !== "classic" && layer === "lead") return LIBRARY[(samples && STORY_SAMPLED[style]) || STORY_LEAD[style]];
   return sampled[layer] ? LIBRARY[sampled[layer]] : STYLES[style].inst[layer];
 }
-export function resolveInstruments(style, choice = {}, melody = "classic", samples = false) {
+// defaults: { layer: preset } in place of the style's own (By genre, gen.js); your choice still wins
+export function resolveInstruments(style, choice = {}, melody = "classic", samples = false, defaults = null) {
   const out = {};
   for (const l of ["lead", "harm", "bass", "pad"]) {
-    const c = choice[l], base = c && c.preset && LIBRARY[c.preset] ? LIBRARY[c.preset] : styleDefault(style, l, melody, samples);
+    const c = choice[l], d = defaults && defaults[l] && LIBRARY[defaults[l]];
+    const base = c && c.preset && LIBRARY[c.preset] ? LIBRARY[c.preset] : d || styleDefault(style, l, melody, samples);
     out[l] = { ...base, ...(c && c.edits ? c.edits : {}) };
   }
   return out;

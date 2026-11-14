@@ -97,7 +97,7 @@ export function buildGraph(ctx, reverb, mix, fx = defaultFx(), bpm = 90, extra =
   tone.type = "lowpass"; dlyIn.connect(dly); dly.connect(tone); tone.connect(fb); fb.connect(dly); tone.connect(dlyOut); dlyOut.connect(bus);
   const inp = {}, drive = {}, eq = {}, fader = {}, rSend = {}, dSend = {}, duck = {};
   const baseGain = {}, layers = [...LAYERS, ...extra.map(L => L.id)];
-  for (const L of extra) baseGain[L.id] = (ROLES[L.role] || {}).gain ?? 0.45;
+  for (const L of extra) baseGain[L.id] = L.gain ?? (ROLES[L.role] || {}).gain ?? 0.45;
   for (const l of layers) {
     inp[l] = ctx.createGain();
     drive[l] = ctx.createWaveShaper(); drive[l].oversample = "4x";
@@ -508,7 +508,7 @@ function buildStem(ctx, layer, mix, fx, bpm, extra) {
   const inp = ctx.createGain(), drive = ctx.createWaveShaper(), eq = eqChain(ctx, layerEq(fx, layer)), duck = ctx.createGain(), fader = ctx.createGain();
   drive.oversample = "4x";
   inp.connect(drive); drive.connect(eq.input); eq.output.connect(duck); duck.connect(fader); fader.connect(ctx.destination);
-  const baseGain = {}; for (const L of extra) baseGain[L.id] = (ROLES[L.role] || {}).gain ?? 0.45;
+  const baseGain = {}; for (const L of extra) baseGain[L.id] = L.gain ?? (ROLES[L.role] || {}).gain ?? 0.45;
   const L = layerFx(fx, layer);
   drive.curve = L.drive > 0.001 ? driveCurve(L.drive) : null;
   setEq(eq, layerEq(fx, layer), 0);

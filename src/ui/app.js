@@ -8,6 +8,8 @@ import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
+import { GEN_MODES, GEN_DESC, genreCore, genreLayers, styleKey, GENRE_OMIT } from "../core/gen.js";
+import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable } from "../core/raw.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
@@ -54,7 +56,7 @@ const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
   style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
-  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "classic", rawBpm: 0, rawScale: true, rawTracks: [], layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
   // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
@@ -195,8 +197,8 @@ function recompute() {
     const semEff = SEM || (ATTN.objects && ATTN.objects.length ? { objects: ATTN.objects, valence: null, energy: null } : null);
     SCORE = compose({ A, sal: SAL, points: POINTS, cl: CL, motifs: MOT, P, sem: semEff, cov: COV, lum: LUM });
     ensureLayerState(SCORE); renderOrch(); renderExpert(); renderStyleSuggest();
-    storyStep();
-    grooveStep();
+    if (SCORE.raw) { melNote(""); grooveNote(""); } else { storyStep(); grooveStep(); }
+    renderRaw();
     // how it is played: dynamics from the image, accents, phrasing, CC curves, humanize
     perform(SCORE, P, A);
     preloadSamples();
@@ -326,9 +328,9 @@ function renderStyleSuggest() { const el = $("#styleSuggest"); if (el) el.innerH
 /* ============ orchestration: extra layers (src/core/arrange.js) ============ */
 // Small, Medium and Full are chosen automatically from the analysis; any change to the list
 // (add, remove, change an instrument) copies it into a custom list the user owns.
-const laneKeys = () => [...LAYERS, ...((SCORE && SCORE.extra) || []).map(L => L.id)];
+const laneKeys = () => [...LAYERS.filter(l => !((SCORE && SCORE.omit) || []).includes(l)), ...((SCORE && SCORE.extra) || []).map(L => L.id)];
 const extraOf = id => ((SCORE && SCORE.extra) || []).find(L => L.id === id);
-const layerName = l => LAYER_NAME[l] || (extraOf(l) ? ROLES[extraOf(l).role].name : l);
+const layerName = l => LAYER_NAME[l] || (extraOf(l) ? (extraOf(l).read ? RAW_READS[extraOf(l).read] : ROLES[extraOf(l).role].name) : l);
 // an added layer takes its role's colour; a second or third layer with the same role gets a lighter
 // or darker shade of it, so the lanes, the notes and the orchestration list can tell them apart
 const shadeHex = (hex, to, a) => { const c = parseInt(hex.slice(1), 16), t = to === "w" ? 255 : 0, m = v => Math.round(v + (t - v) * a); return "#" + ((m(c >> 16) << 16) | (m((c >> 8) & 255) << 8) | m(c & 255)).toString(16).padStart(6, "0"); };
@@ -355,7 +357,7 @@ function renderOrch() {
   if (ORCH_SEG) ORCH_SEG.set(P.orch || "small");
   const host = $("#orchNote"); if (!host || !SCORE) return;
   const xs = SCORE.extra || [];
-  host.textContent = (xs.length ? `Five tracks and ${xs.length} added: ${xs.map(L => ROLES[L.role].name.toLowerCase()).join(", ")}.` : "Five tracks: melody, harmony, bass, pad and rhythm. Medium and Full add tracks chosen from the image; Add layer picks one yourself.")
+  host.textContent = (xs.length ? `Five tracks and ${xs.length} added${P.gen === "genre" && P.orch !== "custom" ? ", chosen by the genre and the picture" : ""}: ${xs.map(L => `${ROLES[L.role].name.toLowerCase()} (${L.name})`).join(", ")}.` : "Five tracks: melody, harmony, bass, pad and rhythm. Medium adds 2 or 3 tracks and Full 4 to 6, on top of these five; Add layer picks one yourself.")
     + " Choose each track's instrument with ▾ on its lane under the picture.";
 }
 function initOrch() {
@@ -603,6 +605,7 @@ function openNewSong(fresh = false) {
       <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. Everything below reads only what is inside.</p>
       <div class="frame" id="nsFrame"></div></details>
     <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
+    <div class="field"><div class="flabel" id="nsLblGen">How the song is made</div><div class="seg" id="nsGen" role="radiogroup" aria-labelledby="nsLblGen"></div><p class="snote" id="nsGenNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblDur">Duration</div><div class="seg" id="nsDur" role="radiogroup" aria-labelledby="nsLblDur"></div></div>
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, fresh ? sug : P.count || sug)}">
@@ -612,10 +615,10 @@ function openNewSong(fresh = false) {
       <p class="snote" id="nsBackNote"></p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblCircle">Circle size</div><div class="seg" id="nsCircle" role="radiogroup" aria-labelledby="nsLblCircle"></div><p class="snote" id="nsCircleNote"></p></div>
-    <div class="field"><div class="flabel" id="nsLblMel">Melody</div><div class="seg" id="nsMel" role="radiogroup" aria-labelledby="nsLblMel"></div><p class="snote" id="nsMelNote"></p></div>
-    <div class="field"><div class="flabel" id="nsLblConn">Between the spots</div><div class="seg" id="nsConn" role="radiogroup" aria-labelledby="nsLblConn"></div><p class="snote" id="nsConnNote"></p></div>
-    <div class="field"><div class="flabel" id="nsLblOrch">Orchestration</div><div class="seg" id="nsOrch" role="radiogroup" aria-labelledby="nsLblOrch"></div><p class="snote" id="nsOrchNote"></p></div>
-    <div class="field"><div class="flabel" id="nsLblGroove">Groove</div><div class="seg" id="nsGroove" role="radiogroup" aria-labelledby="nsLblGroove"></div><p class="snote" id="nsGrooveNote"></p></div>
+    <div class="field no-raw"><div class="flabel" id="nsLblMel">Melody</div><div class="seg" id="nsMel" role="radiogroup" aria-labelledby="nsLblMel"></div><p class="snote" id="nsMelNote"></p></div>
+    <div class="field no-raw"><div class="flabel" id="nsLblConn">Between the spots</div><div class="seg" id="nsConn" role="radiogroup" aria-labelledby="nsLblConn"></div><p class="snote" id="nsConnNote"></p></div>
+    <div class="field no-raw"><div class="flabel" id="nsLblOrch">Orchestration</div><div class="seg" id="nsOrch" role="radiogroup" aria-labelledby="nsLblOrch"></div><p class="snote" id="nsOrchNote"></p></div>
+    <div class="field no-raw"><div class="flabel" id="nsLblGroove">Groove</div><div class="seg" id="nsGroove" role="radiogroup" aria-labelledby="nsLblGroove"></div><p class="snote" id="nsGrooveNote"></p></div>
     <p class="snote">Everything here can be changed later in the Piece tab. Advanced shows the rest: every instrument, the composition rules, how it is played, and more.</p>
     <div class="ns-actions">
       <button type="button" class="btn btn-primary" id="nsAuto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>Generate song</button>
@@ -627,7 +630,7 @@ function openNewSong(fresh = false) {
   if (fresh && A) { const best = suggestStyles(A)[0]; if (best) $b("#nsStyle").value = best.style; }
   $b("#nsSuggest").addEventListener("click", e => { const x = e.target.closest("[data-style]"); if (!x) return; $b("#nsStyle").value = x.dataset.style; note(); });
   let dur = P.duration, mel = P.melody || "classic", conn = P.connect || "light", orch = P.orch === "custom" ? "custom" : P.orch || "small";
-  let circle = P.circleSize || "area", groove = P.groove === "neural" ? "neural" : "straight";
+  let circle = P.circleSize || "area", groove = P.groove === "neural" ? "neural" : "straight", gen = P.gen || "classic";
   const CIRCLE_DESC = {
     area: "Each circle takes the size of the spot that draws the eye there: small for a sharp detail, large for a wide, even area. The circle is what that place reads, so its size shapes the sound too.",
     same: "Every circle has the same size, set by Radius in the Piece tab."
@@ -650,9 +653,11 @@ function openNewSong(fresh = false) {
   const orchNote = () => {
     const st = $b("#nsStyle").value, n = Number($b("#nsCount").value);
     if (orch === "custom") return "Your own list of instruments stays as it is.";
-    if (orch === "small") return "Five tracks: melody, harmony, bass, a pad underneath and the drums (or the style's percussion).";
-    const xs = A ? autoLayers(st, orch, richnessOf(A, n), P.samples !== false) : [];
-    return `The five tracks, plus ${xs.length} more from the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds; one with almost nothing to play in this picture is swapped for the next in the style's band.`;
+    const samples = P.samples !== false, core = gen === "genre" && A ? genreCore(st, A, { samples, melody: mel }) : null;
+    const coreTxt = core && Object.values(core).some(Boolean) ? ` For this picture: ${["lead", "harm", "bass", "pad"].filter(l => core[l]).map(l => `${LAYER_NAME[l].toLowerCase()} on ${LIBRARY[core[l]].name}`).join(", ")}.` : "";
+    if (orch === "small") return "Five tracks: melody, harmony, bass, a pad underneath and the drums (or the style's percussion)." + coreTxt;
+    const xs = !A ? [] : gen === "genre" ? genreLayers(st, orch, A, { samples, richness: richnessOf(A, n) }).pick : autoLayers(st, orch, richnessOf(A, n), samples);
+    return `The five tracks, plus ${xs.length} more ${gen === "genre" ? "chosen for this picture from" : "from"} the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds; one with almost nothing to play in this picture is swapped for the next in the band.${coreTxt}`;
   };
   const note = () => {
     $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
@@ -661,7 +666,9 @@ function openNewSong(fresh = false) {
       $b("#nsBackNote").textContent = k ? `The eye goes back to ${k} of the points it has seen and their tune comes back, like a refrain. ${c} points + ${k} return${k > 1 ? "s" : ""} = ${c + k} stops on the path.` : `The eye never goes back: ${c} points, ${c} stops on the path. Add returns to bring a tune back, like a refrain.`; }
     $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
     $b("#nsCircleNote").textContent = CIRCLE_DESC[circle]; $b("#nsGrooveNote").textContent = GROOVE_DESC[groove];
+    $b("#nsGenNote").textContent = GEN_DESC[gen]; body.querySelector(".newsong").classList.toggle("gen-raw", gen === "raw");
   };
+  makeSeg($b("#nsGen"), Object.entries(GEN_MODES), gen, v => { gen = v; note(); });
   makeSeg($b("#nsCircle"), [["area", "From the area"], ["same", "Same for all"]], circle, v => { circle = v; note(); });
   makeSeg($b("#nsGroove"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], groove, v => { groove = v; note(); });
   // the suggested number of places follows the length chosen and the frame
@@ -695,7 +702,7 @@ function openNewSong(fresh = false) {
   const apply = () => {
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value); P.returnsExact = true;
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
-    P.connect = conn; P.orch = orch; P.circleSize = circle;
+    P.connect = conn; P.orch = orch; P.circleSize = circle; P.gen = gen;
     if (P.groove !== groove) { P.groove = groove; GROOVE.failed = false; }
     SL.reverb.set(STYLES[P.style].reverb, false); ATTN.failed = false;
   };
@@ -1372,6 +1379,7 @@ function adsrSvg(list, label = "Envelope") {
 // The instruments of a place that the picture shapes: melody, harmony, bass and the parts the
 // orchestration added (shaped like the harmony), each with its timbre here and its depth.
 function pointInstruments(sc, F) {
+  if (sc.raw) return [];
   const out = ["lead", "harm", "bass"].filter(l => sc.inst[l] && F.tim[l]).map(l => ({ l, T: F.tim[l], depth: LAYER_DEPTH[l] }));
   for (const L of sc.extra || []) if (!L.only && F.timX && F.timX[L.id] && sc.inst[L.id]) out.push({ l: L.id, T: F.timX[L.id], depth: LAYER_DEPTH.harm });
   return out;
@@ -1457,9 +1465,10 @@ function renderPoint() {
     <div class="share"><div class="sharebar"><span style="width:${(F.share * 100).toFixed(1)}%"></span></div>
       <p>${nf(F.sec, 1)} s of ${sc.seconds} s (${Math.round(F.share * 100)}%), ${nf1(F.dur)} beats. Saliency here ${nf(F.s)}.</p></div>
     <h3>Timbre</h3>
-    ${timbreHtml}
+    ${timbreHtml || (sc.raw ? '<p class="snote">Raw: the instruments play as they are; the picture sets the notes, not the timbre.</p>' : "")}
     ${F.obj && CAT[F.obj.category] && P.wSem > 0 ? `<p class="note">The object “${esc(F.obj.name)}” pulls the timbre toward ${CAT[F.obj.category].label}.</p>` : ""}
-    <h3>Music</h3>
+    ${sc.raw ? `<h3>Music (raw)</h3>
+    <dl>${kv(sc.raw.tracks.map(T => { const ns = sc.notes.filter(n => n.layer === T.id && n.point === F.idx); return [layerName(T.id), `${ns.length} ${T.id === "perc" ? "hit" : "note"}${ns.length === 1 ? "" : "s"}${T.id !== "perc" && ns.length ? ": " + ns.slice(0, 8).map(n => midiName(n.midi)).join(" ") + (ns.length > 8 ? " …" : "") : ""}`, `reads the ${(RAW_READS[T.read] || T.read).toLowerCase()}: ${RAW_READ_DESC[T.read] || ""}`]; }).concat([["Stereo", panTxt, "from the horizontal position"]]))}</dl>` : `<h3>Music</h3>
     <dl>${kv([
       ["Arc", `${SECTION_NAME[F.section] || "Development"}, tension ${nf(F.tension ?? 0.6)}`, F.section === "climax" ? "the melody is doubled an octave above" : F.section === "intro" ? "texture only: the bass and the drum backbone enter after it" : F.section === "resolution" ? "the arrangement thins toward the cadence" : "density and dynamics follow the tension"],
       ["Melody", F.lead.map(midiName).join("  "), F.story ? (P.melody === "improv" ? "improvised over the chords (Magenta ImprovRNN) on this place's theme" : "story melody (Magenta), shaped by this place and the next") : stepTxt],
@@ -1467,7 +1476,7 @@ function renderPoint() {
       ["Harmony plays", HARM_NAME[F.harmKind] || "held chord", F.harmKind === "arp" ? "complex area or climax" : F.harmKind === "pulse" ? "rough area" : F.harmKind === "broken" ? "moderate texture" : "smooth area or quiet moment"],
       ["Bass", midiName(F.bass), BASS_NAME[F.bassKind] || ""],
       ["Drums", F.hits ? `${F.hits} hits` : "none", (F.drums || []).join(", ")],
-      ["Stereo", panTxt, "from the horizontal position"]])}</dl>
+      ["Stereo", panTxt, "from the horizontal position"]])}</dl>`}
     <h3>Area</h3>
     <dl>${kv([["Saliency", nf(F.s), ""], ["Brightness", nf(r.L), ""], ["Saturation", nf(r.sat), ""],
       ["Edges", nf(clamp(r.edge / maxE)), ""],
@@ -1541,7 +1550,7 @@ function renderLanes() {
       const b = e.target.closest(".ms button"); if (!b) return;
       const l = b.closest(".lane").dataset.layer, k = b.dataset.act;
       if (k === "pieces") { openDrumPieces(); return; }
-      if (k === "inst") { if (SOUND) SOUND.pickInstrument(l); return; }
+      if (k === "inst") { if (extraOf(l) && extraOf(l).read) pickRawInstrument(l); else if (SOUND) SOUND.pickInstrument(l); return; }
       P.mix[l][k] = !P.mix[l][k]; applyMixLive(); renderLanes(); drawTimeline();
     });
     host.addEventListener("input", e => {
@@ -1555,7 +1564,8 @@ function renderLanes() {
     // the colour is set every time: a layer's role (and so its colour) or the theme can change
     s.style.setProperty("--dot", laneColor(l));
     const iname = l === "perc" ? PERC_NAME[P.style] : ((SCORE && SCORE.inst[l]) || st.inst[l] || { name: "" }).name;
-    s.querySelector("em").textContent = iname; s.querySelector(".lname").title = `${layerName(l)}: ${iname}`;
+    s.querySelector(".lt").textContent = iname || layerName(l); s.querySelector("em").textContent = iname ? layerName(l) : "";
+    s.querySelector(".lname").title = `${layerName(l)}: ${iname}`;
     s.querySelector('[data-act="mute"]').setAttribute("aria-pressed", String(P.mix[l].mute));
     s.querySelector('[data-act="solo"]').setAttribute("aria-pressed", String(P.mix[l].solo));
     s.classList.toggle("off", !audible(P.mix, l));
@@ -2075,6 +2085,87 @@ function initKeyControls() {
   $("#keySel").addEventListener("change", e => { const v = e.target.value; P.keyMode = v === "auto" ? "auto" : "manual"; if (v !== "auto") P.keyPc = Number(v); invalidate(LV.MUSIC); });
   $("#scaleSel").addEventListener("change", e => { P.scale = e.target.value; invalidate(LV.MUSIC); });
 }
+/* ============ how the song is made: Classic, By genre, Raw (core/gen.js, core/raw.js) ============ */
+let GEN_SEG = null, RAW_TEMPO = null;
+function setGen(v) { P.gen = v; document.body.classList.toggle("gen-raw", v === "raw"); invalidate(LV.MUSIC); }
+function initGen() {
+  GEN_SEG = makeSeg($("#genSeg"), Object.entries(GEN_MODES), P.gen || "classic", setGen);
+  const keyOpts = `<option value="auto">From the picture</option>${NOTE_SH.map((n, i) => `<option value="${i}">${n}${[1, 3, 6, 8, 10].includes(i) ? " / " + NOTE_FL[i] : ""}</option>`).join("")}`;
+  $("#rawBox").innerHTML = `
+    <div class="field"><div class="flabel" id="lblRawTempo">Tempo</div><div class="seg seg-sm" id="rawTempoSeg" role="radiogroup" aria-labelledby="lblRawTempo"></div>
+      <div class="srow" id="rawBpmRow"><input type="range" id="rawBpm" min="40" max="200" step="1" aria-label="Tempo in beats per minute"><b class="mono" id="rawBpmVal"></b></div>
+      <p class="snote" id="rawTempoNote" role="status"></p></div>
+    <div class="field-2"><label class="field"><span class="flabel">Key</span><span class="select"><select id="rawKey">${keyOpts}</select></span></label>
+      <label class="field"><span class="flabel">Scale</span><span class="select"><select id="rawScaleSel">${SCALES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></span></label></div>
+    <label class="toggle"><input type="checkbox" id="rawScaleOn"><span>Keep to the scale</span></label>
+    <p class="snote">Off, every semitone can sound: the picture exactly, dissonances included.</p>
+    <div class="field"><div class="flabel">Tracks</div><ul class="rawlist" id="rawList"></ul>
+      <button type="button" class="btn" id="rawAdd"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add track</button>
+      <p class="snote">Each track plays what it reads where the eye is, on its own instrument. Add as many as you like; one of them can be the drum kit.</p></div>`;
+  RAW_TEMPO = makeSeg($("#rawTempoSeg"), [["auto", "From the picture"], ["set", "Set"]], P.rawBpm > 0 ? "set" : "auto", v => { P.rawBpm = v === "set" ? Number($("#rawBpm").value) || 100 : 0; renderRaw(); invalidate(LV.MUSIC); });
+  const bpm = $("#rawBpm");
+  bpm.addEventListener("input", () => { $("#rawBpmVal").textContent = bpm.value + " BPM"; fillRange(bpm); });
+  bpm.addEventListener("change", () => { P.rawBpm = Number(bpm.value); invalidate(LV.MUSIC); });
+  $("#rawKey").addEventListener("change", e => { const v = e.target.value; P.keyMode = v === "auto" ? "auto" : "manual"; if (v !== "auto") P.keyPc = Number(v); syncAllControls(); invalidate(LV.MUSIC); });
+  $("#rawScaleSel").addEventListener("change", e => { P.scale = e.target.value; syncAllControls(); invalidate(LV.MUSIC); });
+  $("#rawScaleOn").addEventListener("change", e => { P.rawScale = e.target.checked; invalidate(LV.MUSIC); });
+  $("#rawList").addEventListener("change", e => { const id = e.target.dataset.r; if (!id) return; setRawTrack(id, { read: e.target.value }); });
+  $("#rawList").addEventListener("click", e => {
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const id = b.closest("li").dataset.id;
+    if (b.dataset.act === "del") { P.rawTracks = rawList().filter(t => t.id !== id); invalidate(LV.MUSIC); }
+    else pickRawInstrument(id);
+  });
+  $("#rawAdd").addEventListener("click", () => pickRawInstrument(null));
+  document.body.classList.toggle("gen-raw", P.gen === "raw");
+}
+function renderRaw() {
+  if (!GEN_SEG) return;
+  const raw = P.gen === "raw";
+  GEN_SEG.set(P.gen || "classic"); $("#genNote").textContent = GEN_DESC[P.gen || "classic"] || "";
+  document.body.classList.toggle("gen-raw", raw);
+  $("#rawBox").hidden = !raw; if (!raw) return;
+  const set = P.rawBpm > 0; RAW_TEMPO.set(set ? "set" : "auto");
+  const bpm = $("#rawBpm"); $("#rawBpmRow").hidden = !set; bpm.value = set ? P.rawBpm : Math.round(SCORE ? SCORE.bpm : 100); $("#rawBpmVal").textContent = bpm.value + " BPM"; fillRange(bpm);
+  $("#rawTempoNote").textContent = SCORE ? `${set ? "Set" : "From the picture"}: ${nf1(SCORE.bpm)} BPM${set && Math.abs(SCORE.bpm - P.rawBpm) > 0.5 ? `, the nearest tempo that fits ${SCORE.seconds} s in whole bars` : ""}.` : "";
+  $("#rawKey").value = P.keyMode === "manual" ? String(P.keyPc) : "auto"; $("#rawScaleSel").value = P.scale || "auto"; $("#rawScaleOn").checked = P.rawScale !== false;
+  const opts = cur => Object.entries(RAW_READS).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}</option>`).join("");
+  const list = rawList(), one = list.length < 2;
+  $("#rawList").innerHTML = list.map(t => { const drums = t.preset === DRUMS_KEY, lane = drums ? "perc" : t.id, iname = drums ? "Drum kit: " + PERC_NAME[P.style] : (LIBRARY[t.preset] || {}).name || t.preset; return `<li data-id="${esc(t.id)}" style="--dot:${laneColor(lane)}"><span class="odot" aria-hidden="true"></span>
+      <span class="select select-sm"><select data-r="${esc(t.id)}" aria-label="What this track reads">${opts(t.read)}</select></span>
+      <button type="button" class="choose" data-act="inst" aria-haspopup="dialog" title="Change the instrument"><span>${esc(iname)}</span></button>
+      <button type="button" class="icon-btn" data-act="del" aria-label="Remove this track" title="Remove"${one ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <small>${esc(RAW_READ_DESC[t.read] || "")}${drums ? " (drum hits: low a kick, then a snare, high a hi-hat)" : ""}</small></li>`; }).join("");
+}
+// the raw tracks as the piece has them (one, on the style's melody instrument, to begin with)
+const rawList = () => rawTrackList(P, styleKey(P.style, "lead", "classic", P.samples === true));
+function setRawTrack(id, patch) { P.rawTracks = rawList().map(t => (t.id === id ? { ...t, ...patch } : t)); invalidate(LV.MUSIC); }
+// A raw track's instrument (or a new track: its instrument first, then what it reads): the whole
+// library and the drum kit (one drum track at most); for a track already there, what it reads and
+// removing it sit above the list.
+function pickRawInstrument(id) {
+  const list = rawList(), T = id ? list.find(t => t.id === id) : null, hasDrums = list.some(t => t.preset === DRUMS_KEY && t !== T);
+  const band = new Set((STYLE_BAND[P.style] || []).map(([k]) => k)), bandName = `${STYLES[P.style].name} band`;
+  const items = [...(hasDrums ? [] : [{ key: DRUMS_KEY, name: "Drum kit: " + PERC_NAME[P.style], group: "Drums", sub: "kick, snare and hi-hat, from the picture" }]),
+    ...Object.entries(LIBRARY).filter(([k]) => rawPlayable(k)).map(([k, v]) => ({ key: k, name: v.name, group: band.has(k) ? bandName : v.family || (v.type === "sample" ? "Recommended (sampled)" : "Synthesizers") }))];
+  items.sort((a, b) => (b.group === "Drums") - (a.group === "Drums") || (b.group === bandName) - (a.group === bandName) || a.group.localeCompare(b.group));
+  const readOpts = cur => Object.entries(RAW_READS).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}: ${esc(RAW_READ_DESC[k])}</option>`).join("");
+  openPicker({
+    title: T ? `${RAW_READS[T.read]} track: instrument` : "Add a track", items, current: T ? T.preset : "", searchLabel: "Search instruments",
+    note: T ? "Sampled instruments download when first used." : "Pick its instrument; then choose what it reads in the Raw panel.",
+    head: T ? `<label class="flabel" for="plRead">What it reads</label><div class="pl-row"><span class="select select-sm"><select id="plRead">${readOpts(T.read)}</select></span>${list.length > 1 ? '<button type="button" class="btn btn-danger" id="plRemove">Remove this track</button>' : ""}</div>` : "",
+    onHead: (body, close) => {
+      body.querySelector("#plRead").addEventListener("change", e => setRawTrack(T.id, { read: e.target.value }));
+      const rm = body.querySelector("#plRemove"); if (rm) rm.addEventListener("click", () => { P.rawTracks = rawList().filter(t => t.id !== T.id); close(); invalidate(LV.MUSIC); });
+    },
+    onPick: key => {
+      if (T) { setRawTrack(T.id, { preset: key, ...(key === DRUMS_KEY && !["edges", "texture"].includes(T.read) ? { read: "edges" } : {}) }); return; }
+      const cur = rawList(), used = new Set(cur.map(t => t.read)), read = key === DRUMS_KEY ? "edges" : READ_ORDER.find(r => !used.has(r) && r !== "edges") || "colour";
+      P.rawTracks = [...cur, { id: nextTrackId(cur), read, preset: key }]; invalidate(LV.MUSIC);
+    },
+    onPreview: key => (key === DRUMS_KEY ? previewHit(ensureCtx(), 38, kitName(), 1) : preview(ensureCtx(), "harm", LIBRARY[key]))
+  });
+}
 // Composition rules (core/rules.js): one switch each, all on by default
 function initRulesControls() {
   const host = $("#sRules");
@@ -2091,7 +2182,7 @@ function syncAllControls() {
   SRC_CTL.ch.set(P.src.channels); SRC_CTL.range.set(P.src.range); $("#srcInvert").checked = P.src.invert; $("#srcMix").hidden = P.src.channels !== "mix";
   STYLE_SEG.set(P.style); DUR_SEG.set(String(P.duration)); MEL_SEG.set(P.melody); CONNECT_SEG.set(P.connect || "off"); GROOVE_SEG.set(P.groove); CHORD_SEG.set(String(P.chordRate ?? 1)); CIRCLE_SEG.set(P.circleSize || "same"); INTRO_SEG.set(String(P.intro ?? "auto")); END_SEG.set(String(P.end ?? "auto")); $("#placeSel").value = P.placement;
   document.querySelectorAll(".lane").forEach(el => { const l = el.dataset.layer, r = el.querySelector("input[type=range]"); r.value = P.mix[l].vol; r.style.setProperty("--p", ((P.mix[l].vol / 1.5) * 100).toFixed(1) + "%"); });
-  syncSourceControls(); syncRules(); renderLanes(); if (SOUND) SOUND.sync();
+  syncSourceControls(); syncRules(); renderLanes(); renderRaw(); if (SOUND) SOUND.sync();
 }
 function closeMenus() { document.querySelectorAll(".popover").forEach(p => (p.hidden = true)); document.querySelectorAll("[aria-haspopup]").forEach(b => b.setAttribute("aria-expanded", "false")); }
 
@@ -2591,6 +2682,7 @@ export function init() {
     styleSel.value = b.dataset.style; styleSel.dispatchEvent(new Event("change"));
   });
   DUR_SEG = makeSeg($("#durSeg"), DURATIONS.map(d => [String(d), `${d} s`]), String(P.duration), v => { P.duration = Number(v); invalidate(LV.MUSIC); });
+  initGen();
   MEL_SEG = makeSeg($("#melSeg"), [["classic", "Classic"], ["story", "Story"], ["improv", "Improvise"]], P.melody, v => { P.melody = v; STORY.failed = false; invalidate(LV.MUSIC); });
   const placeSel = $("#placeSel"), groups = {};
   for (const [k, v] of Object.entries(PLACEMENTS)) (groups[v.group] = groups[v.group] || []).push([k, v.name]);

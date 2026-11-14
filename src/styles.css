@@ -585,6 +585,14 @@ button,.btn,[role=tab],[role=radio],select,label.toggle{touch-action:manipulatio
 .drumlist .choose{min-width:0;width:100%}
 .drumlist .choose span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 .ms button[data-act="pieces"],.ms button[data-act="inst"]{font-size:11px}
+body.gen-raw .no-raw,.newsong.gen-raw .no-raw{display:none!important}
+.rawbox{display:grid;gap:10px;padding:10px 12px;margin:2px 0 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel-2)}
+.rawbox .srow input[type=range]{flex:1}
+.rawlist{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:6px}
+.rawlist li{display:grid;grid-template-columns:auto minmax(0,8.5rem) minmax(0,1fr) auto;align-items:center;gap:4px 8px}
+.rawlist li .choose{min-width:0}
+.rawlist li small{grid-column:2/-1;color:var(--text-3);font-size:11.5px;margin-top:-3px}
+.rawlist .odot{width:8px;height:8px;border-radius:50%;background:var(--dot)}
 .dlg-pickhead{display:grid;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .dlg-pickhead .pl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media (max-width:560px){

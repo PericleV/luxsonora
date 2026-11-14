@@ -105,13 +105,15 @@
         <div role="tabpanel" id="pan-piece" aria-labelledby="tab-piece" class="panel">
           <section class="card" aria-labelledby="hMusic"><h3 id="hMusic">Music</h3>
           <div class="field"><label class="flabel" for="styleSel">Style</label><span class="select"><select id="styleSel"></select></span><div class="sugg" id="styleSuggest"></div><p class="snote" id="styleNote"></p></div>
+          <div class="field"><div class="flabel" id="lblGen">How the song is made</div><div class="seg" id="genSeg" role="radiogroup" aria-labelledby="lblGen"></div><p class="snote" id="genNote" role="status"></p></div>
+          <div id="rawBox" class="rawbox" hidden></div>
           <div class="field"><div class="flabel" id="lblDur">Duration</div><div class="seg" id="durSeg" role="radiogroup" aria-labelledby="lblDur"></div></div>
-          <div class="field"><div class="flabel" id="lblMel">Melody</div><div class="seg" id="melSeg" role="radiogroup" aria-labelledby="lblMel"></div><p class="snote" id="melNote" role="status" hidden></p></div>
-          <div class="field"><div class="flabel" id="lblConn">Connections</div><div class="seg" id="connectSeg" role="radiogroup" aria-labelledby="lblConn"></div><p class="snote">Adds a few notes as the eye moves from one spot to the next, so the parts flow into each other.</p></div>
-          <div class="field"><div class="flabel" id="lblOrch">Orchestration</div><div class="seg" id="orchSeg" role="radiogroup" aria-labelledby="lblOrch"></div>
+          <div class="field no-raw"><div class="flabel" id="lblMel">Melody</div><div class="seg" id="melSeg" role="radiogroup" aria-labelledby="lblMel"></div><p class="snote" id="melNote" role="status" hidden></p></div>
+          <div class="field no-raw"><div class="flabel" id="lblConn">Connections</div><div class="seg" id="connectSeg" role="radiogroup" aria-labelledby="lblConn"></div><p class="snote">Adds a few notes as the eye moves from one spot to the next, so the parts flow into each other.</p></div>
+          <div class="field no-raw"><div class="flabel" id="lblOrch">Orchestration</div><div class="seg" id="orchSeg" role="radiogroup" aria-labelledby="lblOrch"></div>
             <p class="snote" id="orchNote" role="status"></p>
             <button type="button" class="btn" id="addLayer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add layer</button></div>
-          <div class="field adv-only"><div class="flabel" id="lblGroove">Groove</div><div class="seg" id="grooveSeg" role="radiogroup" aria-labelledby="lblGroove"></div><p class="snote" id="grooveNote" role="status" hidden></p></div>
+          <div class="field adv-only no-raw"><div class="flabel" id="lblGroove">Groove</div><div class="seg" id="grooveSeg" role="radiogroup" aria-labelledby="lblGroove"></div><p class="snote" id="grooveNote" role="status" hidden></p></div>
           </section>
           <section class="card" aria-labelledby="hImage"><h3 id="hImage">Image</h3>
             <div class="imginfo" id="imgInfo"></div>
@@ -157,7 +159,7 @@
             <summary>Advanced: music</summary>
             <div id="sMusic" class="sliders"></div>
           </details>
-          <details class="adv" data-adv="compose">
+          <details class="adv no-raw" data-adv="compose">
             <summary>Advanced: composition</summary>
             <p class="sub">How the chords move, how the swing leans and when the layers come in.</p>
             <div class="field-2"><div class="field"><div class="flabel" id="lblIntro">Intro</div><div class="seg seg-sm" id="introSeg" role="radiogroup" aria-labelledby="lblIntro"></div></div>
@@ -171,7 +173,7 @@
             <p class="sub">How the notes are played: dynamics read from the picture, accents, phrasing, expression and vibrato curves, and a human touch in timing, length and velocity. All of it goes into the MIDI file too.</p>
             <div id="sPerform" class="sliders"></div>
           </details>
-          <details class="adv" data-adv="rules">
+          <details class="adv no-raw" data-adv="rules">
             <summary>Advanced: composition rules</summary>
             <p class="sub">Every rule the composer follows, on top of the style's own frame (the key, the mode, the tempo, the chord grid, the drum patterns and the final cadence). Turn off any you don't want and hear what changes.</p>
             <div id="sRules" class="rules"></div>

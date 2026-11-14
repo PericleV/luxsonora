@@ -630,8 +630,11 @@ function openNewSong(fresh = false) {
     <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblDur">Duration</div><div class="seg" id="nsDur" role="radiogroup" aria-labelledby="nsLblDur"></div></div>
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
-      <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, P.count || sug)}">
-      <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture and length we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.${P.returns > 0 ? ` The eye may also look back at up to ${P.returns} of them.` : ""}</p></div>
+      <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, fresh ? sug : P.count || sug)}">
+      <p class="snote">How many spots the eye visits. Each one becomes a part of the song. For this picture and length we'd go with <button type="button" class="linkbtn" id="nsSug">${sug}</button>.</p>
+      <div class="srow"><label class="flabel" for="nsBack">Looks back</label><b id="nsBackVal" class="mono"></b></div>
+      <input type="range" id="nsBack" min="0" max="12" step="1" value="${Math.min(12, P.returns ?? 3)}">
+      <p class="snote" id="nsBackNote"></p></div>
     <div class="field"><label class="flabel" for="nsPlace">Where the eye looks</label><span class="select"><select id="nsPlace">${places}</select></span><p class="snote" id="nsPlaceNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblCircle">Circle size</div><div class="seg" id="nsCircle" role="radiogroup" aria-labelledby="nsLblCircle"></div><p class="snote" id="nsCircleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblMel">Melody</div><div class="seg" id="nsMel" role="radiogroup" aria-labelledby="nsLblMel"></div><p class="snote" id="nsMelNote"></p></div>
@@ -679,19 +682,22 @@ function openNewSong(fresh = false) {
   const note = () => {
     $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";
     $b("#nsCountVal").textContent = $b("#nsCount").value; fillRange($b("#nsCount"));
+    { const c = Number($b("#nsCount").value), k = Number($b("#nsBack").value); $b("#nsBackVal").textContent = k; fillRange($b("#nsBack"));
+      $b("#nsBackNote").textContent = k ? `The eye can also go back to spots it has already seen, and their tune returns. ${c} spots and up to ${k} look${k > 1 ? "s" : ""} back make up to ${c + k} stops on the path.` : `Every stop is a new spot: ${c} stops on the path.`; }
     $b("#nsMelNote").textContent = MEL_DESC[mel] || ""; $b("#nsConnNote").textContent = CONN_DESC[conn] || ""; $b("#nsOrchNote").textContent = orchNote();
     $b("#nsCircleNote").textContent = CIRCLE_DESC[circle]; $b("#nsGrooveNote").textContent = GROOVE_DESC[groove];
   };
   makeSeg($b("#nsCircle"), [["area", "From the area"], ["same", "Same for all"]], circle, v => { circle = v; note(); });
   makeSeg($b("#nsGroove"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], groove, v => { groove = v; note(); });
   // the suggested number of places follows the length chosen and the frame
-  const reSug = () => { sug = suggestedCount(dur); $b("#nsSug").textContent = sug; };
+  let countTouched = !fresh;
+  const reSug = () => { sug = suggestedCount(dur); $b("#nsSug").textContent = sug; if (!countTouched) { $b("#nsCount").value = sug; note(); } };
   makeSeg($b("#nsDur"), DURATIONS.map(d => [String(d), `${d} s`]), String(dur), v => { dur = Number(v); reSug(); });
   makeSeg($b("#nsMel"), [["classic", "Classic"], ["story", "Story (AI)"], ["improv", "Improvise (AI)"]], mel, v => { mel = v; note(); });
   makeSeg($b("#nsConn"), Object.entries(CONNECT), conn, v => { conn = v; note(); });
   makeSeg($b("#nsOrch"), Object.entries(ORCHESTRATION).filter(([k]) => k !== "custom" || P.orch === "custom"), orch, v => { orch = v; note(); });
   ["#nsStyle", "#nsPlace"].forEach(s => $b(s).addEventListener("change", note));
-  $b("#nsCount").addEventListener("input", note);
+  $b("#nsCount").addEventListener("input", () => { countTouched = true; note(); }); $b("#nsBack").addEventListener("input", note);
   $b("#nsSug").addEventListener("click", () => { $b("#nsCount").value = sug; note(); });
   note(); reSug();
   // the frame, first: changing it reads the picture again, then the suggestions here follow
@@ -712,7 +718,7 @@ function openNewSong(fresh = false) {
     if ($b("#nsFrameBox").open) build();
   }
   const apply = () => {
-    P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value);
+    P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value);
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
     P.connect = conn; P.orch = orch; P.circleSize = circle;
     if (P.groove !== groove) { P.groove = groove; GROOVE.failed = false; }
@@ -1312,7 +1318,9 @@ function updateReadout() {
   if (!SCORE) return;
   const sc = SCORE, spb = 60 / sc.bpm;
   $("#rKey").textContent = `${pcName(sc.pc)} ${sc.pent ? (sc.major ? "major pentatonic" : "minor pentatonic") : MODES[sc.modeKey].name.split(" ")[0]}`;
-  $("#rMeta").textContent = `${nf1(sc.bpm)} BPM · ${sc.bars} bars · ${sc.points.length} points`;
+  const back = sc.points.filter(F => F.revisitOf !== null && F.revisitOf !== undefined && F.revisitOf >= 0).length, places = sc.points.length - back;
+  $("#rMeta").textContent = `${nf1(sc.bpm)} BPM · ${sc.bars} bars · ${places} place${places === 1 ? "" : "s"}${back ? ` + ${back} return${back === 1 ? "" : "s"}` : ""}`;
+  $("#rMeta").title = back ? `The eye visits ${places} places and goes back to ${back} of them, so the path has ${sc.points.length} stops.` : `The eye visits ${places} places.`;
   $("#rTime").textContent = `${ftime(Math.min(currentBeat(), sc.total) * spb)} / ${ftime(sc.total * spb)}`;
   const sk = $("#seek"); if (!SEEK.drag) { sk.value = Math.round(clamp(currentBeat() / sc.total) * 1000); sk.style.setProperty("--p", sk.value / 10 + "%"); }
 }
@@ -2106,8 +2114,8 @@ const exportView = () => $("#tab-export") && $("#tab-export").getAttribute("aria
 /* ============ sliders ============ */
 const SLIDERS = {
   sBasic: [
-    { key: "count", label: "Focus points", min: 2, max: 32, step: 1, def: 8, level: LV.PATH, help: "How many spots the eye visits. Each one shows up as a circle on the picture." },
-    { key: "returns", label: "Revisits", adv: true, min: 0, max: 12, step: 1, def: 3, level: LV.PATH, help: "How many times the eye can go back to a spot it has already seen. When it does, that spot's tune comes back. At 0 every spot is new." },
+    { key: "count", label: "Focus points", min: 2, max: 32, step: 1, def: 8, level: LV.PATH, help: "How many different spots the eye visits. Each one shows up as a circle on the picture." },
+    { key: "returns", label: "Looks back", min: 0, max: 12, step: 1, def: 3, level: LV.PATH, help: "How many times the eye can go back to a spot it has already seen. When it does, that spot's tune comes back. These come on top of the focus points: 9 points and 3 looks back make 12 stops on the path. At 0 every stop is a new spot." },
     { key: "tempoAdj", label: "Tempo", adv: true, min: -0.3, max: 0.3, step: 0.01, def: 0, scale: 100, unit: "%", signed: true, level: LV.MUSIC },
     { key: "arc", label: "Build-up", adv: true, min: 0, max: 1, step: 0.01, def: 0.7, scale: 100, unit: "%", level: LV.MUSIC, help: "Turns the journey into a story, with a quiet start, a climax and an ending. At 0% the song stays at one level." },
     { key: "smooth", label: "Smoothness", adv: true, min: 0, max: 1, step: 0.01, def: 0.6, scale: 100, unit: "%", level: LV.MUSIC, help: "How gently one part flows into the next. At 0% the changes are sudden." }

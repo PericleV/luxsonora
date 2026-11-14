@@ -25,8 +25,20 @@ export const KITS = {
   orchestral: { name: "Orchestral (taiko, timpani, cymbals)", orchestral: true, group: "Built in" }
 };
 // Default kit per style: the genre's sound (electronic on an 808; orchestral styles on taiko and timpani).
-export const STYLE_KIT = { lofinature: "synth", neoclassical: "synth", folk: "synth", meditation: "synth", postrock: "abuse:linn-9000", chiptune: "Casio-RZ1", triphop: "LM-2", reggae: "LM-2", baroque: "synth", eastasian: "orchestral", dnb: "abuse:linn-9000", techno: "TR-808", blues: "abuse:linn-9000", funk: "LM-2", pop: "LM-2", rock: "abuse:linn-9000", metal: "abuse:oberheim-dmx", ambient: "synth", cinematic: "orchestral", minimal: "synth", jazz: "synth", electronic: "TR-808", epic: "orchestral", movie: "orchestral", lofi: "LM-2", bossa: "synth", synthwave: "LM-2", classical: "synth" };
+export const STYLE_KIT = { acappella: "synth", lofinature: "synth", neoclassical: "synth", folk: "synth", meditation: "synth", postrock: "abuse:linn-9000", chiptune: "Casio-RZ1", triphop: "LM-2", reggae: "LM-2", baroque: "synth", eastasian: "orchestral", dnb: "abuse:linn-9000", techno: "TR-808", blues: "abuse:linn-9000", funk: "LM-2", pop: "LM-2", rock: "abuse:linn-9000", metal: "abuse:oberheim-dmx", ambient: "synth", cinematic: "orchestral", minimal: "synth", jazz: "synth", electronic: "TR-808", epic: "orchestral", movie: "orchestral", lofi: "LM-2", bossa: "synth", synthwave: "LM-2", classical: "synth" };
 
+// The pieces of a kit, each with its General MIDI note. Every piece has its own volume and can
+// take its sound from another kit (P.drums, by key): a rock kit with an 808 kick, another cymbal.
+export const DRUM_PIECES = [
+  { key: "kick", midi: 36, name: "Kick" }, { key: "snare", midi: 38, name: "Snare" }, { key: "clap", midi: 39, name: "Clap" }, { key: "rim", midi: 37, name: "Rim and sticks" },
+  { key: "chat", midi: 42, name: "Closed hi-hat" }, { key: "phat", midi: 44, name: "Pedal hi-hat" }, { key: "ohat", midi: 46, name: "Open hi-hat" }, { key: "ride", midi: 51, name: "Ride" }, { key: "crash", midi: 49, name: "Crash" },
+  { key: "ltom", midi: 45, name: "Low tom" }, { key: "mtom", midi: 48, name: "Mid tom" }, { key: "htom", midi: 50, name: "High tom" }, { key: "shaker", midi: 70, name: "Shaker" }
+];
+// The kits the pieces borrow from, as sample specs to load.
+export function pieceSpecs(drums) {
+  const kits = new Set(Object.values(drums || {}).map(d => d && d.kit).filter(k => k && k !== "synth"));
+  return [...kits].flatMap(k => kitSpecs(k));
+}
 // General MIDI drum note → candidate group names in a drum machine (first match wins).
 const DM_GROUPS = {
   36: ["kick", "bd", "bass-drum", "bassdrum"], 38: ["snare", "sd"], 39: ["clap", "cp", "handclap", "hand-clap"], 37: ["rimshot", "rim", "rs", "stick", "clave"],
@@ -102,24 +114,28 @@ export function sampler(G, layer, src) {
 export function playSample(G, layer, n, t0, durSec, tim) {
   const e = sampler(G, layer, tim.src);
   if (!e) return false;
-  e.inst.start({ note: n.midi, velocity: Math.max(1, Math.min(127, Math.round(n.vel * (tim.lvl ?? 1)))), time: t0, duration: durSec, lpfCutoffHz: Math.min(16000, tim.cut), ampRelease: Math.max(0.05, tim.r) });
+  // a voice sings within its range: a note outside it moves by octaves into it
+  let note = n.midi;
+  if (tim.range) { while (note < tim.range[0]) note += 12; while (note > tim.range[1]) note -= 12; }
+  e.inst.start({ note, velocity: Math.max(1, Math.min(127, Math.round(n.vel * (tim.lvl ?? 1)))), time: t0, duration: durSec, lpfCutoffHz: Math.min(16000, tim.cut), ampRelease: Math.max(0.05, tim.r) });
   return true;
 }
 // Plays a drum hit on the selected kit; returns false when it can't (use the synthesized kit).
-export function playDrum(G, kit, n, t0) {
+export function playDrum(G, kit, n, t0, vel = n.vel) {
+  const v = Math.max(1, Math.min(127, Math.round(vel)));
   const K = KITS[kit];
   if (!K || kit === "synth") return false;
   if (K.machine || K.abuse) {
     const e = sampler(G, "perc", K.abuse ? { kind: "abuse", instrument: K.abuse } : { kind: "drums", instrument: K.machine });
     if (!e || !e.map[n.midi]) return false;
-    e.inst.start({ note: e.map[n.midi], velocity: n.vel, time: t0 });
+    e.inst.start({ note: e.map[n.midi], velocity: v, time: t0 });
     return true;
   }
   const o = n.roll ? [TIMPANI, n.tune ?? 43] : ORCH[n.midi];
   if (!o) return false;
   const e = sampler(G, "perc", { kind: "sf", instrument: o[0] });
   if (!e) return false;
-  e.inst.start({ note: o[1], velocity: n.vel, time: t0, duration: n.roll ? 0.3 : 1.2 });
+  e.inst.start({ note: o[1], velocity: v, time: t0, duration: n.roll ? 0.3 : 1.2 });
   return true;
 }
 // What a kit needs loaded.

@@ -10,7 +10,7 @@ import { ROLES } from "../core/arrange.js";
 import { tiltWave } from "../core/instruments.js";
 import { defaultFx, driveCurve, DELAY_TIMES, defaultEq } from "./fx.js";
 import { measure } from "lufs-web";
-import { playSample, playDrum, prepareSamples, kitSpecs } from "./samples.js";
+import { playSample, playDrum, prepareSamples, kitSpecs, DRUM_PIECES } from "./samples.js";
 export { defaultFx };
 
 export const LAYER_GAIN = { lead: 0.95, harm: 0.5, bass: 0.8, pad: 0.42, perc: 0.6 };
@@ -404,6 +404,14 @@ export function scheduleExpression(G, sc, fromBeat = 0, t0 = G.ctx.currentTime) 
   }
 }
 
+// The kit's pieces on a graph: drums = { [piece key]: { vol (0-1.5), kit (another kit, "synth", or
+// none for the track's own) } }. Safe to call again while playing.
+export function applyDrums(G, drums, initial = false) {
+  const pieces = {}; let boost = 1;
+  for (const p of DRUM_PIECES) { const d = drums && drums[p.key]; if (!d) continue; const vol = Math.max(0, Math.min(1.5, d.vol ?? 1)); pieces[p.midi] = { vol, kit: d.kit || null }; boost = Math.max(boost, vol); }
+  G.pieces = pieces; G.percBoost = boost;
+  if (G.bus && G.bus.perc) { if (initial) G.bus.perc.gain.value = boost; else G.bus.perc.gain.setTargetAtTime(boost, G.ctx.currentTime, 0.02); }
+}
 // from: the beat at which playback of this note starts (later than n.t when seeking into a held note)
 export function playNote(G, n, t0, durSec, from = n.t) {
   const ctx = G.ctx;
@@ -411,18 +419,26 @@ export function playNote(G, n, t0, durSec, from = n.t) {
     // the offset into the noise buffer depends on the beat, not the clock: the same hit always sounds the same
     const off = (n.t * 0.37) % 0.5;
     const bus = G.bus.perc, m = n.midi;
-    if (n.swell) { swellFx(ctx, bus, t0, durSec, n.vel, G.noise, n.swell); return; }
+    // each piece of the kit has its own volume and may take its sound from another kit
+    // (applyDrums); the whole kit's input is raised to the loudest piece and the others are
+    // played softer, since a sampler takes no gain per note
+    const pz = G.pieces && !n.roll ? G.pieces[m] : null, k = ((pz && pz.vol) ?? 1) / (G.percBoost || 1), vel = n.vel * k;
+    if (n.swell) { swellFx(ctx, bus, t0, durSec, n.vel / (G.percBoost || 1), G.noise, n.swell); return; }
+    if (k <= 0.001) return;
     if (m === 36 && G.sidechain > 0) pump(G, t0, G.sidechain);
-    if (G.kit && playDrum(G, G.kit, n, t0)) return;
-    if (m === 36) kick(ctx, bus, t0, n.vel);
-    else if (m === 38) snare(ctx, bus, t0, n.vel, G.noise, off);
-    else if (m === 39) clap(ctx, bus, t0, n.vel, G.noise, off);
-    else if (m === 37) rim(ctx, bus, t0, n.vel);
-    else if (TOM_HZ[m]) tom(ctx, bus, t0, n.vel, TOM_HZ[m]);
-    else if (m === 49) hat(ctx, bus, t0, n.vel * 0.8, G.noise, 1.6, 3500, off);
-    else if (m === 70) hat(ctx, bus, t0, n.vel * 0.7, G.noise, 0.07, 6000, off);
-    else if (m === 46) hat(ctx, bus, t0, n.vel * 0.85, G.noise, 0.32, 7000, off);
-    else hat(ctx, bus, t0, n.vel, G.noise, m === 51 ? 0.35 : m === 44 ? 0.04 : 0.06, m === 51 ? 5200 : 7500, off);
+    const kit = pz && pz.kit ? pz.kit : G.kit;
+    if (kit && kit !== "synth" && playDrum(G, kit, n, t0, vel)) return;
+    // a borrowed kit without that piece: the track's own kit, then the synthesized one
+    if (pz && pz.kit && G.kit && G.kit !== kit && playDrum(G, G.kit, n, t0, vel)) return;
+    if (m === 36) kick(ctx, bus, t0, vel);
+    else if (m === 38) snare(ctx, bus, t0, vel, G.noise, off);
+    else if (m === 39) clap(ctx, bus, t0, vel, G.noise, off);
+    else if (m === 37) rim(ctx, bus, t0, vel);
+    else if (TOM_HZ[m]) tom(ctx, bus, t0, vel, TOM_HZ[m]);
+    else if (m === 49) hat(ctx, bus, t0, vel * 0.8, G.noise, 1.6, 3500, off);
+    else if (m === 70) hat(ctx, bus, t0, vel * 0.7, G.noise, 0.07, 6000, off);
+    else if (m === 46) hat(ctx, bus, t0, vel * 0.85, G.noise, 0.32, 7000, off);
+    else hat(ctx, bus, t0, vel, G.noise, m === 51 ? 0.35 : m === 44 ? 0.04 : 0.06, m === 51 ? 5200 : 7500, off);
   } else {
     // a swelling note (film strings) grows from 35% to full level over its length
     let dest = G.bus[n.layer];
@@ -441,6 +457,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, sc.extra || []);
   G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); G.kit = opts.kit || null;
+  if (opts.drums) applyDrums(G, opts.drums, true);
   if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
   const g0 = G.out.gain.value;
   G.out.gain.setValueAtTime(g0, Math.max(0, T - 0.4)); G.out.gain.linearRampToValueAtTime(0, T);
@@ -480,4 +497,15 @@ export async function preview(ctx, layer, tim, kit = null) {
     [0, 4, 7, 12].forEach((iv, k) => playNote(G, { layer, t: held ? 0 : k, dur: held ? 3 : 0.9, midi: base + iv, vel: 92, tim, pan: 0 }, t0 + (held ? 0 : k * spb), held ? 3 * spb : 0.9 * spb));
   }
   setTimeout(() => { try { G.out.disconnect(); } catch (e) { /* already gone */ } }, 7000);
+}
+
+// One piece of a kit, twice (soft and loud), to hear it before choosing: kit is a kit key, "synth"
+// or null (the synthesized kit).
+export async function previewHit(ctx, midi, kit = null, vol = 1) {
+  const G = buildGraph(ctx, 0.2, defaultMix(), defaultFx(), 100);
+  G.kit = kit && kit !== "synth" ? kit : null;
+  if (G.kit) await prepareSamples(G, kitSpecs(G.kit), 20000);
+  const t0 = ctx.currentTime + 0.06;
+  [[0, 70], [0.45, 104]].forEach(([dt, v]) => playNote(G, { layer: "perc", t: dt, dur: 0.1, midi, vel: Math.min(127, v * vol) }, t0 + dt, 0.1));
+  setTimeout(() => { try { G.out.disconnect(); } catch (e) { /* already gone */ } }, 5000);
 }

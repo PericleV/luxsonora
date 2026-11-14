@@ -153,6 +153,8 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Resizable layout: the panel, the timeline and the layer names, dragged or with the keyboard, remembered
 - [x] Sounds right out of the box: the last drum hit no louder than the bars before it (no gong on a soft ending), added instruments on the last chord only if still playing, no stray notes, the melody's last note always on the final chord, ostinato and pulse on the chord's real root, a lead-in that grows into the first note, the intro's chord in the harmony's register
 - [x] Clean harmony in Medium and Full: every instrument has a part (one with almost nothing to play is replaced), the melody has right of way, low interval limits (no seconds or thirds low down), connection notes off the rubbing tones, no minor third under a Picardy ending, the tonic pedal gives way under the dominant; the audit measures mud too
+- [x] The drum kit piece by piece (volume and sound of each piece, from any kit), from the Rhythm track
+- [x] Voices: mixed choir, male, female and boys voices, each in its range; an A cappella choir style; voices in the bands of the film, classical and calm styles
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)
 - [x] Twelve more styles (Lo-fi chill, Neoclassical piano, Acoustic folk, Meditation, Post-rock, Chiptune, Trip-hop, Reggae, Baroque, East Asian, Drum and bass, Techno), the styles in five groups, and the three that suit a picture suggested from its analysis
 - [ ] Styles in 3/4 and 6/8 (waltz, folk jigs): the engine is in 4/4

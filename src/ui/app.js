@@ -14,7 +14,7 @@ import { suggestStyles, explainStyles } from "../core/suggest.js";
 import { saveSession, loadSession } from "./session.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
-import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, scheduleExpression } from "../audio/engine.js";
+import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, previewHit, applyDrums, scheduleExpression } from "../audio/engine.js";
 import { perform, PERFORM_DEFAULTS } from "../core/perform.js";
 import { initSound } from "./sound.js";
 import { drawDemo } from "./demo.js";
@@ -33,7 +33,7 @@ import { grooveFor, applyGroove, grooveKey } from "../ml/groove.js";
 import { prepareSamples, kitSpecs, STYLE_KIT, onSampleStatus, instrumentCatalog } from "../audio/samples.js";
 import { addToLibrary, LIBRARY } from "../core/instruments.js";
 import { ROLES, ROLE_COLOR, ORCHESTRATION, roleInstrument, STYLE_BAND, roleFor, autoLayers, richnessOf } from "../core/arrange.js";
-import { KITS, kitCatalog } from "../audio/samples.js";
+import { KITS, kitCatalog, DRUM_PIECES, pieceSpecs } from "../audio/samples.js";
 import { defaultEq, styleFx } from "../audio/fx.js";
 import { storyMelody, applyStory, storyKey } from "../ml/story.js";
 import { SECTION_NAME } from "../core/arc.js";
@@ -54,7 +54,7 @@ const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
   style: "ambient", duration: 30, count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
-  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
   // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
@@ -276,7 +276,7 @@ function renderWhy() {
 /* ============ styles: groups and one-line descriptions for the dropdown ============ */
 const STYLE_GROUPS = [
   ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
-  ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
+  ["Classical and film", ["classical", "baroque", "acappella", "movie", "cinematic", "epic"]],
   ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
   ["Band", ["pop", "rock", "postrock", "folk", "metal"]],
   ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
@@ -300,6 +300,7 @@ const STYLE_DESC = {
   funk: "Tight and syncopated. Scratchy guitar, popping bass, ghost notes on the snare and horns.",
   lofinature: "Slow and warm, for nature and quiet light. Felt piano, a soft guitar, a tape-worn pad and almost no drums.",
   neoclassical: "Intimate piano with a cello and soft strings. Open chords, long phrases, no drums.",
+  acappella: "Voices only: a soprano line over a mixed choir, with the basses underneath. Held chords like a hymn, no instruments, no drums.",
   folk: "Fingerpicked acoustic guitar, a fiddle and an accordion, with a light kick and a shaker.",
   meditation: "Very slow. Long drones, a singing bowl and bells on a five-note scale, no drums.",
   postrock: "Echoing guitars that build slowly to a big climax with the whole band, then settle.",
@@ -427,7 +428,7 @@ const kitName = () => (P.kit === "style" ? STYLE_KIT[P.style] : P.kit) || "synth
 function sampleSpecs(sc) {
   const specs = [];
   for (const l of ["lead", "harm", "bass", "pad", ...(sc.extra || []).map(L => L.id)]) if (sc.inst[l] && sc.inst[l].type === "sample") specs.push({ layer: l, src: sc.inst[l].src });
-  return specs.concat(kitSpecs(kitName()));
+  return specs.concat(kitSpecs(kitName()), pieceSpecs(P.drums));
 }
 function liveSamples() {
   const ctx = ensureCtx();
@@ -608,7 +609,7 @@ function showWelcome() {
       <li><b>Play with it</b><span>Drag the spots around, pick the climax, then save the song or a video of it.</span></li>
     </ol>
     <ul class="welcome-points">
-      <li>28 styles, from ambient, nature lo-fi and classical to jazz, reggae, rock, metal, techno and 8-bit</li>
+      <li>29 styles, from ambient, nature lo-fi, classical and an a cappella choir to jazz, reggae, rock, metal, techno and 8-bit</li>
       <li>Real recorded instruments, plus optional AI models (Magenta) for melodies and grooves that feel more human</li>
       <li>It all runs in your browser, so your picture stays on your device</li>
       <li>Same picture, same settings, same song. Save the project and anyone can open it again</li>
@@ -907,7 +908,7 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   // the logo listens: an analyser on the master moves its sound waves while the song plays
   Player.an = ctx.createAnalyser(); Player.an.fftSize = 512; Player.an.smoothingTimeConstant = 0.72; Player.G.out.connect(Player.an); Player.G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); Player.score = sc; Player.playing = true;
   // sampled instruments: route the persistent samplers into this graph
-  const SG = liveSamples(); Player.G.samplers = SG.samplers; Player.G.kit = kitName();
+  const SG = liveSamples(); Player.G.samplers = SG.samplers; Player.G.kit = kitName(); applyDrums(Player.G, P.drums, true);
   for (const l of Object.keys(SG.bus)) { try { SG.bus[l].disconnect(); } catch (e) { /* not connected */ } if (Player.G.bus[l]) SG.bus[l].connect(Player.G.bus[l]); }
   Player.fromBeat = fromBeat; Player.startTime = ctx.currentTime + 0.08;
   Player.audition = stopAt !== null; Player.stopAt = stopAt ?? sc.total;
@@ -984,7 +985,7 @@ function audition(i) {
 }
 // the mixer's effects, with the style's own distortion on its guitars (rock, metal)
 const effFx = (sc = SCORE) => (sc ? styleFx(P.fx, sc.style, sc.inst, RULES) : P.fx);
-function applyMixLive() { if (Player.G) updateGraph(Player.G, effFx(Player.score), P.mix, P.reverb); }
+function applyMixLive() { if (Player.G) { updateGraph(Player.G, effFx(Player.score), P.mix, P.reverb); applyDrums(Player.G, P.drums); } }
 function updatePlayBtn() {
   const b = $("#play"), on = Player.playing && !Player.audition, wait = WAIT_PLAY && !on;
   const label = wait ? "Starts when the models are ready (press to cancel)" : on ? "Pause" : "Play";
@@ -1316,6 +1317,57 @@ function renderPoint() {
       ["Edges", nf(clamp(r.edge / maxE)), ""],
       ["Entropy", nf(r.entropy), ""]])}</dl>`;
 }
+/* ============ the drum kit, piece by piece ============ */
+// Each piece (kick, snare, hi-hats, cymbals, toms) has its own volume and can take its sound
+// from another kit: a rock kit with an 808 kick, another crash. Opened from the Rhythm track.
+function openDrumPieces() {
+  const all = kitCatalog(), ownKit = () => kitName(), kitLabel = k => (k === "synth" ? "Synthesized" : (all[k] || KITS[k] || {}).name || k);
+  const hits = p => (SCORE ? SCORE.notes.filter(n => n.layer === "perc" && n.midi === p.midi && !n.swell && !n.roll).length : 0);
+  const get = p => P.drums[p.key] || { vol: 1, kit: null };
+  const row = p => {
+    const d = get(p), h = hits(p);
+    return `<li data-k="${p.key}" class="${h ? "" : "unused"}">
+      <button type="button" class="icon-btn" data-act="play" aria-label="Hear the ${esc(p.name.toLowerCase())}" title="Hear it"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg></button>
+      <span class="dname"><b>${esc(p.name)}</b><small>${h ? `${h} hit${h > 1 ? "s" : ""} in this piece` : "not played in this piece"}</small></span>
+      <input type="range" min="0" max="1.5" step="0.01" value="${d.vol ?? 1}" aria-label="${esc(p.name)} volume"><b class="mono dval">${Math.round((d.vol ?? 1) * 100)}%</b>
+      <button type="button" class="choose" data-act="sound" aria-haspopup="dialog" title="Take this piece from another kit"><span>${esc(d.kit ? kitLabel(d.kit) : "From the kit")}</span></button></li>`;
+  };
+  const { body } = openInfo("Drum kit, piece by piece", `<div class="dlg-info drums">
+    <p class="snote">The track plays <b id="dpKit"></b>. Each piece has its own volume and can take its sound from another kit, for example a rock kit with an 808 kick or another crash.</p>
+    <ol class="drumlist" id="dpList"></ol>
+    <div class="ns-actions"><button type="button" class="btn" id="dpKitBtn">Change the whole kit</button><button type="button" class="btn" id="dpReset">Reset the pieces</button></div>
+    <p class="snote">Timpani rolls and swells follow the track's volume. The MIDI export keeps the standard drum notes, so a drum plug-in in your DAW plays them with its own sounds.</p></div>`, "dlg-drums");
+  const $b = s => body.querySelector(s);
+  const render = () => {
+    $b("#dpKit").textContent = kitLabel(ownKit());
+    // the pieces this piece of music plays come first
+    $b("#dpList").innerHTML = [...DRUM_PIECES].sort((a, b) => (hits(b) > 0) - (hits(a) > 0)).map(row).join("");
+    $b("#dpList").querySelectorAll("input[type=range]").forEach(r => { r.style.setProperty("--p", ((Number(r.value) / 1.5) * 100).toFixed(1) + "%"); });
+  };
+  const set = (key, patch) => { const d = { vol: 1, kit: null, ...(P.drums[key] || {}), ...patch }; if (d.vol === 1 && !d.kit) delete P.drums[key]; else P.drums[key] = d; applyMixLive(); scheduleSave(); };
+  const pieceOf = el => DRUM_PIECES.find(p => p.key === el.closest("li").dataset.k);
+  $b("#dpList").addEventListener("input", e => {
+    if (e.target.type !== "range") return;
+    const p = pieceOf(e.target), v = Number(e.target.value);
+    set(p.key, { vol: v }); e.target.style.setProperty("--p", ((v / 1.5) * 100).toFixed(1) + "%"); e.target.nextElementSibling.textContent = Math.round(v * 100) + "%";
+  });
+  $b("#dpList").addEventListener("click", e => {
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const p = pieceOf(b), d = get(p);
+    if (b.dataset.act === "play") { previewHit(ensureCtx(), p.midi, d.kit || ownKit(), d.vol ?? 1); return; }
+    const items = [{ key: "", name: "From the kit: " + kitLabel(ownKit()), group: "This track" }, { key: "synth", name: "Synthesized", group: "Built in" }]
+      .concat(Object.entries(all).filter(([k, v]) => k !== "synth" && !v.orchestral).map(([k, v]) => ({ key: k, name: v.name, group: v.group || "Drum machines" })));
+    openPicker({
+      title: `${p.name}: which kit it comes from`, items, current: d.kit || "", searchLabel: "Search drum kits",
+      note: "The piece is taken from the kit you pick. A kit without that piece leaves it to the track's own kit.",
+      onPick: key => { set(p.key, { kit: key || null }); preloadSamples(); render(); },
+      onPreview: key => previewHit(ensureCtx(), p.midi, key || ownKit(), 1)
+    });
+  });
+  $b("#dpKitBtn").addEventListener("click", () => { if (SOUND) SOUND.pickKit(); });
+  $b("#dpReset").addEventListener("click", () => { P.drums = {}; applyMixLive(); preloadSamples(); scheduleSave(); render(); });
+  render();
+}
 function renderLanes() {
   const st = STYLES[P.style], host = $("#lanesHead"), LANE_KEYS = laneKeys(), sig = LANE_KEYS.join(",");
   if (host.dataset.keys !== sig) {
@@ -1323,7 +1375,7 @@ function renderLanes() {
     host.querySelectorAll(".lane").forEach(e => e.remove());
     host.insertAdjacentHTML("beforeend", LANE_KEYS.map(l => `<div class="lane" data-layer="${l}" style="--dot:${laneColor(l)}">
       <span class="lname"><span class="lt">${esc(layerName(l))}</span><em></em></span>
-      <span class="ms"><button type="button" data-act="mute" aria-pressed="false" aria-label="Mute ${esc(layerName(l))}" title="Mute">M</button><button type="button" data-act="solo" aria-pressed="false" aria-label="Solo ${esc(layerName(l))}" title="Solo">S</button></span>
+      <span class="ms"><button type="button" data-act="mute" aria-pressed="false" aria-label="Mute ${esc(layerName(l))}" title="Mute">M</button><button type="button" data-act="solo" aria-pressed="false" aria-label="Solo ${esc(layerName(l))}" title="Solo">S</button>${l === "perc" ? `<button type="button" data-act="pieces" aria-haspopup="dialog" aria-label="Drum pieces: volume and sound of each" title="Drum pieces: volume and sound of each">▾</button>` : ""}</span>
       <input type="range" min="0" max="1.5" step="0.01" value="${P.mix[l] ? P.mix[l].vol : 1}" aria-label="${esc(layerName(l))} volume" style="--p:${(((P.mix[l] ? P.mix[l].vol : 1) / 1.5) * 100).toFixed(1)}%"></div>`).join(""));
     host.dataset.keys = sig;
   }
@@ -1332,6 +1384,7 @@ function renderLanes() {
     host.addEventListener("click", e => {
       const b = e.target.closest(".ms button"); if (!b) return;
       const l = b.closest(".lane").dataset.layer, k = b.dataset.act;
+      if (k === "pieces") { openDrumPieces(); return; }
       P.mix[l][k] = !P.mix[l][k]; applyMixLive(); renderLanes(); drawTimeline();
     });
     host.addEventListener("input", e => {
@@ -1762,6 +1815,7 @@ function applySettings(j) {
   // projects from before the generated intro had none, and a one-bar ending
   if (!("intro" in j.settings)) P.intro = "off";
   if (!("circleSize" in j.settings)) P.circleSize = "same";
+  if (!("drums" in j.settings) || !P.drums || typeof P.drums !== "object") P.drums = {};
   if (!("end" in j.settings)) P.end = 1;
   if (EXPORT) EXPORT.sync();
   if (j.settings.src) { const cropRef = P.src.crop, crop = { ...cropRef, ...(j.settings.src.crop || {}) }; Object.assign(P.src, j.settings.src); P.src.crop = Object.assign(cropRef, crop); }
@@ -2025,7 +2079,7 @@ function paramsJson() {
 // It is kept for the current piece and mix, so the next export (and the video preview's sound
 // analysis) does not render again.
 let MASTER = null;
-const masterKey = () => JSON.stringify([P.mix, P.fx, P.reverb, kitName(), P.samples, SCORE && scoreHash(SCORE)]);
+const masterKey = () => JSON.stringify([P.mix, P.fx, P.reverb, kitName(), P.drums, P.samples, SCORE && scoreHash(SCORE)]);
 function renderMaster(say = () => {}) {
   const run = async () => {
     say("Waiting for the models"); await settled();
@@ -2034,7 +2088,7 @@ function renderMaster(say = () => {}) {
     if (MASTER && MASTER.key === key && MASTER.m) return MASTER.m;
     if (MASTER && MASTER.key === key && MASTER.p) return MASTER.p;
     const p = (async () => {
-      const sopts = { specs: sampleSpecs(sc), kit: kitName() };
+      const sopts = { specs: sampleSpecs(sc), kit: kitName(), drums: P.drums };
       say("Rendering audio");
       let buf = await renderOffline(sc, P.reverb, P.mix, effFx(sc), sopts);
       let chs = [buf.getChannelData(0), buf.getChannelData(1)], loud = null, gain = null;

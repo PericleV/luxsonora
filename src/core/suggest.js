@@ -35,6 +35,7 @@ const PROFILE = {
   techno: [0.25, 0.35, 0.4, 0.65, 0.7, ["grey", "blue"]],
   dnb: [0.3, 0.4, 0.55, 0.8, 0.7, ["cyan", "green", "blue"]],
   synthwave: [0.3, 0.5, 0.75, 0.5, 0.65, ["magenta", "purple", "cyan"]],
+  acappella: [0.55, 0.5, 0.2, 0.25, 0.4, ["blue", "grey", "purple"]],
   chiptune: [0.6, 0.5, 0.8, 0.65, 0.7, ["red", "green", "blue", "yellow", "magenta", "cyan"]]
 };
 const WEIGHT = [1.2, 0.8, 1, 1, 0.8], HUE_BONUS = 0.8, MAX = WEIGHT.reduce((a, b) => a + b, 0) + HUE_BONUS;

@@ -4,7 +4,7 @@
 // melody's first note, and the rhythm prepares the entrance in the style's way: a swell (cymbal,
 // riser or timpani) in film and electronic styles, a count-in on the hi-hat or sticks in band
 // styles, a soft ride in swung ones, nothing in the calm ones.
-const CALM = new Set(["ambient", "classical", "minimal", "movie", "lofinature", "neoclassical", "meditation", "baroque", "eastasian"]);
+const CALM = new Set(["acappella", "ambient", "classical", "minimal", "movie", "lofinature", "neoclassical", "meditation", "baroque", "eastasian"]);
 const COUNT_IN = new Set(["rock", "metal", "pop", "funk", "chiptune", "folk"]);
 const SWUNG = new Set(["jazz", "lofi", "bossa", "blues", "reggae", "triphop"]);
 const pc = m => ((m % 12) + 12) % 12;

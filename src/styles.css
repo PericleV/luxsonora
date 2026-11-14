@@ -566,3 +566,22 @@ button,.btn,[role=tab],[role=radio],select,label.toggle{touch-action:manipulatio
 @media (max-width:1320px){.tb-link span{display:none}.tb-link{padding:0;width:32px;justify-content:center}}
 @media (max-width:640px){.actions .icon-btn,.actions .tb-link{width:30px;height:30px}}
 @media (max-width:430px){.transport .readout{display:none}}
+
+/* ---------- the drum kit, piece by piece ---------- */
+.dlg-drums .dlg-body{max-width:640px}
+.drumlist{list-style:none;margin:8px 0 12px;padding:0;display:grid;gap:4px}
+.drumlist li{display:grid;grid-template-columns:auto minmax(0,1.2fr) minmax(70px,1fr) 44px minmax(0,1.1fr);align-items:center;gap:10px;padding:5px 6px;border-radius:var(--r-sm)}
+.drumlist li:hover{background:var(--panel-2,rgba(127,127,127,.08))}
+.drumlist li.unused .dname,.drumlist li.unused .dval{opacity:.55}
+.drumlist .dname{display:grid;min-width:0}
+.drumlist .dname b{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drumlist .dname small{color:var(--text-3);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drumlist .dval{font-size:12px;text-align:right;color:var(--text-2)}
+.drumlist .choose{min-width:0;width:100%}
+.drumlist .choose span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.ms button[data-act="pieces"]{font-size:11px}
+@media (max-width:560px){
+  .drumlist li{grid-template-columns:auto minmax(0,1fr) 44px;row-gap:4px}
+  .drumlist li input[type=range]{grid-column:1 / 3}
+  .drumlist li .choose{grid-column:1 / -1}
+}

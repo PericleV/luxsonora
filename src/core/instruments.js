@@ -26,6 +26,7 @@ const extra = {
 // type used until they load (or if they can't), with the same envelope and filter values, which
 // the image modulates as usual (cutoff, release and velocity reach the samples).
 const SF = (name, instrument, fb, p = {}) => ({ type: "sample", name, src: { kind: "sf", instrument }, fb, a: 0.01, d: 0.8, s: 0.8, r: 0.6, cut: 9000, q: 0.7, col: 0.35, det: 6, ratio: 1, ...p });
+const VOX = (name, instrument, range, p = {}) => ({ type: "sample", name, family: "Voices", src: { kind: "mellotron", instrument }, fb: "pad", range, a: 0.2, d: 0.8, s: 0.85, r: 1.0, cut: 7000, q: 0.7, col: 0.15, det: 6, ratio: 1, vib: 0, ...p });
 const SAMPLED = {
   "s.piano": { type: "sample", name: "Grand piano (Steinway)", src: { kind: "piano" }, fb: "fm", a: 0.004, d: 2.6, s: 0.15, r: 0.9, cut: 12000, q: 0.6, col: 0.12, ratio: 1 },
   "s.wurli": { type: "sample", name: "Wurlitzer EP200", src: { kind: "epiano", instrument: "WurlitzerEP200" }, fb: "fm", a: 0.004, d: 1.2, s: 0.3, r: 0.5, cut: 9000, q: 0.7, col: 0.4, ratio: 1 },
@@ -42,6 +43,14 @@ const SAMPLED = {
   "s.trumpet": SF("Trumpet", "trumpet", "pad", { a: 0.03, r: 0.4, col: 0.7 }),
   "s.trombone": SF("Trombone", "trombone", "pad", { a: 0.05, r: 0.5, cut: 5000, col: 0.7 }),
   "s.choir": SF("Choir", "choir_aahs", "pad", { a: 0.5, r: 1.4, cut: 6000, col: 0.15 }),
+  // Voices: a mixed choir, men, women and boys (Mellotron and Chamberlin tapes, vowels only) and
+  // the General MIDI "ooh" (levels trimmed to sit with the strings on offline renders). range keeps each within the notes it can sing: a note outside moves
+  // by octaves into it when played (the score keeps its own pitch).
+  "v.mixed": VOX("Mixed choir", "8VOICE CHOIR", [43, 77]),
+  "v.male": VOX("Male voices", "CHMB MALE VC", [41, 67], { cut: 6000, lvl: 0.85 }),
+  "v.female": VOX("Female voices", "CHMB FEMALE", [55, 79], { lvl: 0.85 }),
+  "v.boys": VOX("Boys choir", "BOYS CHOIR", [55, 79], { lvl: 0.85 }),
+  "v.oohs": { ...SF("Voices (ooh)", "voice_oohs", "pad", { a: 0.3, r: 1.2, cut: 6000, col: 0.12 }), family: "Voices", range: [43, 79] },
   "s.flute": SF("Flute", "flute", "pad", { a: 0.05, r: 0.4, col: 0.1, vib: 6 }),
   "s.oboe": SF("Oboe", "oboe", "pad", { a: 0.04, r: 0.4, col: 0.3 }),
   "s.clarinet": SF("Clarinet", "clarinet", "pad", { a: 0.04, r: 0.4, col: 0.2 }),
@@ -112,13 +121,14 @@ export const STYLE_SAMPLED = {
   baroque: { lead: "s.violin", harm: "s.harpsichord", bass: "s.cello", pad: "s.strings" },
   eastasian: { lead: "s.shakuhachi", harm: "s.koto", bass: "s.contrabass", pad: "s.strings" },
   dnb: { pad: "s.synthstrings" },
-  techno: {}
+  techno: {},
+  acappella: { lead: "v.female", harm: "v.mixed", bass: "v.male", pad: "v.oohs" }
 };
-export const STORY_SAMPLED = { lofinature: "s.flute", neoclassical: "s.cello", folk: "s.fiddle", meditation: "s.flute", postrock: "s.cleangtr", triphop: "s.mutedtpt", reggae: "s.trumpet", baroque: "s.violin", eastasian: "s.shakuhachi", pop: "s.flute", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
+export const STORY_SAMPLED = { acappella: "v.female", lofinature: "s.flute", neoclassical: "s.cello", folk: "s.fiddle", meditation: "s.flute", postrock: "s.cleangtr", triphop: "s.mutedtpt", reggae: "s.trumpet", baroque: "s.violin", eastasian: "s.shakuhachi", pop: "s.flute", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
 
 // With the Story melody the line is long and tied, so a plucked default would cut it into
 // separate attacks: each style uses a sustained lead instead, unless a preset is chosen.
-export const STORY_LEAD = { lofinature: "x.softlead", neoclassical: "x.warmlead", folk: "x.softlead", meditation: "x.softlead", postrock: "x.softlead", chiptune: "chiptune.lead", triphop: "x.softlead", reggae: "x.softlead", baroque: "x.softlead", eastasian: "x.softlead", dnb: "x.synthlead", techno: "x.synthlead", blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
+export const STORY_LEAD = { acappella: "x.softlead", lofinature: "x.softlead", neoclassical: "x.warmlead", folk: "x.softlead", meditation: "x.softlead", postrock: "x.softlead", chiptune: "chiptune.lead", triphop: "x.softlead", reggae: "x.softlead", baroque: "x.softlead", eastasian: "x.softlead", dnb: "x.synthlead", techno: "x.synthlead", blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
 
 // Adds catalog entries (sampled instruments listed at runtime by the UI, see samples.js) to
 // the library without replacing curated presets.

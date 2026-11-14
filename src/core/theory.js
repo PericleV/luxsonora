@@ -308,6 +308,16 @@ export const STYLES = {
       pad: I("pad", "Dark drone", { a: 1.5, d: 1.0, s: 0.85, r: 2.0, cut: 900, q: 0.8, col: 0.4, det: 12 })
     },
     gm: { lead: 87, harm: 90, bass: 38, pad: 95 }
+  },
+  acappella: {
+    name: "A cappella choir", modes: ["ionian", "aeolian", "dorian", "lydian"], tempo: [56, 84], pent: false, ext: 5, swing: 0, perc: "none", bass: "hold", reverb: 0.7,
+    inst: {
+      lead: I("pad", "Solo voice", { a: 0.08, d: 0.8, s: 0.85, r: 0.7, cut: 2600, q: 0.9, col: 0.1, det: 3 }),
+      harm: I("pad", "Choir", { a: 0.35, d: 1.0, s: 0.85, r: 1.2, cut: 2200, q: 0.8, col: 0.15, det: 9 }),
+      bass: I("bass", "Bass voices", { a: 0.2, d: 0.8, s: 0.9, r: 0.9, cut: 700, q: 0.7, col: 0.2 }),
+      pad: I("pad", "Humming", { a: 1.2, d: 1.0, s: 0.85, r: 1.8, cut: 1200, q: 0.6, col: 0.1, det: 6 })
+    },
+    gm: { lead: 53, harm: 52, bass: 52, pad: 54 }
   }
 };
 
@@ -371,6 +381,8 @@ export const RULES = {
   dnb: { grid: 2, unit: 8, phrase: 4, harm: ["block", "block"], bass: ["hold", "hold"], cands: [[0, 5, 3], [5, 3, 6]], sidechain: 0.35, pickups: false, approach: false, swell: "riser", stopDown: false },
   // techno: four on the floor, an off-beat rolling bass, minimal stabs
   techno: { grid: 2, unit: 8, phrase: 4, harm: ["block", "stab"], bass: ["offbeat", "offbeat"], cands: [[0, 5, 6], [0, 3, 5]], sidechain: 0.55, pickups: false, approach: false, swell: "riser", stopDown: false },
+  // a cappella: held chords that swell, a bass voice on the roots, a chord a bar like a hymn, the chord before the last is V
+  acappella: { grid: 1, unit: 4, phrase: 4, harm: ["swell", "block"], bass: ["hold", "hold"], cands: [[0, 3, 4], [5, 3, 4]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false, cadentialV: true },
   movie: { grid: 1, unit: 8, phrase: 2, harm: ["swell", "arp"], bass: ["pedal", "hold"], cands: [[0, 3, 4], [5, 3, 1]], sidechain: 0, pickups: true, approach: true, swell: "cymbal", stopDown: false }
 };
 
@@ -394,4 +406,4 @@ export function objectAt(sem, x, y) {
 export const LAYERS = ["lead", "harm", "bass", "pad", "perc"];
 export const LAYER_NAME = { lead: "Melody", harm: "Harmony", bass: "Bass", pad: "Pad", perc: "Rhythm" };
 // Drum kit of each style (see rhythm.js)
-export const PERC_NAME = { lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };
+export const PERC_NAME = { acappella: "No drums", lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };

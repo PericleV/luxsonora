@@ -80,3 +80,42 @@ describe("effects", () => {
     expect(fx.reverb.size).toBe(3.4);
   });
 });
+
+// The kit piece by piece, and the voices.
+import { DRUM_PIECES, pieceSpecs, KITS } from "../src/audio/samples.js";
+import { DRUM } from "../src/core/rhythm.js";
+import { STYLE_BAND } from "../src/core/arrange.js";
+describe("drum pieces", () => {
+  it("cover every drum the rhythm writes, each once", () => {
+    const midis = DRUM_PIECES.map(p => p.midi);
+    expect(new Set(midis).size).toBe(midis.length);
+    expect(new Set(DRUM_PIECES.map(p => p.key)).size).toBe(DRUM_PIECES.length);
+    for (const m of Object.values(DRUM)) expect(midis, `drum ${m}`).toContain(m);
+  });
+  it("load only the kits the pieces borrow from", () => {
+    expect(pieceSpecs({})).toEqual([]);
+    expect(pieceSpecs({ kick: { vol: 1.2, kit: null }, snare: { vol: 1, kit: "synth" } })).toEqual([]);
+    const specs = pieceSpecs({ kick: { vol: 1, kit: "TR-808" }, crash: { vol: 0.8, kit: "TR-808" }, snare: { vol: 1, kit: "LM-2" } });
+    expect(specs.map(s => s.src.instrument).sort()).toEqual(["LM-2", "TR-808"]);
+    expect(KITS["TR-808"]).toBeTruthy();
+  });
+});
+describe("voices", () => {
+  it("are in the library with the range each can sing", () => {
+    for (const k of ["v.mixed", "v.male", "v.female", "v.boys", "v.oohs"]) {
+      const v = LIBRARY[k];
+      expect(v, k).toBeTruthy(); expect(v.family).toBe("Voices"); expect(v.type).toBe("sample");
+      expect(v.range[0]).toBeLessThan(v.range[1]); expect(v.range[1] - v.range[0]).toBeGreaterThanOrEqual(24);
+    }
+    expect(LIBRARY["v.male"].range[0]).toBeLessThan(LIBRARY["v.female"].range[0]);
+  });
+  it("sing the A cappella style: women on the tune, the mixed choir, the men underneath, no drums", () => {
+    const inst = resolveInstruments("acappella", {}, "classic", true);
+    expect(inst.lead.name).toBe("Female voices"); expect(inst.harm.name).toBe("Mixed choir"); expect(inst.bass.name).toBe("Male voices");
+    expect(STYLES.acappella.perc).toBe("none");
+    for (const [k] of STYLE_BAND.acappella) expect(LIBRARY[k], k).toBeTruthy();
+  });
+  it("are offered in the bands of the genres they suit", () => {
+    for (const st of ["epic", "cinematic", "movie", "meditation", "ambient", "baroque", "neoclassical", "classical"]) expect(STYLE_BAND[st].map(x => x[0]), st).toEqual(expect.arrayContaining(["v.mixed", "v.female", "v.male"]));
+  });
+});

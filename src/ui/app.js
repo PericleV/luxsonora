@@ -9,7 +9,7 @@ import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT,
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
 import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT } from "../core/gen.js";
-import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable } from "../core/raw.js";
+import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable, RAW_CC, RAW_CC_DESC } from "../core/raw.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
@@ -56,7 +56,7 @@ const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
   style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
-  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, rawBpm: 0, rawScale: true, rawTracks: [], layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, rawBpm: 0, rawScale: true, rawTracks: [], rawCut: [], rawCC: {}, layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
   // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
@@ -200,7 +200,9 @@ function recompute() {
     if (SCORE.raw) { melNote(""); grooveNote(""); } else { storyStep(); grooveStep(); }
     renderRaw();
     // how it is played: dynamics from the image, accents, phrasing, CC curves, humanize
-    perform(SCORE, P, A);
+    if (!SCORE.raw) perform(SCORE, P, A);
+    for (const k of [...RSEL]) if (!SCORE.raw || !SCORE.notes.some(n => n.rawKey === k)) RSEL.delete(k);
+    showRawSel();
     preloadSamples();
     setSpelling(SCORE.pc);
     if (SEL >= SCORE.points.length) SEL = 0;
@@ -1128,7 +1130,14 @@ function audition(i) {
   startPlayback(F.t0, F.t1);
 }
 // the mixer's effects, with the style's own distortion on its guitars (rock, metal)
-const effFx = (sc = SCORE) => (sc ? styleFx(P.fx, sc.style, sc.inst, RULES) : P.fx);
+const effFx = (sc = SCORE) => {
+  if (!sc) return P.fx;
+  const fx = styleFx(P.fx, sc.style, sc.inst, RULES);
+  if (!sc.rawFx) return fx;
+  const layer = { ...fx.layer };
+  for (const [l, v] of Object.entries(sc.rawFx)) { const own = P.fx.layer[l]; if (!own || !own.own) layer[l] = { drive: 0, ...(own || {}), ...v }; }
+  return { ...fx, layer };
+};
 function applyMixLive() { if (Player.G) { updateGraph(Player.G, effFx(Player.score), P.mix, P.reverb); applyDrums(Player.G, P.drums); } }
 function updatePlayBtn() {
   const b = $("#play"), on = Player.playing && !Player.audition, wait = WAIT_PLAY && !on;
@@ -1238,7 +1247,7 @@ function drawTimeline() {
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + "px"; }
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const sc = SCORE, padL = 6, padR = 10, X = b => padL + (b / sc.total) * (w - padL - padR);
-  tlGeom = { X, padL, padR, w };
+  tlGeom = { X, padL, padR, w, rulerH }; TL_NOTES = [];
   g.clearRect(0, 0, w, h);
   const text2 = css("--text-2"), text3 = css("--text-3"), line = css("--line"), text = css("--text"), acc = css("--accent");
   // tension along the arc: a band at the top of the ruler, stronger where the tension is higher
@@ -1281,23 +1290,103 @@ function drawTimeline() {
     g.globalAlpha = on ? 1 : 0.18; g.fillStyle = col;
     if (l === "perc") {
       const PH = { 36: 1, 38: 0.8, 39: 0.8, 45: 0.7, 48: 0.7, 50: 0.7, 49: 0.9 };
-      for (const n of ns) { const hh = lh * (PH[n.midi] || 0.45); g.globalAlpha = (on ? 1 : 0.18) * (0.45 + 0.55 * n.vel / 127); g.fillRect(X(n.t), y0 + (lh - hh), 1.5, hh); }
+      for (const n of ns) {
+        const hh = lh * (PH[n.midi] || 0.45); g.globalAlpha = (on ? 1 : 0.18) * (0.45 + 0.55 * n.vel / 127); g.fillRect(X(n.t), y0 + (lh - hh), 1.5, hh);
+        if (n.rawKey) { TL_NOTES.push({ key: n.rawKey, x0: X(n.t) - 2, x1: X(n.t) + 3.5, y0: y0 + (lh - hh), y1: y0 + lh }); if (RSEL.has(n.rawKey)) { g.globalAlpha = 1; g.strokeStyle = text; g.lineWidth = 1.5; g.strokeRect(X(n.t) - 1.5, y0 + (lh - hh) - 1.5, 4.5, hh + 3); g.fillStyle = col; } }
+      }
     } else if (ns.length) {
       const lo = Math.min(...ns.map(n => n.midi)), hi = Math.max(...ns.map(n => n.midi)), span = Math.max(1, hi - lo);
       const rowH = Math.max(2, Math.min(4, lh / (span + 1)));
       for (const n of ns) {
         const y = y0 + (1 - (n.midi - lo) / span) * (lh - rowH);
         g.globalAlpha = (on ? 1 : 0.18) * (l === "pad" ? 0.55 : 0.95);
-        g.fillRect(X(n.t), y, Math.max(1.5, X(n.t + n.dur) - X(n.t) - 1), rowH);
+        const nw = Math.max(1.5, X(n.t + n.dur) - X(n.t) - 1);
+        g.fillRect(X(n.t), y, nw, rowH);
+        if (n.rawKey) { TL_NOTES.push({ key: n.rawKey, x0: X(n.t) - 1, x1: X(n.t) + Math.max(4, nw) + 1, y0: y - 3, y1: y + rowH + 3 }); if (RSEL.has(n.rawKey)) { g.globalAlpha = 1; g.strokeStyle = text; g.lineWidth = 1.5; g.strokeRect(X(n.t) - 1, y - 1.5, nw + 2, rowH + 3); } }
       }
     }
   });
   g.globalAlpha = 1;
+  // the rectangle being dragged to select notes
+  if (TL_DRAG && TL_DRAG.box) { const b = TL_DRAG.box; g.fillStyle = hexA(acc, 0.12); g.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); g.strokeStyle = acc; g.lineWidth = 1; g.strokeRect(b.x0 + 0.5, b.y0 + 0.5, b.x1 - b.x0 - 1, b.y1 - b.y0 - 1); }
   const beat = currentBeat();
   if (beat > 0 || Player.playing) { const x = X(Math.min(beat, sc.total)); g.fillStyle = text; g.fillRect(x - 0.75, 0, 1.5, h); }
   g.textAlign = "start"; g.textBaseline = "alphabetic";
 }
 
+/* ============ editing the notes of a raw piece ============ */
+// Click a note on the timeline to select it (Shift adds or removes it), or drag a rectangle over
+// several; Delete removes them (Ctrl+Z brings them back), Controllers sets their CC values.
+const RSEL = new Set();
+let TL_NOTES = [], TL_DRAG = null, TL_SKIP_CLICK = false;
+function showRawSel() {
+  const bar = $("#rawSel"); if (!bar) return;
+  const n = RSEL.size; bar.hidden = !n || !SCORE || !SCORE.raw;
+  if (n) $("#rawSelN").textContent = `${n} note${n === 1 ? "" : "s"} selected`;
+}
+function rawNotesAt(x0, y0, x1, y1) { return TL_NOTES.filter(r => r.x1 >= x0 && r.x0 <= x1 && r.y1 >= y0 && r.y0 <= y1).map(r => r.key); }
+function deleteRawSelection() {
+  if (!RSEL.size) return;
+  pushHistory(); P.rawCut = [...new Set([...(P.rawCut || []), ...RSEL])]; RSEL.clear(); showRawSel(); invalidate(LV.MUSIC);
+}
+function initRawEditing() {
+  const cv = $("#roll"), pos = e => { const rc = cv.getBoundingClientRect(); return { x: e.clientX - rc.left, y: e.clientY - rc.top }; };
+  cv.addEventListener("pointerdown", e => {
+    if (!SCORE || !SCORE.raw || !tlGeom || e.button !== 0) return;
+    const p = pos(e); if (p.y < tlGeom.rulerH) return;
+    TL_DRAG = { x: p.x, y: p.y, shift: e.shiftKey, box: null }; try { cv.setPointerCapture(e.pointerId); } catch (err) { /* a pointer that is not active */ }
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!TL_DRAG) return;
+    const p = pos(e);
+    if (TL_DRAG.box || Math.hypot(p.x - TL_DRAG.x, p.y - TL_DRAG.y) > 4) { TL_DRAG.box = { x0: Math.min(TL_DRAG.x, p.x), y0: Math.min(TL_DRAG.y, p.y), x1: Math.max(TL_DRAG.x, p.x), y1: Math.max(TL_DRAG.y, p.y) }; drawTimeline(); }
+  });
+  cv.addEventListener("pointerup", e => {
+    const d = TL_DRAG; TL_DRAG = null; if (!d) return;
+    const p = pos(e);
+    if (d.box) {
+      if (!d.shift) RSEL.clear();
+      for (const k of rawNotesAt(d.box.x0, d.box.y0, d.box.x1, d.box.y1)) RSEL.add(k);
+      TL_SKIP_CLICK = true;
+    } else {
+      const hit = rawNotesAt(p.x - 2, p.y - 2, p.x + 2, p.y + 2)[0];
+      if (hit) { if (d.shift) { if (RSEL.has(hit)) RSEL.delete(hit); else RSEL.add(hit); } else { RSEL.clear(); RSEL.add(hit); } TL_SKIP_CLICK = true; }
+      else if (!d.shift && RSEL.size) RSEL.clear();
+    }
+    showRawSel(); drawTimeline();
+  });
+  $("#rawSelDel").addEventListener("click", deleteRawSelection);
+  $("#rawSelX").addEventListener("click", () => { RSEL.clear(); showRawSel(); drawTimeline(); });
+  $("#rawSelCC").addEventListener("click", openRawControllers);
+}
+// The controllers of the selected notes: from the picture until you set them; a slider sets the
+// value for every selected note.
+function openRawControllers() {
+  if (!SCORE || !RSEL.size) return;
+  const notes = SCORE.notes.filter(n => RSEL.has(n.rawKey) && n.layer !== "perc");
+  if (!notes.length) { flash("Drum hits have no controllers."); return; }
+  const stat = k => { const v = notes.map(n => n.cc[k]); return { avg: v.reduce((a, b) => a + b, 0) / v.length, spread: Math.max(...v) - Math.min(...v) }; };
+  const own = notes.filter(n => n.ccOwn).length;
+  const { body, close } = openInfo(`${notes.length} note${notes.length === 1 ? "" : "s"}: controllers`, `<div class="dlg-info ccdlg">
+    <p class="snote">Each note takes its controllers from the picture under it, as in a composed piece. A slider sets that value for all the selected notes; the others stay from the picture.${own ? ` ${own} of them have values you set.` : ""}</p>
+    ${Object.entries(RAW_CC).map(([k, name]) => { const s = stat(k); return `<div class="slider"><div class="srow"><label for="cc_${k}">${esc(name)}</label><b class="mono" id="ccv_${k}">${Math.round(s.avg * 127)}${s.spread > 0.04 ? " (varies)" : ""}</b></div>
+      <input type="range" id="cc_${k}" data-k="${k}" min="0" max="127" step="1" value="${Math.round(s.avg * 127)}"><small>${esc(RAW_CC_DESC[k])}</small></div>`; }).join("")}
+    <div class="ns-actions"><button type="button" class="btn" id="ccPic">Back to the picture</button><button type="button" class="btn btn-primary" data-close>Done</button></div></div>`, "dlg-cc");
+  let pushed = false;
+  body.querySelectorAll("input[type=range]").forEach(r => {
+    fillRange(r);
+    r.addEventListener("input", () => { body.querySelector(`#ccv_${r.dataset.k}`).textContent = r.value; fillRange(r); });
+    r.addEventListener("change", () => {
+      if (!pushed) { pushHistory(); pushed = true; }
+      const v = Number(r.value) / 127, cc = { ...(P.rawCC || {}) };
+      for (const n of notes) cc[n.rawKey] = { ...(cc[n.rawKey] || {}), [r.dataset.k]: v };
+      P.rawCC = cc; invalidate(LV.MUSIC);
+    });
+  });
+  body.querySelector("#ccPic").addEventListener("click", () => {
+    pushHistory(); const cc = { ...(P.rawCC || {}) }; for (const n of notes) delete cc[n.rawKey]; P.rawCC = cc; invalidate(LV.MUSIC); close();
+  });
+}
 /* ============ text panels ============ */
 function updateReadout() {
   if (!SCORE) return;
@@ -1788,7 +1877,14 @@ function syncSourceControls() {
 
 /* ============ editing focus points ============ */
 const plain = q => ({ id: q.id || newId(), x: q.x, y: q.y, r: q.r, w: q.w ?? q.s ?? 0.5, pinned: !!q.pinned || q.source === "manual", index: q.index, ...(q.mood ? { mood: q.mood } : {}), ...(q.accent ? { accent: true } : {}) });
-function pushHistory() { HIST.push(JSON.stringify(PATH)); if (HIST.length > 200) HIST.shift(); FUT = []; }
+// one step of history: the path and the edits of a raw piece (deleted notes, controllers)
+const snapshot = () => JSON.stringify({ p: PATH, c: P.rawCut || [], cc: P.rawCC || {} });
+function pushHistory() { HIST.push(snapshot()); if (HIST.length > 200) HIST.shift(); FUT = []; }
+function restore(str) {
+  const j = JSON.parse(str), s = j && j.p ? j : { p: j, c: P.rawCut, cc: P.rawCC }, same = JSON.stringify(s.p) === JSON.stringify(PATH);
+  Object.assign(PATH, s.p); P.rawCut = s.c || []; P.rawCC = s.cc || {};
+  if (same) invalidate(LV.MUSIC); else pathChanged();
+}
 // The first edit of an automatic path turns it into a manual list holding every current point.
 function ensureEditable() { if (PATH.mode === "auto") { PATH.mode = "manual"; PATH.points = POINTS.map(q => ({ ...plain(q), pinned: false })); } }
 function pathChanged() { invalidate(LV.PATH); syncPathUI(); }
@@ -1835,8 +1931,8 @@ function setMode(m) {
   else if (m === "mixed") PATH.points = (PATH.mode === "manual" ? PATH.points.map((q, i) => ({ ...q, index: i })) : PATH.points).filter(q => q.pinned);
   PATH.mode = m; pathChanged();
 }
-function undo() { if (!HIST.length) return; FUT.push(JSON.stringify(PATH)); Object.assign(PATH, JSON.parse(HIST.pop())); pathChanged(); }
-function redo() { if (!FUT.length) return; HIST.push(JSON.stringify(PATH)); Object.assign(PATH, JSON.parse(FUT.pop())); pathChanged(); }
+function undo() { if (!HIST.length) return; FUT.push(snapshot()); restore(HIST.pop()); }
+function redo() { if (!FUT.length) return; HIST.push(snapshot()); restore(FUT.pop()); }
 let MODE_SEG = null;
 function syncPathUI() {
   if (MODE_SEG) MODE_SEG.set(PATH.mode);
@@ -2124,7 +2220,8 @@ function initGen() {
     <p class="snote">Off, every semitone can sound: the picture exactly, dissonances included.</p>
     <div class="field"><div class="flabel">Tracks</div><ul class="rawlist" id="rawList"></ul>
       <button type="button" class="btn" id="rawAdd"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add track</button>
-      <p class="snote">Each track plays what it reads where the eye is, on its own instrument. Add as many as you like; one of them can be the drum kit.</p></div>`;
+      <p class="snote">Each track plays what it reads where the eye is, on its own instrument. Add as many as you like; one of them can be the drum kit.</p></div>
+    <p class="snote">On the timeline, click a note (Shift for more) or drag over several to select them: Delete removes them, Controllers sets their expression, vibrato and brightness. Effects sets a track's reverb, chorus and delay, read from the picture until you change them. <span id="rawCutNote"></span></p>`;
   RAW_TEMPO = makeSeg($("#rawTempoSeg"), [["auto", "From the picture"], ["set", "Set"]], P.rawBpm > 0 ? "set" : "auto", v => { P.rawBpm = v === "set" ? Number($("#rawBpm").value) || 100 : 0; renderRaw(); invalidate(LV.MUSIC); });
   const bpm = $("#rawBpm");
   bpm.addEventListener("input", () => { $("#rawBpmVal").textContent = bpm.value + " BPM"; fillRange(bpm); });
@@ -2134,12 +2231,16 @@ function initGen() {
   $("#rawScaleOn").addEventListener("change", e => { P.rawScale = e.target.checked; invalidate(LV.MUSIC); });
   $("#rawList").addEventListener("change", e => { const id = e.target.dataset.r; if (!id) return; setRawTrack(id, { read: e.target.value }); });
   $("#rawList").addEventListener("click", e => {
-    const b = e.target.closest("[data-act]"); if (!b) return;
+    const b = e.target.closest("[data-act]"); if (!b || b.dataset.act === "fx") return;
     const id = b.closest("li").dataset.id;
     if (b.dataset.act === "del") { P.rawTracks = rawList().filter(t => t.id !== id); invalidate(LV.MUSIC); }
     else pickRawInstrument(id);
   });
   $("#rawAdd").addEventListener("click", () => pickRawInstrument(null));
+  $("#rawBox").addEventListener("click", e => {
+    if (e.target.closest("#rawRestore")) { pushHistory(); P.rawCut = []; invalidate(LV.MUSIC); }
+    const fx = e.target.closest("[data-act=fx]"); if (fx && SOUND) { const id = fx.closest("li").dataset.id, t = rawList().find(x => x.id === id); selectTab("sound"); SOUND.select(t && t.preset === DRUMS_KEY ? "perc" : id); }
+  });
   document.body.classList.toggle("gen-raw", P.gen === "raw");
 }
 function renderRaw() {
@@ -2157,10 +2258,12 @@ function renderRaw() {
   $("#rawTempoNote").textContent = SCORE ? `${set ? "Set" : "From the picture"}: ${nf1(SCORE.bpm)} BPM${set && Math.abs(SCORE.bpm - P.rawBpm) > 0.5 ? `, the nearest tempo that fits ${SCORE.seconds} s in whole bars` : ""}.` : "";
   $("#rawKey").value = P.keyMode === "manual" ? String(P.keyPc) : "auto"; $("#rawScaleSel").value = P.scale || "auto"; $("#rawScaleOn").checked = P.rawScale !== false;
   const opts = cur => Object.entries(RAW_READS).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}</option>`).join("");
-  const list = rawList(), one = list.length < 2;
+  const list = rawList(), one = list.length < 2, cut = (SCORE && SCORE.raw && SCORE.raw.cut) || 0;
+  $("#rawCutNote").innerHTML = cut ? `${cut} note${cut === 1 ? "" : "s"} deleted. <button type="button" class="linkbtn" id="rawRestore">Bring them back</button>` : "";
   $("#rawList").innerHTML = list.map(t => { const drums = t.preset === DRUMS_KEY, lane = drums ? "perc" : t.id, iname = drums ? "Drum kit: " + PERC_NAME[P.style] : (LIBRARY[t.preset] || {}).name || t.preset; return `<li data-id="${esc(t.id)}" style="--dot:${laneColor(lane)}"><span class="odot" aria-hidden="true"></span>
       <span class="select select-sm"><select data-r="${esc(t.id)}" aria-label="What this track reads">${opts(t.read)}</select></span>
       <button type="button" class="choose" data-act="inst" aria-haspopup="dialog" title="Change the instrument"><span>${esc(iname)}</span></button>
+      <button type="button" class="linkbtn" data-act="fx" title="Reverb, chorus and delay of this track">Effects</button>
       <button type="button" class="icon-btn" data-act="del" aria-label="Remove this track" title="Remove"${one ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       <small>${esc(RAW_READ_DESC[t.read] || "")}${drums ? " (drum hits: low a kick, then a snare, high a hi-hat)" : ""}</small></li>`; }).join("");
 }
@@ -2770,7 +2873,9 @@ export function init() {
   ["dragenter", "dragover"].forEach(t => lb.addEventListener(t, e => { e.preventDefault(); $("#lightbox").classList.add("dragging"); }));
   ["dragleave", "drop"].forEach(t => lb.addEventListener(t, e => { e.preventDefault(); $("#lightbox").classList.remove("dragging"); }));
   lb.addEventListener("drop", e => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) loadFile(f); });
+  initRawEditing();
   $("#roll").addEventListener("click", e => {
+    if (TL_SKIP_CLICK) { TL_SKIP_CLICK = false; return; }
     if (!SCORE || !tlGeom) return;
     const rc = e.currentTarget.getBoundingClientRect(), x = e.clientX - rc.left;
     const beat = clamp((x - tlGeom.padL) / (tlGeom.w - tlGeom.padL - tlGeom.padR)) * SCORE.total;
@@ -2787,6 +2892,8 @@ export function init() {
     if (e.code === "Space") { e.preventDefault(); togglePlay(); }
     else if (e.key === "[") selectPoint(SEL - 1);
     else if (e.key === "]") selectPoint(SEL + 1);
+    else if ((e.key === "Delete" || e.key === "Backspace") && RSEL.size && SCORE && SCORE.raw) { e.preventDefault(); deleteRawSelection(); }
+    else if (e.key === "Escape" && RSEL.size) { RSEL.clear(); showRawSel(); drawTimeline(); }
     else if (e.key === "Delete" || e.key === "Backspace") { if (SCORE && SCORE.points.length) { e.preventDefault(); deletePoint(SEL); } }
     else if (e.key.toLowerCase() === "a") { tool = tool === "add" ? "select" : "add"; syncPathUI(); }
     else if (e.key === "Escape" && tool === "add") { tool = "select"; syncPathUI(); }
@@ -2812,7 +2919,9 @@ export function init() {
   addToLibrary(instrumentCatalog());
   initOrch();
   SOUND = initSound({ P, onMusic: () => invalidate(LV.MUSIC), onFx: () => applyMixLive(), onPreview: (layer, tim, kit) => preview(ensureCtx(), layer, tim, kit || null),
-    getExtra: () => ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, name: ROLES[L.role].name, inst: SCORE.inst[L.id] })), onPickExtra: id => pickLayerInstrument(id) });
+    getExtra: () => ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, name: L.read ? RAW_READS[L.read] : ROLES[L.role].name, inst: SCORE.inst[L.id] })),
+    onPickExtra: id => (extraOf(id) && extraOf(id).read ? pickRawInstrument(id) : pickLayerInstrument(id)),
+    getPictureFx: c => (SCORE && SCORE.rawFx && SCORE.rawFx[c]) || null });
   // the last session (a phone may have closed the page in the background), else the first demo
   restoreSession().then(ok => { if (!ok && !INFO) loadDemo("lac"); });
   // save at once when the page is hidden: a phone may close it without warning

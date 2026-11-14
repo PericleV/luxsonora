@@ -589,10 +589,15 @@ body.gen-raw .no-raw,.newsong.gen-raw .no-raw{display:none!important}
 .rawbox{display:grid;gap:10px;padding:10px 12px;margin:2px 0 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel-2)}
 .rawbox .srow input[type=range]{flex:1}
 .rawlist{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:6px}
-.rawlist li{display:grid;grid-template-columns:auto minmax(0,8.5rem) minmax(0,1fr) auto;align-items:center;gap:4px 8px}
+.rawlist li{display:grid;grid-template-columns:auto minmax(0,8.5rem) minmax(0,1fr) auto auto;align-items:center;gap:4px 8px}
 .rawlist li .choose{min-width:0}
 .rawlist li small{grid-column:2/-1;color:var(--text-3);font-size:11.5px;margin-top:-3px}
 .rawlist .odot{width:8px;height:8px;border-radius:50%;background:var(--dot)}
+.rawsel{position:absolute;top:2px;right:8px;z-index:3;display:flex;align-items:center;gap:6px;padding:3px 4px 3px 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel);box-shadow:0 4px 14px rgba(0,0,0,.12);font-size:12.5px}
+.rawsel[hidden]{display:none}
+.rawsel .btn-sm{padding:3px 9px;font-size:12px;min-height:0}
+.ui-simple body.gen-raw #layerFx{display:block!important}
+.ccdlg .slider small{display:block;color:var(--text-3);font-size:11.5px}
 .dlg-pickhead{display:grid;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .dlg-pickhead .pl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media (max-width:560px){

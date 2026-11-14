@@ -166,6 +166,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] The timbre of a focus point one instrument at a time, with the values before and after; labels that show the notes of each place (following the melody as it plays) or its timbre and the measures behind it (the detected names are gone)
 - [x] Each track's instrument chosen on its lane (▾); labels follow a chosen track, name its chords, and show the ticked measures of the picture
 - [x] How the song is made: Composed (the genre's usual band, or, with a switch, the band the picture chooses from pools checked against each genre's usual instrumentation, saying what it chose) and Raw (the notes read straight from the picture: its own tracks, added one by one, each with its instrument and what it reads; the tempo and the scale set by hand); lanes named after their instruments
+- [x] Raw: notes selected and deleted on the timeline, controllers (CC11, CC1, CC74) from the picture under each note or set by hand, each track's reverb, chorus and delay from the picture or set by hand; a chorus on every track
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)
 - [x] Twelve more styles (Lo-fi chill, Neoclassical piano, Acoustic folk, Meditation, Post-rock, Chiptune, Trip-hop, Reggae, Baroque, East Asian, Drum and bass, Techno), the styles in five groups, and the three that suit a picture suggested from its analysis
 - [ ] Styles in 3/4 and 6/8 (waltz, folk jigs): the engine is in 4/4

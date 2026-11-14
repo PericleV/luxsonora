@@ -29,7 +29,16 @@ export function audible(mix, l) {
 // base: the layer's level in the mix (extra layers take their role's level, arrange.js)
 export function layerGain(mix, l, base = LAYER_GAIN[l] ?? 0.45) { return audible(mix, l) ? base * ((mix[l] && mix[l].vol) ?? 1) : 0; }
 // Per-layer effect settings, with defaults for layers the settings don't know yet (extra layers).
-const layerFx = (fx, l) => fx.layer[l] || { drive: 0, rev: 0.45, dly: 0.1 };
+const layerFx = (fx, l) => fx.layer[l] || { drive: 0, rev: 0.45, dly: 0.1, cho: 0 };
+// A track's own chorus: a delay line modulated by a slow sine (starting at time 0, so a render is
+// always the same), mixed in after the track's EQ.
+function layerChorus(ctx) {
+  const d = ctx.createDelay(0.05), wet = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+  d.delayTime.value = 0.014; wet.gain.value = 0; lfo.type = "sine"; lfo.frequency.value = 0.8; lg.gain.value = 0.003;
+  lfo.connect(lg); lg.connect(d.delayTime); lfo.start(0); d.connect(wet);
+  return { input: d, output: wet, lfo, depth: lg };
+}
+function setChorus(c, L, set) { set(c.output.gain, Math.max(0, L.cho || 0)); set(c.lfo.frequency, L.choRate ?? 0.8); set(c.depth.gain, L.choDepth ?? 0.003); }
 const layerEq = (fx, l) => fx.eq[l] || defaultEq();
 
 const IR_CACHE = new WeakMap(), NOISE_CACHE = new WeakMap(), KS_CACHE = new WeakMap(), WAVE_CACHE = new WeakMap();
@@ -95,7 +104,7 @@ export function buildGraph(ctx, reverb, mix, fx = defaultFx(), bpm = 90, extra =
   // delay
   const dlyIn = ctx.createGain(), dly = ctx.createDelay(4), tone = ctx.createBiquadFilter(), fb = ctx.createGain(), dlyOut = ctx.createGain();
   tone.type = "lowpass"; dlyIn.connect(dly); dly.connect(tone); tone.connect(fb); fb.connect(dly); tone.connect(dlyOut); dlyOut.connect(bus);
-  const inp = {}, drive = {}, eq = {}, fader = {}, rSend = {}, dSend = {}, duck = {};
+  const inp = {}, drive = {}, eq = {}, fader = {}, rSend = {}, dSend = {}, duck = {}, cho = {};
   const baseGain = {}, layers = [...LAYERS, ...extra.map(L => L.id)];
   for (const L of extra) baseGain[L.id] = L.gain ?? (ROLES[L.role] || {}).gain ?? 0.45;
   for (const l of layers) {
@@ -106,10 +115,12 @@ export function buildGraph(ctx, reverb, mix, fx = defaultFx(), bpm = 90, extra =
     rSend[l] = ctx.createGain(); dSend[l] = ctx.createGain();
     // duck: sidechain gain, pulled down on each kick in styles that pump (see playNote)
     duck[l] = ctx.createGain();
+    cho[l] = layerChorus(ctx);
     inp[l].connect(drive[l]); drive[l].connect(eq[l].input); eq[l].output.connect(duck[l]); duck[l].connect(fader[l]);
+    duck[l].connect(cho[l].input); cho[l].output.connect(fader[l]);
     fader[l].connect(bus); fader[l].connect(rSend[l]); rSend[l].connect(revIn); fader[l].connect(dSend[l]); dSend[l].connect(dlyIn);
   }
-  const G = { ctx, master: out, out, makeup, wet, bus: inp, fader, duck, sidechain: 0, baseGain, extraIds: extra.map(L => L.id), rSend, dSend, drive, eq, mEq, comp, limiter, pre, conv, damp, dly, tone, fb, dlyOut, chDry, chWet, chDelay, lfo, lfoGain, noise: makeNoise(ctx), irSize: fx.reverb.size, bpm };
+  const G = { ctx, master: out, out, makeup, wet, bus: inp, fader, duck, cho, sidechain: 0, baseGain, extraIds: extra.map(L => L.id), rSend, dSend, drive, eq, mEq, comp, limiter, pre, conv, damp, dly, tone, fb, dlyOut, chDry, chWet, chDelay, lfo, lfoGain, noise: makeNoise(ctx), irSize: fx.reverb.size, bpm };
   updateGraph(G, fx, mix, reverb, t, true);
   return G;
 }
@@ -123,6 +134,7 @@ export function updateGraph(G, fx, mix, reverb, t = G.ctx.currentTime, initial =
     setEq(G.eq[l], layerEq(fx, l), t);
     set(G.fader[l].gain, layerGain(mix, l, G.baseGain[l]));
     set(G.rSend[l].gain, L.rev); set(G.dSend[l].gain, L.dly);
+    if (G.cho && G.cho[l]) setChorus(G.cho[l], L, set);
   }
   setEq(G.mEq, fx.eq.master, t);
   set(G.wet.gain, reverb * 0.9);
@@ -507,10 +519,12 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
 function buildStem(ctx, layer, mix, fx, bpm, extra) {
   const inp = ctx.createGain(), drive = ctx.createWaveShaper(), eq = eqChain(ctx, layerEq(fx, layer)), duck = ctx.createGain(), fader = ctx.createGain();
   drive.oversample = "4x";
-  inp.connect(drive); drive.connect(eq.input); eq.output.connect(duck); duck.connect(fader); fader.connect(ctx.destination);
+  const ch = layerChorus(ctx);
+  inp.connect(drive); drive.connect(eq.input); eq.output.connect(duck); duck.connect(fader); duck.connect(ch.input); ch.output.connect(fader); fader.connect(ctx.destination);
   const baseGain = {}; for (const L of extra) baseGain[L.id] = L.gain ?? (ROLES[L.role] || {}).gain ?? 0.45;
   const L = layerFx(fx, layer);
   drive.curve = L.drive > 0.001 ? driveCurve(L.drive) : null;
+  setChorus(ch, L, (p, v) => { p.value = v; });
   setEq(eq, layerEq(fx, layer), 0);
   fader.gain.value = layerGain(mix, layer, baseGain[layer]);
   return { ctx, stem: layer, bus: { [layer]: inp }, drive: { [layer]: drive }, eq: { [layer]: eq }, duck: { [layer]: duck }, fader: { [layer]: fader }, baseGain, extraIds: extra.map(x => x.id), sidechain: 0, noise: makeNoise(ctx), bpm };

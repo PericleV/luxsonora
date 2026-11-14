@@ -9,7 +9,7 @@ import { compose } from "../src/core/compose.js";
 import { STYLES } from "../src/core/theory.js";
 import { LIBRARY } from "../src/core/instruments.js";
 import { genreCore, genreLayers, pictureOf, characterOf, GEN_MODES, genOf, pictureBandOf } from "../src/core/gen.js";
-import { rawNotes, rawPath, snap, RAW_READS, rawTrackList, nextTrackId, DRUMS_KEY } from "../src/core/raw.js";
+import { rawNotes, rawPath, snap, RAW_READS, rawTrackList, nextTrackId, DRUMS_KEY, ccFromPicture } from "../src/core/raw.js";
 
 const P0 = { style: "rock", duration: 30, count: 8, returns: 0, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7, samples: true, orch: "small" };
 const cache = new Map();
@@ -105,6 +105,24 @@ describe("raw", () => {
     expect(sc.notes.every(n => pcs.has(n.midi % 12))).toBe(true);
     const ch = run({ ...P0, gen: "raw", rawTracks: T, rawScale: false });
     expect(new Set(ch.notes.map(n => n.midi % 12)).size).toBeGreaterThan(pcs.size - 1);
+  });
+  it("notes you delete stay deleted; controllers from the picture, or yours", () => {
+    const T = [{ id: "r1", read: "height", preset: "s.piano" }, { id: "r2", read: "edges", preset: DRUMS_KEY }];
+    const a = run({ ...P0, gen: "raw", rawTracks: T });
+    expect(a.notes.every(n => n.rawKey && n.cc)).toBe(true);
+    const gone = a.notes.filter(n => n.layer === "r1").slice(0, 3).map(n => n.rawKey);
+    const b = run({ ...P0, gen: "raw", rawTracks: T, rawCut: gone });
+    expect(b.notes.length).toBe(a.notes.length - 3); expect(b.raw.cut).toBe(3);
+    expect(b.notes.some(n => gone.includes(n.rawKey))).toBe(false);
+    const n0 = a.notes.find(n => n.layer === "r1");
+    expect(n0.cc).toEqual(ccFromPicture(n0.pic));
+    expect(a.cc.r1.expr.length).toBeGreaterThan(0); expect(a.cc.r1.bright.length).toBeGreaterThan(0); expect(a.cc.perc).toBeUndefined();
+    const c = run({ ...P0, gen: "raw", rawTracks: T, rawCC: { [n0.rawKey]: { expr: 0.2, bright: 1 } } }), m = c.notes.find(n => n.rawKey === n0.rawKey);
+    expect(m.cc.expr).toBe(0.2); expect(m.cc.bright).toBe(1); expect(m.cc.mod).toBe(n0.cc.mod); expect(m.ccOwn).toBe(true);
+    expect(m.tim.cut).toBeGreaterThan(n0.tim.cut);
+    // each track's effects from what its notes saw
+    expect(Object.keys(a.rawFx)).toEqual(["r1"]);
+    for (const v of Object.values(a.rawFx.r1)) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
   });
   it("a tempo set by hand", () => {
     const sc = run({ ...P0, gen: "raw", rawBpm: 90 });

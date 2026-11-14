@@ -121,9 +121,12 @@ export function rawNotes(sc, A, tracks, { scale = true } = {}) {
       return snap(lo + clamp(v) * (hi - lo), pcs, lo, hi);
     };
     const value = s => (read === "height" ? 1 - s.y : read === "light" ? s.L : read === "saturation" ? s.sat : read === "warmth" ? s.warm : read === "texture" ? s.L : s.L);
-    const push = (t, dur, midi, s) => notes.push(perc
-      ? { layer: "perc", t, dur: 0.05, midi, vel: velOf(s), point: s.j, raw: read }
-      : { layer: id, t, dur, midi, vel: velOf(s), tim: timOf(s.j), pan: panOf(s.x), point: s.j, raw: read });
+    // each note keeps what the picture was under it (for its controllers and its track's effects)
+    // and a key that names it while the piece stays the same (to delete it or change it)
+    const push = (t, dur, midi, s) => notes.push({
+      ...(perc ? { layer: "perc", t, dur: 0.05, midi, vel: velOf(s) } : { layer: id, t, dur, midi, vel: velOf(s), tim: timOf(s.j), pan: panOf(s.x) }),
+      point: s.j, raw: read, rawKey: `${id}:${Math.round(t * 1000)}:${midi}`, pic: { L: s.L, edge: s.edge, sat: s.sat, ent: s.ent }
+    });
     let cur = null, prevE = 0, phase = 0, prevLevel = -1;
     const close = t => { if (cur) { cur.dur = Math.max(0.1, t - cur.t); cur = null; } };
     for (let t = 0; t < total - 1e-9; t += step) {
@@ -158,3 +161,53 @@ export function rawNotes(sc, A, tracks, { scale = true } = {}) {
   return notes.sort((a, b) => a.t - b.t || a.midi - b.midi);
 }
 
+
+/*
+ * Your edits on a raw piece, and what each note plays with.
+ *  - Deleted notes (P.rawCut: their keys) are left out.
+ *  - Controllers: each note has three, from the picture under it (as the composed pieces take
+ *    theirs from the places): expression (CC11) from its brightness and edges, vibrato (CC1) from
+ *    how vivid the colour is, brightness (CC74) from how busy the texture is. P.rawCC holds the
+ *    values you set by hand ({ key: { expr, mod, bright } }), which win. In the app the expression
+ *    sets the track's level, the brightness its filter and the vibrato a synthesizer's vibrato; all
+ *    three go into the MIDI file.
+ *  - Each track's effects from the picture (sc.rawFx): reverb for calm, smooth areas, chorus for
+ *    vivid colours, delay for bright, sparse lines.
+ */
+export const RAW_CC = { expr: "Expression (CC11)", mod: "Vibrato (CC1)", bright: "Brightness (CC74)" };
+export const RAW_CC_DESC = { expr: "from the brightness and the edges under the note", mod: "from how vivid the colour is", bright: "from how busy the texture is" };
+export function ccFromPicture(p = {}) {
+  return { expr: clamp(0.55 + 0.35 * (p.L ?? 0.5) + 0.1 * (p.edge ?? 0)), mod: clamp(0.8 * (p.sat ?? 0.3)), bright: clamp(0.25 + 0.75 * (p.ent ?? 0.5)) };
+}
+export function applyRawEdits(sc, P = {}) {
+  const cut = new Set(P.rawCut || []), own = P.rawCC || {}, spb = 60 / sc.bpm, before = sc.notes.length;
+  sc.notes = sc.notes.filter(n => !cut.has(n.rawKey));
+  sc.raw.cut = before - sc.notes.length;
+  const cc = {};
+  for (const n of sc.notes) {
+    const o = own[n.rawKey] || null;
+    n.cc = { ...ccFromPicture(n.pic), ...(o || {}) };
+    if (o) n.ccOwn = true;
+    if (n.layer === "perc" || !n.tim) continue;
+    const tim = { ...n.tim, cut: Math.min(16000, (n.tim.cut || 6000) * 2 ** (2 * (n.cc.bright - 0.5))) };
+    if (tim.type !== "sample" && n.cc.mod > 0.02 && n.dur * spb >= 0.4) tim.vib = (tim.vib || 0) + Math.round(16 * n.cc.mod);
+    n.tim = tim;
+    const c = cc[n.layer] || (cc[n.layer] = { expr: [], mod: [], bright: [] });
+    c.expr.push([n.t, n.cc.expr]); c.mod.push([n.t, n.cc.mod]); c.bright.push([n.t, n.cc.bright]);
+  }
+  // one value per moment (the last note starting there)
+  for (const c of Object.values(cc)) for (const k of ["expr", "mod", "bright"]) {
+    const m = new Map(); for (const [t, v] of c[k]) m.set(Math.round(t * 1e4), [t, v]);
+    c[k] = [...m.values()].sort((a, b) => a[0] - b[0]);
+  }
+  sc.cc = cc;
+  // each track's effects, from what its notes saw
+  const fx = {}, by = {};
+  for (const n of sc.notes) if (n.layer !== "perc" && n.pic) (by[n.layer] || (by[n.layer] = [])).push(n);
+  for (const [l, ns] of Object.entries(by)) {
+    const m = k => ns.reduce((a, n) => a + (n.pic[k] ?? 0), 0) / ns.length, density = ns.length / Math.max(1, sc.total);
+    fx[l] = { rev: clamp(0.2 + 0.9 * (1 - m("edge")) * (1 - 0.4 * m("ent"))), cho: clamp(0.75 * m("sat")), dly: clamp((0.05 + 0.4 * m("L")) * (1 - Math.min(1, density / 2))) };
+  }
+  sc.rawFx = fx;
+  return sc;
+}

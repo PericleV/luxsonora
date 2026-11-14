@@ -15,7 +15,7 @@ import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
 import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
 import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf } from "./gen.js";
-import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY } from "./raw.js";
+import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY, applyRawEdits } from "./raw.js";
 
 export const SCORE_VERSION = 2;
 
@@ -58,7 +58,7 @@ export function compose(args) {
   sc.raw = { tracks, scale: P.rawScale !== false, bpm: fixed ? P.rawBpm : null };
   sc.omit = ["lead", "harm", "bass", "pad", ...(list.some(t => t.preset === DRUMS_KEY) ? [] : ["perc"])];
   sc.cadence = null; sc.modulation = null; sc.picardy = false;
-  return sc;
+  return applyRawEdits(sc, P);
 }
 function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = null }) {
   const st = STYLES[P.style], g = A.global, ws = sem ? P.wSem : 0;

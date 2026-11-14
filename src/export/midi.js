@@ -87,6 +87,8 @@ export function midiFile(sc, isOn) {
       }
     }
     if (C && C.mod) for (const [b, v] of C.mod) ev.push({ t: tick(b), o: 1, b: [0xb0 | ch, 1, c7(v)] });
+    // a raw piece: each note's brightness (CC74)
+    if (C && C.bright) for (const [b, v] of C.bright) ev.push({ t: tick(b), o: 1, b: [0xb0 | ch, 74, c7(v)] });
     for (const nn of sc.notes) if (nn.layer === L.key) {
       const on = tick(nn.t), off = Math.min(endT, Math.max(on + 1, tick(nn.t + nn.dur)));
       ev.push({ t: on, o: 2, b: [0x90 | ch, nn.midi & 127, clampInt(nn.vel, 1, 127)] });

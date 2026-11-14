@@ -199,7 +199,8 @@
   <div class="split-row"><div class="splitter splitter-h" id="splitTl" role="separator" aria-orientation="horizontal" aria-label="Height of the timeline (drag, or use the arrow keys; double-click to reset)" title="Drag to resize; double-click to reset" tabindex="0"></div></div>
   <section class="timeline" aria-label="Timeline">
     <div class="lanes-head" id="lanesHead"><div class="splitter splitter-v splitter-head" id="splitHead" role="separator" aria-orientation="vertical" aria-label="Width of the layer names (drag, or use the arrow keys; double-click to reset)" title="Drag to resize; double-click to reset" tabindex="0"></div><div class="ruler-head"><span>Layers</span></div></div>
-    <div class="lanes-body" id="rollWrap"><canvas id="roll" aria-label="Timeline with the generated notes"></canvas></div>
+    <div class="lanes-body" id="rollWrap"><canvas id="roll" aria-label="Timeline with the generated notes"></canvas>
+      <div class="rawsel" id="rawSel" role="toolbar" aria-label="Selected notes" hidden><span id="rawSelN"></span><button type="button" class="btn btn-sm" id="rawSelCC">Controllers</button><button type="button" class="btn btn-sm btn-danger" id="rawSelDel">Delete</button><button type="button" class="icon-btn" id="rawSelX" aria-label="Clear the selection" title="Clear the selection (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div>
   </section>
 </div>
 <div class="flash" id="flash" role="status" hidden></div>

@@ -29,7 +29,8 @@ function makeFreqSlider(label, get, set) {
 }
 
 // getExtra: the score's extra layers [{ id, name, inst }]; onPickExtra(id): change an extra layer's instrument.
-export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExtra = () => [], onPickExtra = () => {} }) {
+// getPictureFx(channel): a raw track's effects read from the picture ({ rev, cho, dly }), or null
+export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExtra = () => [], onPickExtra = () => {}, getPictureFx = () => null }) {
   let chan = "master", band = 2;
   const host = $("#pan-sound");
   host.insertAdjacentHTML("afterbegin", `
@@ -217,9 +218,19 @@ export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExt
   function renderLayerFx() {
     const box = $("#layerFx"); box.hidden = chan === "master"; if (box.hidden) return;
     const L = P.fx.layer[chan] || (P.fx.layer[chan] = { drive: 0, rev: 0.45, dly: 0.1 }), w = $("#layerFxCtl"); w.innerHTML = "";
-    fxSlider("#layerFxCtl", L, { key: "drive", label: "Drive", min: 0, max: 1, step: 0.01, def: 0, scale: 100, unit: "%", help: "Adds warmth and a bit of grit." });
-    fxSlider("#layerFxCtl", L, { key: "rev", label: "Reverb send", min: 0, max: 1.5, step: 0.01, def: 0.5, scale: 100, unit: "%" });
-    fxSlider("#layerFxCtl", L, { key: "dly", label: "Delay send", min: 0, max: 1, step: 0.01, def: 0, scale: 100, unit: "%" });
+    // a raw track takes its reverb, chorus and delay from the picture until you set them
+    const pic = getPictureFx(chan), fromPic = !!pic && !L.own, shown = { cho: 0, choRate: 0.8, ...L, ...(fromPic ? pic : {}) };
+    if (pic) {
+      w.insertAdjacentHTML("beforeend", `<label class="toggle"><input type="checkbox" id="fxFromPic"${fromPic ? " checked" : ""}><span>From the picture</span></label><p class="snote">Reverb for calm, smooth areas, chorus for vivid colours, delay for bright, sparse lines. Move a slider to set your own.</p>`);
+      $("#fxFromPic").addEventListener("change", e => { if (e.target.checked) delete L.own; else Object.assign(L, pic, { own: true }); renderLayerFx(); onFx(); });
+    }
+    const mine = () => { if (pic && !L.own) { Object.assign(L, shown, { own: true }); const cb = $("#fxFromPic"); if (cb) cb.checked = false; } else Object.assign(L, shown); onFx(); };
+    const fxs = def => { const sl = makeSlider(def, shown, () => mine()); w.appendChild(sl.el); return sl; };
+    fxs({ key: "drive", label: "Drive", min: 0, max: 1, step: 0.01, def: 0, scale: 100, unit: "%", help: "Adds warmth and a bit of grit." });
+    fxs({ key: "rev", label: "Reverb send", min: 0, max: 1.5, step: 0.01, def: 0.5, scale: 100, unit: "%" });
+    fxs({ key: "cho", label: "Chorus", min: 0, max: 1, step: 0.01, def: 0, scale: 100, unit: "%", help: "This track's own chorus: a slow shimmer that widens it." });
+    fxs({ key: "choRate", label: "Chorus rate", min: 0.1, max: 4, step: 0.05, def: 0.8, unit: "Hz", dec: 2 });
+    fxs({ key: "dly", label: "Delay send", min: 0, max: 1, step: 0.01, def: 0, scale: 100, unit: "%" });
   }
   const R = P.fx.reverb, D = P.fx.delay, C = P.fx.chorus, K = P.fx.comp, LM = P.fx.limiter;
   const masterSliders = [
@@ -255,5 +266,7 @@ export function initSound({ P, onMusic, onFx, onPreview = async () => {}, getExt
   }
   render();
   new ResizeObserver(() => drawEq()).observe(svg);
-  return { render, sync, pickInstrument, pickKit, get channel() { return chan; } };
+  // show a channel (from the Raw panel's Effects buttons)
+  function select(c) { buildChan(); if (chanItems().some(([k]) => k === c)) { chan = c; chanSeg.set(c); render(); } }
+  return { render, sync, pickInstrument, pickKit, select, get channel() { return chan; } };
 }

@@ -163,6 +163,30 @@ export function autoLayers(style, level, richness, samples) {
     return { id: "x" + (i + 1), role, preset };
   });
 }
+// A layer for a role in a style, avoiding the presets already used (the next instrument of the
+// style's band with that role).
+export function layerFor(style, role, id, samples, used = new Set()) {
+  let preset = roleInstrument(style, role, samples);
+  if (used.has(preset) && samples) { const alt = (STYLE_BAND[style] || []).find(([k, r]) => r === role && !used.has(k)); if (alt) preset = alt[0]; }
+  return { id, role, preset };
+}
+// The layers that would have almost nothing to play in this piece (xs: the notes extraNotes wrote):
+// a held role (section, drone) sounding for less than three bars in all, another role with
+// fewer than three entries. The doubling follows the melody and is judged later.
+export function thinLayers(layers, xs, body) {
+  return layers.filter(L => {
+    if (L.only || L.role === "double") return false;
+    const mine = xs.filter(n => n.layer === L.id && n.t < body - 1e-9);
+    if (L.role === "sustain" || L.role === "drone") {
+      // the time it sounds, counting a chord once
+      const spans = [...new Map(mine.map(n => [n.t.toFixed(3), [n.t, n.t + n.dur]])).values()].sort((a, b) => a[0] - b[0]);
+      let cover = 0, end = -Infinity;
+      for (const [a, b] of spans) { cover += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }
+      return cover < Math.min(12, body * 0.25) - 1e-9;
+    }
+    return new Set(mine.map(n => n.t.toFixed(3))).size < 3;
+  });
+}
 export const richnessOf = (A, places) => clamp(0.4 * A.global.entropy + 0.3 * A.global.edgeN + 0.3 * Math.min(1, places / 10));
 
 // Entry threshold of the k-th extra layer (0-based) out of n: they join one by one as the tension rises.

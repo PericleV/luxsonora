@@ -13,6 +13,8 @@
 //   leap       a melody leap over an octave
 //   offgrid    a drum hit off the sixteenth grid
 //   pileup     more than 14 pitched notes starting in one beat
+//   mud        two notes of different layers together for half a beat or more, a second apart
+//              with both below E3 or a third apart with both below C3 (low interval limits)
 //   range      a note outside MIDI 24-100
 //   ending     the last chord is not the tonic, the melody's last note is not a tone of it, or a
 //              note starts after the end
@@ -104,8 +106,11 @@ export function auditScore(sc) {
     for (let i = 0; i + 1 < B.length; i++) { const b1 = B[i], b2 = B[i + 1]; if (b1.midi === b2.midi) continue; const l1 = Ld.find(n => n.t <= b1.t + 1e-6 && n.t + n.dur > b1.t + 1e-6), l2 = Ld.find(n => Math.abs(n.t - b2.t) < 1e-6); if (!l1 || !l2 || l1 === l2 || l1.midi === l2.midi) continue; const i1 = pc(l1.midi - b1.midi), i2 = pc(l2.midi - b2.midi); if (i1 === i2 && (i1 === 7 || i1 === 0) && Math.sign(l2.midi - l1.midi) === Math.sign(b2.midi - b1.midi)) hit("parallel", `${where(l2)} over ${where(b2)}`); } }
   // stale: an accompaniment note still sounding a quarter beat after a chord change into a chord
   // it does not belong to
+  const droneIds = new Set((sc.extra || []).filter(L => L.role === "drone").map(L => L.id));
   for (const n of pitched) {
     if (n.layer === "lead" || n.chromatic) continue;
+    // the drone's pedal (the tonic or its fifth, which rests where it rubs) is held on purpose
+    if (droneIds.has(n.layer) && (pc(n.midi - sc.pc - shiftAt(n.t)) === 0 || pc(n.midi - sc.pc - shiftAt(n.t)) === 7)) continue;
     for (const S of sc.slots) if (S.t0 > n.t + 1e-6 && S.t0 < n.t + n.dur - 0.25 && !S.pcs.has(pc(n.midi))) { hit("stale", `${where(n)} dur=${n.dur.toFixed(2)} into chord at ${S.t0} ${[...S.pcs]}`); break; }
     if (sc.body > n.t + 1e-6 && sc.body < n.t + n.dur - 0.25 && tonic && !tonic.has(pc(n.midi))) hit("stale", `${where(n)} into the cadence`);
   }
@@ -160,6 +165,12 @@ export function auditScore(sc) {
   for (const n of sc.notes) if (n.layer === "perc" && !n.roll && !STYLES[sc.style].swing && !STYLES[sc.style].swing16 && Math.abs(n.t * 4 - Math.round(n.t * 4)) > 1e-6 && !sc.groove) hit("offgrid", `perc t=${n.t.toFixed(3)} ${n.midi}`);
   // pile-ups, range, ending
   for (let b = 0; b < sc.total; b++) { const k = pitched.filter(n => n.t >= b - 1e-9 && n.t < b + 1 - 1e-9).length; if (k > 14) hit("pileup", `beat ${b}: ${k} notes`); }
+  { const low = pitched.filter(n => n.midi < 52).sort((a, b) => a.t - b.t);
+    for (let i = 0; i < low.length; i++) for (let j = i + 1; j < low.length && low[j].t < low[i].t + low[i].dur; j++) {
+      const a = low[i], b = low[j]; if (a.layer === b.layer) continue;
+      const ov = Math.min(a.t + a.dur, b.t + b.dur) - Math.max(a.t, b.t), iv = Math.abs(a.midi - b.midi);
+      if (ov >= 0.5 && ((iv >= 1 && iv <= 2) || (iv >= 3 && iv <= 4 && Math.max(a.midi, b.midi) < 48))) hit("mud", `${where(a)} dur=${a.dur.toFixed(2)} vs ${where(b)} dur=${b.dur.toFixed(2)}`);
+    } }
   for (const n of pitched) if (n.midi < 24 || n.midi > 100) hit("range", where(n));
   if (tonic && !new Set(sc.cadence.chord.map(pc)).has(pc(sc.pc))) hit("ending", "cadence chord lacks the tonic");
   for (const n of sc.notes) if (n.t > sc.total + 1e-6) hit("ending", `${where(n)} after the end`);
@@ -169,7 +180,7 @@ export function auditScore(sc) {
 }
 
 // ---- run
-const KEYS = ["clash", "stale", "outOfMode", "parallel", "accNCT", "padNCT", "melNCT", "unresolved", "bassRoot", "crossing", "restrike", "leap", "offgrid", "pileup", "range", "ending"];
+const KEYS = ["clash", "stale", "outOfMode", "parallel", "accNCT", "padNCT", "melNCT", "unresolved", "bassRoot", "crossing", "restrike", "leap", "offgrid", "pileup", "mud", "range", "ending"];
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
 if (isMain) {
   const rows = [], worst = [];

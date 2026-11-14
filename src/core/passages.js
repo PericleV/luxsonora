@@ -37,6 +37,8 @@ export function pathProfile(A, a, b, n = 64) {
 const PC = m => ((m % 12) + 12) % 12;
 const nearestIn = (pcs, target) => { let best = null; for (let m = Math.round(target) - 7; m <= Math.round(target) + 7; m++) if (pcs.has(PC(m)) && (best === null || Math.abs(m - target) < Math.abs(best - target))) best = m; return best ?? Math.round(target); };
 const stepToward = (n, dir, scale) => { let m = n + dir; while (!scale.has(PC(m))) m += dir; return m; };
+// the scale without the tones that rub against a chord (a semitone from one of its tones)
+const calm = (scale, chord) => { const out = new Set([...scale].filter(p => chord.has(p) || !(chord.has((p + 1) % 12) || chord.has((p + 11) % 12)))); return out.size >= 3 ? out : scale; };
 const onBeat = t => Math.abs(t - Math.round(t)) < 1e-6;
 
 /*
@@ -60,7 +62,11 @@ export function passage(L, N, t0, t1, prof, level, style, scalePcs, chordAt) {
   const notes = times.map((t, j) => {
     const fpos = clamp((t - t0) / win), f = (j + 1) / (times.length + 1);
     const li = prof.lum[Math.round(fpos * (n - 1))], terrain = (li - (lum0 + (lum1 - lum0) * fpos)) * 7;
-    const pcs = arp ? chordAt(t1) : onBeat(t) ? chordAt(t) : scalePcs;
+    // off the beat: scale tones, but not the ones a semitone from a tone of the chord (the fourth
+    // over a major chord, the minor sixth over a minor one): held half a beat they rub against
+    // the pad and the section
+    const ch = chordAt(t);
+    const pcs = arp ? chordAt(t1) : onBeat(t) ? ch : calm(scalePcs, ch);
     return { t, f: fpos, midi: nearestIn(pcs, L + (N - L) * f + terrain) };
   });
   // the last note leads into the arrival note
@@ -77,7 +83,7 @@ export function passage(L, N, t0, t1, prof, level, style, scalePcs, chordAt) {
     last.midi = !rub(a) ? a : !rub(b) ? b : c ?? a;
   }
   // no note repeats its neighbour: move it by a scale step toward the arrival
-  for (let j = 1; j < notes.length; j++) if (notes[j].midi === notes[j - 1].midi && !notes[j].chromatic) notes[j].midi = stepToward(notes[j].midi, N >= L ? 1 : -1, arp ? chordAt(t1) : scalePcs);
+  for (let j = 1; j < notes.length; j++) if (notes[j].midi === notes[j - 1].midi && !notes[j].chromatic) notes[j].midi = stepToward(notes[j].midi, N >= L ? 1 : -1, arp ? chordAt(t1) : calm(scalePcs, chordAt(notes[j].t)));
   notes.forEach((x, j) => { x.dur = ((notes[j + 1] ? notes[j + 1].t : t1) - x.t) * 0.96; });
   return notes;
 }

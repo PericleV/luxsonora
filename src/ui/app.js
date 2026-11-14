@@ -539,7 +539,7 @@ function openNewSong(fresh = false) {
     if (orch === "custom") return "Your own list of instruments stays as it is.";
     if (orch === "small") return "Five tracks: melody, harmony, bass, a pad underneath and the drums (or the style's percussion).";
     const xs = A ? autoLayers(st, orch, richnessOf(A, n), P.samples !== false) : [];
-    return `The five tracks, plus ${xs.length} more from the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds.`;
+    return `The five tracks, plus ${xs.length} more from the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds; one with almost nothing to play in this picture is swapped for the next in the style's band.`;
   };
   const note = () => {
     $b("#nsStyleNote").textContent = STYLE_DESC[$b("#nsStyle").value] || ""; $b("#nsSuggest").innerHTML = styleSuggestHtml($b("#nsStyle").value); $b("#nsPlaceNote").textContent = (PLACEMENTS[$b("#nsPlace").value] || {}).desc || "";

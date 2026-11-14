@@ -164,6 +164,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Five suggested styles, one from each family, ranked by how much better than usual a style fits the picture
 - [x] Video from the original photo at full size, the graphics card's encoder first, each layer rendered in parallel (a minute of music in about 30 s instead of 60-110 s), a smooth preview, and the cover leaving by a fade, a zoom, a circle that opens or a cut
 - [x] The timbre of a focus point one instrument at a time, with the values before and after; labels that show the notes of each place (following the melody as it plays) or its timbre and the measures behind it (the detected names are gone)
+- [x] Each track's instrument chosen on its lane (▾); labels follow a chosen track, name its chords, and show the ticked measures of the picture
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)
 - [x] Twelve more styles (Lo-fi chill, Neoclassical piano, Acoustic folk, Meditation, Post-rock, Chiptune, Trip-hop, Reggae, Baroque, East Asian, Drum and bass, Techno), the styles in five groups, and the three that suit a picture suggested from its analysis
 - [ ] Styles in 3/4 and 6/8 (waltz, folk jigs): the engine is in 4/4

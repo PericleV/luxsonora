@@ -6,7 +6,7 @@ import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
 import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, PLACE_NOW, COVER_OUTS, LABEL_INS, LABEL_OUTS, LABEL_POS, LABEL_BEATS, LABEL_FILLS, RIPPLE_FILLS, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook, defaultEdit, curveLUT, CURVE_X } from "../export/look.js";
-import { LABEL_MODES } from "../export/labels.js";
+import { LABEL_MODES, MEASURES, DEFAULT_MEASURES } from "../export/labels.js";
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const ICON_DL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>';
@@ -14,8 +14,8 @@ const ICON_FILM = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5"
 const LOOK_STORE = "sonification.looks";
 // what each kind of label shows
 const LABEL_ABOUT = {
-  notes: "Each place shows the notes its melody plays, and under them its chord. Following the music, the label shows the last notes played and each new one slides in as it sounds; otherwise it shows the first ones.",
-  timbre: "Each place shows how it changes the sound against the rest of the picture, and under it the measures behind that: the value here and the picture's mean, as in the Focus point tab.",
+  notes: "Each place shows the notes the chosen track plays there (notes played together as a chord, like Am7), and under them the place's chord. Following the music, the label shows the last ones played and each new one slides in as it sounds; otherwise it shows the first ones.",
+  timbre: "Each place shows what the analysis measured there, the measures that shape its sound, from 0 to 1. Tick the ones to show.",
   custom: "Write a label for each place, or leave it empty. It shows when the eye gets there."
 };
 const readLooks = () => { try { return JSON.parse(localStorage.getItem(LOOK_STORE) || "{}") || {}; } catch (e) { return {}; } };
@@ -136,7 +136,9 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ${group("labels", "Labels on places", `
       ${seg("xLabels", "Labels")}
       <p class="snote" id="xLabelAbout"></p>
-      <div id="xLabelDetailBox" class="vtoggles">${tog("xLabelLive", "The notes follow the music")}${tog("xLabelDetail", "Details under the label")}</div>
+      <div id="xLabelNotesBox">${sel("xLabelTrack", "From the track", "")}<div class="vtoggles">${tog("xLabelLive", "The notes follow the music")}${tog("xLabelDetail", "The place's chord under them")}</div></div>
+      <div id="xLabelTimbreBox"><div class="field"><div class="flabel">What it shows</div><div class="vtoggles xmeasures">${Object.entries(MEASURES).map(([k, m]) => tog("xLM_" + k, m.name)).join("")}</div></div>
+        <div class="vtoggles">${tog("xLabelMean", "Next to the picture's mean")}</div></div>
       <div id="xLabelCustom"><ol class="xlabels" id="xLabelList"></ol></div>
       <div id="xLabelOpts">
         ${seg("xLabelIn", "How it appears")}
@@ -256,7 +258,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const segs = {};
   for (const [id, key, items, num, after] of SEGS) segs[id] = makeSeg($("#" + id), items, String(V[key]), v => { V[key] = num === "size" ? (v === "original" ? v : Number(v)) : num ? Number(v) : v; if (after) after(); look(); });
   // ---- selects
-  const SELS = [["xLabelPos", "labelPos"], ["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
+  const SELS = [["xLabelPos", "labelPos"], ["xLabelTrack", "labelTrack"], ["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
   for (const [id, key, after] of SELS) $("#" + id).addEventListener("change", e => { V[key] = e.target.value; if (after) after(V[key]); vis(); look(); });
   // ---- sliders on P.video: [host, definition]
   const pct = (key, label, def, max = 1, help) => ({ key, label, min: 0, max, step: 0.05, def, scale: 100, unit: "%", help });
@@ -368,7 +370,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   $("#xEditReset").addEventListener("click", () => { const D = defaultVideo(); V.edit = defaultEdit(); for (const k of ["grade", "gradeAmt", "vignette", "vigColor", "tintColor", "tintAmt", "grain", "dim"]) V[k] = D[k]; sync(); look(); });
   function syncEdit() { for (const [, d] of EDS) esl[d.key].set(ED[d.key] ?? d.def, false); curveSeg.set(curveCh); drawCurve(); }
   // ---- toggles: [id, object, key]
-  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"], ["#xLabelLine", () => V, "labelLine"], ["#xLabelDetail", () => V, "labelDetail"], ["#xLabelLive", () => V, "labelLive"], ["#xBarRound", () => V, "barRound"],
+  const checks = [["#xPassages", () => V, "passages"], ["#xClimaxOwn", () => V, "climaxOwn"], ["#xCaps", () => V, "caps"], ["#xSafe", () => V, "safe"], ["#xLabelKeep", () => V, "labelKeep"], ["#xLabelLine", () => V, "labelLine"], ["#xLabelDetail", () => V, "labelDetail"], ["#xLabelLive", () => V, "labelLive"], ["#xLabelMean", () => V, "labelMean"], ...Object.keys(MEASURES).map(k => ["#xLM_" + k, () => V.labelMeasures || (V.labelMeasures = { ...DEFAULT_MEASURES }), k]), ["#xBarRound", () => V, "barRound"],
     ["#xEndCard", () => V, "endCard"], ["#xCoverClean", () => V, "coverClean"], ["#xLogo", () => V, "logo"], ["#xPatch", () => V, "patch"], ["#xPatchKeep", () => V, "patchKeep"], ["#xLogoAnim", () => V, "logoAnim"], ["#xFadeSound", () => V, "fadeSound"], ...Object.keys(EFFECTS).map(k => ["#xFx_" + k, () => V.fx, k])];
   for (const [id, obj, key] of checks) $(id).addEventListener("change", e => { obj()[key] = e.target.checked; vis(); look(); });
   $("#xLabelOffReset").addEventListener("click", () => { V.labelOff = {}; vis(); look(); });
@@ -399,9 +401,13 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     const inp = e.target.closest("input[data-i]"); if (!inp) return;
     V.labelText = { ...(V.labelText || {}), [inp.dataset.i]: inp.value }; look();
   });
-  // one text box per place (count: how many places the path has)
-  function renderLabels(count = NPTS) {
-    NPTS = count || 0;
+  // one text box per place (count: how many places the path has); the tracks a Notes label can follow
+  let TRACKS = [["lead", "Melody"]];
+  function renderLabels(count = NPTS, tracks = TRACKS) {
+    NPTS = count || 0; TRACKS = tracks && tracks.length ? tracks : TRACKS;
+    const ts = $("#xLabelTrack"), sig = TRACKS.map(t => t.join(":")).join("|");
+    if (ts.dataset.sig !== sig) { ts.innerHTML = TRACKS.map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join(""); ts.dataset.sig = sig; }
+    ts.value = TRACKS.some(([k]) => k === V.labelTrack) ? V.labelTrack : "lead";
     const list = $("#xLabelList"), focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.i : null;
     list.innerHTML = Array.from({ length: NPTS }, (_, i) => `<li><span class="mono">${i + 1}</span><input type="text" class="text-input" data-i="${i + 1}" maxlength="40" placeholder="Place ${i + 1}" value="${esc((V.labelText || {})[String(i + 1)] || "")}" aria-label="Label of place ${i + 1}"></li>`).join("");
     if (focus) { const el = list.querySelector(`input[data-i="${focus}"]`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
@@ -460,7 +466,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     $("#l_xRippleCol2").hidden = (V.rippleFill || "solid") !== "gradient"; $("#l_xRippleCol").hidden = V.rippleFill === "rainbow";
     sl.barGap.el.hidden = V.bottom !== "bars"; sl.barGain.el.hidden = V.bottom === "line"; $("#xBarRound").closest(".vtoggles").hidden = V.bottom === "none";
     $("#xLabelCustom").hidden = V.labels !== "custom"; $("#xLabelOpts").hidden = !V.labels || V.labels === "off";
-    $("#xLabelDetailBox").hidden = V.labels !== "notes" && V.labels !== "timbre"; $("#xLabelLive").closest("label").hidden = V.labels !== "notes";
+    $("#xLabelNotesBox").hidden = V.labels !== "notes"; $("#xLabelTimbreBox").hidden = V.labels !== "timbre";
     $("#xLabelAbout").textContent = LABEL_ABOUT[V.labels] || ""; $("#xLabelAbout").hidden = !LABEL_ABOUT[V.labels];
     sl.placeNowOp.el.hidden = V.points === "off";
     $("#xLineNote").textContent = { particles: "A faint thread with bright dots travelling along it.", constellation: "A hairline between the places and a small star on each.", electric: "A zigzag that flickers. Suits electronic styles.", marching: "Dashes that move forward along the path.", comet: "A tail behind the eye that fades with the distance.", tapered: "Thin where it started, full width at the eye.", brush: "Three thin strokes, like a hand-drawn line." }[V.line || "glow"] || "";

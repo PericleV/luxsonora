@@ -584,7 +584,9 @@ button,.btn,[role=tab],[role=radio],select,label.toggle{touch-action:manipulatio
 .drumlist .dval{font-size:12px;text-align:right;color:var(--text-2)}
 .drumlist .choose{min-width:0;width:100%}
 .drumlist .choose span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
-.ms button[data-act="pieces"]{font-size:11px}
+.ms button[data-act="pieces"],.ms button[data-act="inst"]{font-size:11px}
+.dlg-pickhead{display:grid;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.dlg-pickhead .pl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media (max-width:560px){
   .drumlist li{grid-template-columns:auto minmax(0,1fr) 44px;row-gap:4px}
   .drumlist li input[type=range]{grid-column:1 / 3}

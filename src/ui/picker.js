@@ -21,18 +21,21 @@ function shell(title, cls = "") {
 /*
  * items: [{ key, name, group, sub }]; current: selected key; onPick(key); onPreview(key) → Promise.
  * groups are shown as filter chips in the order they first appear.
+ * head: HTML shown above the search (for example what an added layer plays, and removing it),
+ * wired by onHead(body, close).
  */
-export function openPicker({ title, items, current, onPick, onPreview, note = "", searchLabel = "Search" }) {
+export function openPicker({ title, items, current, onPick, onPreview, note = "", searchLabel = "Search", head = "", onHead = null }) {
   const { body, close } = shell(title, "dlg-picker");
   const groups = [...new Set(items.map(i => i.group))];
   let group = "", query = "";
-  body.innerHTML = `<input type="search" class="dlg-search" placeholder="${esc(searchLabel)}" aria-label="${esc(searchLabel)}">
+  body.innerHTML = `${head ? `<div class="dlg-pickhead">${head}</div>` : ""}<input type="search" class="dlg-search" placeholder="${esc(searchLabel)}" aria-label="${esc(searchLabel)}">
     ${groups.length > 8
       ? `<span class="select"><select class="dlg-family" aria-label="Family"><option value="">All families</option>${groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}</select></span>`
       : `<div class="chips" role="group" aria-label="Families"><button type="button" class="chip" aria-pressed="true" data-g="">All</button>${groups.map(g => `<button type="button" class="chip" aria-pressed="false" data-g="${esc(g)}">${esc(g)}</button>`).join("")}</div>`}
     <ul class="dlg-list" role="listbox" aria-label="${esc(title)}"></ul>
     <p class="snote dlg-note" role="status">${esc(note)}</p>`;
   const list = body.querySelector(".dlg-list"), search = body.querySelector(".dlg-search"), status = body.querySelector(".dlg-note");
+  if (head && onHead) onHead(body, close);
   const render = () => {
     const q = query.trim().toLowerCase();
     const shown = items.filter(i => (!group || i.group === group) && (!q || (i.name + " " + i.group).toLowerCase().includes(q)));

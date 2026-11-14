@@ -7,6 +7,7 @@ import { hashBytes } from "../core/util.js";
 import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
+import { noteTracks } from "../export/labels.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
@@ -349,41 +350,18 @@ function customize() {
   if (P.orch !== "custom") { P.layers = ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, role: L.role, preset: L.preset })); P.orch = "custom"; }
 }
 function nextLayerId() { const used = new Set([...(P.layers || []).map(L => L.id)]); let i = 1; while (used.has("x" + i)) i++; return "x" + i; }
-// the five main tracks (Advanced shows them above the extra layers, each with its instrument)
-const MAIN_DESC = { lead: "the gaze path, from the height of each place", harm: "the chords, on the style's grid", bass: "the chord roots and the style's bass line", pad: "the background, held under everything", perc: "the style's drum patterns, driven by the edges" };
+// The orchestration is chosen here; each track's instrument on its lane under the picture (▾).
 function renderOrch() {
   if (ORCH_SEG) ORCH_SEG.set(P.orch || "small");
-  const host = $("#orchList"); if (!host || !SCORE) return;
+  const host = $("#orchNote"); if (!host || !SCORE) return;
   const xs = SCORE.extra || [];
-  const kitLabel = () => { const k = P.kit && P.kit !== "style" ? P.kit : null; return k ? (kitCatalog()[k] || {}).name || k : "Style kit: " + ((KITS[STYLE_KIT[P.style]] || KITS.synth).name); };
-  const main = LAYERS.map(l => `<li class="adv-only main" data-main="${l}" style="--dot:${css("--lane-" + l) || "#888"}"><span class="odot" aria-hidden="true"></span>
-      <span class="oname"><b>${esc(LAYER_NAME[l])}</b><small>${esc(MAIN_DESC[l])}</small></span>
-      <button type="button" class="choose ochoose" data-act="${l === "perc" ? "kit" : "minst"}" aria-haspopup="dialog" title="${l === "perc" ? "Change drum kit" : "Change instrument"}"><span>${esc(l === "perc" ? kitLabel() : (SCORE.inst[l] || {}).name || "")}</span></button><span aria-hidden="true"></span></li>`).join("");
-  const roleSel = L => `<span class="select select-sm adv-only"><select data-act="role" aria-label="What the ${esc(L.name)} plays">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}"${k === L.role ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></span>`;
-  host.innerHTML = main + (xs.length ? xs.map(L => `<li data-id="${L.id}" style="--dot:${extraColor(L)}"><span class="odot" aria-hidden="true"></span>
-      <span class="oname"><b class="simple-only">${esc(ROLES[L.role].name)}</b>${roleSel(L)}<small>${esc(ROLES[L.role].desc)}</small></span>
-      <button type="button" class="choose ochoose" data-act="inst" aria-haspopup="dialog" title="Change instrument"><span>${esc(L.name)}</span></button>
-      <button type="button" class="icon-btn" data-act="remove" aria-label="Remove ${esc(ROLES[L.role].name)}" title="Remove"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></li>`).join("")
-    : `<li class="empty">Five layers: melody, harmony, bass, pad and rhythm. Medium and Full add layers chosen from the image; Add layer picks one yourself.</li>`);
+  host.textContent = (xs.length ? `Five tracks and ${xs.length} added: ${xs.map(L => ROLES[L.role].name.toLowerCase()).join(", ")}.` : "Five tracks: melody, harmony, bass, pad and rhythm. Medium and Full add tracks chosen from the image; Add layer picks one yourself.")
+    + " Choose each track's instrument with ▾ on its lane under the picture.";
 }
 function initOrch() {
   ORCH_SEG = makeSeg($("#orchSeg"), Object.entries(ORCHESTRATION), P.orch || "small", v => {
     if (v === "custom") customize(); else P.orch = v;
     invalidate(LV.MUSIC);
-  });
-  $("#orchList").addEventListener("change", e => {
-    if (e.target.dataset.act !== "role") return;
-    const id = e.target.closest("li[data-id]").dataset.id; customize();
-    const C = P.layers.find(x => x.id === id); if (C) C.role = e.target.value; invalidate(LV.MUSIC);
-  });
-  $("#orchList").addEventListener("click", e => {
-    const mb = e.target.closest("li[data-main] [data-act]");
-    if (mb && SOUND) { const l = mb.closest("li").dataset.main; if (mb.dataset.act === "kit") SOUND.pickKit(); else SOUND.pickInstrument(l); return; }
-    if (e.target.closest("select")) return;
-    const li = e.target.closest("li[data-id]"), b = e.target.closest("[data-act]"); if (!li || !b) return;
-    const id = li.dataset.id;
-    if (b.dataset.act === "remove") { customize(); P.layers = P.layers.filter(L => L.id !== id); invalidate(LV.MUSIC); return; }
-    pickLayerInstrument(id);
   });
   // Add layer: the style's band first (each instrument with the role it plays), then every other
   // instrument (its role guessed from its name, changeable afterwards in the list)
@@ -409,6 +387,11 @@ function pickLayerInstrument(id) {
   openPicker({
     title: `${ROLES[L.role].name} instrument`, items, current: L.preset || "", searchLabel: "Search instruments",
     note: "Sampled instruments download when first used.",
+    head: `<label class="flabel" for="plRole">What it plays</label><div class="pl-row"><span class="select select-sm"><select id="plRole">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}"${k === L.role ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select></span><button type="button" class="btn btn-danger" id="plRemove">Remove this layer</button></div><p class="snote" id="plRoleNote">${esc(ROLES[L.role].desc)}</p>`,
+    onHead: (body, close) => {
+      body.querySelector("#plRole").addEventListener("change", e => { customize(); const C = P.layers.find(x => x.id === id); if (C) C.role = e.target.value; body.querySelector("#plRoleNote").textContent = ROLES[e.target.value].desc; invalidate(LV.MUSIC); });
+      body.querySelector("#plRemove").addEventListener("click", () => { customize(); P.layers = P.layers.filter(x => x.id !== id); close(); invalidate(LV.MUSIC); });
+    },
     onPick: key => { customize(); const C = P.layers.find(x => x.id === id); if (C) C.preset = key; invalidate(LV.MUSIC); },
     onPreview: key => preview(ensureCtx(), "harm", LIBRARY[key])
   });
@@ -1548,7 +1531,7 @@ function renderLanes() {
     host.querySelectorAll(".lane").forEach(e => e.remove());
     host.insertAdjacentHTML("beforeend", LANE_KEYS.map(l => `<div class="lane" data-layer="${l}" style="--dot:${laneColor(l)}">
       <span class="lname"><span class="lt">${esc(layerName(l))}</span><em></em></span>
-      <span class="ms"><button type="button" data-act="mute" aria-pressed="false" aria-label="Mute ${esc(layerName(l))}" title="Mute">M</button><button type="button" data-act="solo" aria-pressed="false" aria-label="Solo ${esc(layerName(l))}" title="Solo">S</button>${l === "perc" ? `<button type="button" data-act="pieces" aria-haspopup="dialog" aria-label="Drum pieces: volume and sound of each" title="Drum pieces: volume and sound of each">▾</button>` : ""}</span>
+      <span class="ms"><button type="button" data-act="mute" aria-pressed="false" aria-label="Mute ${esc(layerName(l))}" title="Mute">M</button><button type="button" data-act="solo" aria-pressed="false" aria-label="Solo ${esc(layerName(l))}" title="Solo">S</button>${l === "perc" ? `<button type="button" data-act="pieces" aria-haspopup="dialog" aria-label="Drum kit and pieces" title="Drum kit and pieces">▾</button>` : `<button type="button" data-act="inst" aria-haspopup="dialog" aria-label="${esc(layerName(l))} instrument" title="Instrument">▾</button>`}</span>
       <input type="range" min="0" max="1.5" step="0.01" value="${P.mix[l] ? P.mix[l].vol : 1}" aria-label="${esc(layerName(l))} volume" style="--p:${(((P.mix[l] ? P.mix[l].vol : 1) / 1.5) * 100).toFixed(1)}%"></div>`).join(""));
     host.dataset.keys = sig;
   }
@@ -1558,6 +1541,7 @@ function renderLanes() {
       const b = e.target.closest(".ms button"); if (!b) return;
       const l = b.closest(".lane").dataset.layer, k = b.dataset.act;
       if (k === "pieces") { openDrumPieces(); return; }
+      if (k === "inst") { if (SOUND) SOUND.pickInstrument(l); return; }
       P.mix[l][k] = !P.mix[l][k]; applyMixLive(); renderLanes(); drawTimeline();
     });
     host.addEventListener("input", e => {
@@ -2422,7 +2406,7 @@ function videoCaption(sc) {
     point: i => { const F = sc.points[i]; return `Point ${i + 1} · ${SECTION_NAME[F.section] || "Development"} · chord ${romanOf(F.root, sc.modeIv)}`; }
   };
 }
-function refreshLabels() { if (EXPORT && SCORE) EXPORT.renderLabels(SCORE.points.length); }
+function refreshLabels() { if (EXPORT && SCORE) EXPORT.renderLabels(SCORE.points.length, noteTracks(SCORE, Object.fromEntries(laneKeys().map(l => [l, layerName(l) + (extraOf(l) ? ": " + extraOf(l).name : "")])))); }
 // the sound analysis for the preview: from the notes at once, from the rendered audio once the
 // piece has been rendered in the background (only when the look reacts to the sound)
 let AN = { key: null, an: null, job: false };

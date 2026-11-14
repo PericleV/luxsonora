@@ -17,7 +17,7 @@ import { pickAudioCodec, encodeAudioData, resampleChannels, tick } from "./audio
 import { pathGeometry, drawPath } from "./paths.js";
 import { FONTS, QUALITY, safeArea, drawSafeGuides, drawVignette, drawGrain, fadeAt } from "./look.js";
 import { analyzeNotes, valueAt, bandsAt, BANDS } from "./reactive.js";
-import { labelFor, placeLabels, placeNoteTimes, tickerAt } from "./labels.js";
+import { labelFor, placeEvents, notesLabel, measuresLabel, tickerAt, DEFAULT_MEASURES } from "./labels.js";
 
 export const SHAPES = { image: "Like the image", wide: "16:9", square: "1:1", portrait: "4:5", vertical: "9:16" };
 export const VIDEO_THEMES = {
@@ -72,7 +72,7 @@ export function defaultVideo() {
     theme: "gold", pathColor: VIDEO_THEMES.gold.path, pointColor: VIDEO_THEMES.gold.point,
     path: "draw", lineShape: "straight", line: "glow", lineWidth: 3, pathDone: 1, pathAhead: 0.25,
     points: "visited", placeDone: 0.7, placeAhead: 0.35, numbers: true, passages: true, eye: "dot",
-    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0", labelDetail: true, labelLive: true,
+    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0", labelDetail: true, labelLive: true, labelTrack: "lead", labelMeasures: { ...DEFAULT_MEASURES }, labelMean: false,
     barThick: 1, barGain: 1, barGap: 1, barRound: false,
     rippleFill: "solid", rippleColor2: "#6D5DF0",
     placeNow: "same", placeNowOp: 1, placeFill: 1, placeLineW: 1,
@@ -288,7 +288,7 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
   const spb = 60 / sc.bpm, tl = videoTimeline(sc), env = soundEnvelope(sc);
   const geos = {};
   return {
-    sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || placeLabels(sc), noteTimes: placeNoteTimes(sc, spb),
+    sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption,
     an: extra.an || analyzeNotes(sc, env), passages: sc.notes.filter(n => n.passage && n.layer === "lead"),
     maps: extra.maps || null, mapOf: sc.points.map(F => autoMap(F)), onsets: onsetsOf(sc, spb),
     geo(shape, tension = 0.5) { const k = shape + "|" + tension; return geos[k] || (geos[k] = pathGeometry(tl, shape === "curved", 18, tension)); }
@@ -318,6 +318,23 @@ function patchCanvas(D) {
   return PATCH_CV;
 }
 function ring(g, x, y, r, col, a, w) { if (a <= 0 || r <= 0) return; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.strokeStyle = hexA(col, a); g.lineWidth = w; g.stroke(); }
+// The events of the track a Notes label follows, by place (the melody when that track plays
+// nothing, for example a layer since removed); computed once per track.
+function eventsOf(S, o) {
+  const tr = (o && o.labelTrack) || "lead"; S._ev = S._ev || {};
+  if (!S._ev[tr]) { const e = placeEvents(S.sc, S.spb, tr); S._ev[tr] = tr === "lead" || e.some(l => l.length) ? e : eventsOf(S, { labelTrack: "lead" }); }
+  return S._ev[tr];
+}
+// What the label of place j says: the user's text, the notes of the chosen track (and the
+// place's chord), or the ticked measures of the picture there.
+function placeLabel(S, o, j) {
+  const mode = o.labels === "auto" ? "notes" : o.labels, F = S.sc.points[j];
+  if (mode === "custom") return labelFor("custom", j, null, o.labelText);
+  if (!F) return "";
+  if (mode === "notes") { const t = notesLabel(eventsOf(S, o)[j], F, S.sc.modeIv); return o.labelDetail === false ? t.split("\n")[0] : t; }
+  if (mode === "timbre") return measuresLabel(F, S.sc.stats, o.labelMeasures || DEFAULT_MEASURES, !!o.labelMean);
+  return "";
+}
 function pill(g, x, y, w, h, rad = h / 2) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, rad); else g.rect(x, y, w, h); }
 // The cover: the first frame of the video (what messaging apps show as its preview), held for a
 // moment and then blended into the video, instead of fading in from black. A frame of the video
@@ -639,7 +656,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       }
       // label: while the eye is there (fading in 0.35 s, out 0.5 s), or kept at the visited opacity
       if (labelsOn && reached.length) {
-        const j = cur ? gz.i : reached[reached.length - 1], text = labelFor(o.labels, j, S.auto, o.labelText, o.labelDetail !== false);
+        const j = cur ? gz.i : reached[reached.length - 1], text = placeLabel(S, o, j);
         if (text) {
           // it comes in when the eye arrives and leaves when the eye does, or after its own time
           // (Stays for) if that comes first; kept labels settle at the visited opacity instead
@@ -648,9 +665,9 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
           const tin = clamp(age / inS), pin = kin === "none" ? 1 : ease(tin), pout = gone > 0 ? (kout === "none" ? 1 : ease(gone / outS)) : 0, rest = o.labelKeep ? doneOp : 0;
           const la = (kin === "type" ? Math.min(1, tin * 4) : pin) * lerp(1, rest, pout);
           // the notes can follow the melody: the last ones played, the newest sliding in
-          const tick = o.labels === "notes" && o.labelLive !== false ? tickerAt(S.noteTimes && S.noteTimes[j], sec) : null;
+          const notes = o.labels === "notes" || o.labels === "auto", tick = notes && o.labelLive !== false ? tickerAt(eventsOf(S, o)[j], sec) : null;
           if (la > 0.01) labelQueue.push({
-            text, tick, x, y, r: R(p), a: la * (1 - endA), key: js[0] + 1, n: labelQueue.length,
+            text, tick, j, list: o.labels === "timbre", x, y, r: R(p), a: la * (1 - endA), key: js[0] + 1, n: labelQueue.length,
             dy: (kin === "rise" ? (1 - pin) * 10 : 0) + (kout === "sink" && !rest ? pout * 12 : 0),
             scale: (kin === "pop" ? 0.6 + 0.4 * (1 + 2.2 * (tin - 1) ** 3 + 1.2 * (tin - 1) ** 2) : 1) * (kout === "shrink" && !rest ? 1 - 0.4 * pout : 1),
             chars: kin === "type" ? tin : 1
@@ -697,19 +714,27 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     const lpal = [o.labelBg || "#080a0e", o.labelBg2 || o.pathColor, o.pointColor, o.pathColor];
     S._labelHits = [];
     // a label of several lines: the first as before, its details under it, smaller
-    const ls = u * lsz, fHead = `600 ${22 * ls}px ${Fnt.css}`, fDet = `500 ${15 * ls}px ${Fnt.css}`;
+    const ls = u * lsz, fHead = `600 ${22 * ls}px ${Fnt.css}`, fDet = `500 ${15 * ls}px ${Fnt.css}`, fList = `500 ${17 * ls}px ${Fnt.css}`;
     g.save(); g.font = fHead; g.textBaseline = "middle";
     for (const q of labelQueue) {
       const lines = q.text.split("\n").map((t, k) => (k === 0 && Fnt.caps ? t.toUpperCase() : t)), nl = lines.length;
+      // a list (the measures) has every line alike; otherwise the first is the label, the others its details
+      const fOf = k => (q.list ? fList : k ? fDet : fHead);
       // typed: the characters appear across the lines, in order
       let left = q.chars < 1 ? Math.max(1, Math.ceil(lines.reduce((a, t) => a + t.length, 0) * q.chars)) : Infinity;
       const shown = lines.map(t => { const s = t.slice(0, Math.max(0, left)); left -= t.length; return s; });
       // a following label: the notes in fixed slots as wide as the widest name, so it keeps its size
-      const tk = q.tick, slotW = tk ? g.measureText("G#4").width + 12 * ls : 0;
-      if (tk) shown[0] = "";
-      let wMax = tk ? tk.slots * slotW - 12 * ls : 0; lines.forEach((t, k) => { if (tk && !k) return; g.font = k ? fDet : fHead; wMax = Math.max(wMax, g.measureText(t).width); }); g.font = fHead;
-      const tw = wMax + 22 * ls, th = nl === 1 ? 36 * ls : (16 + 24 + 19 * (nl - 1)) * ls, gap = (o.labelLine ? 28 : 10) * u;
-      const lineY = k => (nl === 1 ? 1 * u : k === 0 ? -th / 2 + 20 * ls : -th / 2 + (8 + 24 + 19 * (k - 1) + 9.5) * ls);
+      // (a slot as wide as the widest note or chord this place plays)
+      const tk = q.tick;
+      let slotW = 0;
+      if (tk) {
+        const ck = `${o.labelTrack || "lead"}|${q.j}|${fHead}`; S._slotW = S._slotW || {};
+        if (S._slotW[ck] === undefined) { let w = g.measureText("G4").width; for (const e of eventsOf(S, o)[q.j] || []) w = Math.max(w, g.measureText(Fnt.caps ? e.name.toUpperCase() : e.name).width); S._slotW[ck] = w; }
+        slotW = S._slotW[ck] + 12 * ls; shown[0] = "";
+      }
+      let wMax = tk ? tk.slots * slotW - 12 * ls : 0; lines.forEach((t, k) => { if (tk && !k) return; g.font = fOf(k); wMax = Math.max(wMax, g.measureText(t).width); }); g.font = fHead;
+      const tw = wMax + 22 * ls, th = nl === 1 ? 36 * ls : q.list ? (14 + 22 * nl) * ls : (16 + 24 + 19 * (nl - 1)) * ls, gap = (o.labelLine ? 28 : 10) * u;
+      const lineY = k => (nl === 1 ? 1 * u : q.list ? -th / 2 + (18 + 22 * k) * ls : k === 0 ? -th / 2 + 20 * ls : -th / 2 + (8 + 24 + 19 * (k - 1) + 9.5) * ls);
       // where it sits: where it was dragged to (kept relative to its place), else above the place
       // (below it near the top), or on the side that was asked
       const off = o.labelOff && o.labelOff[q.key];
@@ -750,7 +775,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       g.lineWidth = 1.2 * u; g.strokeStyle = hexA(o.pointColor, 0.8); g.stroke();
       g.fillStyle = o.labelColor || "#fff"; g.textAlign = q.chars < 1 ? "left" : "center";
       const tx = q.chars < 1 ? -tw / 2 + 11 * ls : 0;
-      shown.forEach((t, k) => { if (!t) return; g.font = k ? fDet : fHead; g.globalAlpha = q.a * (k ? 0.82 : 1); g.fillText(t, tx, lineY(k)); });
+      shown.forEach((t, k) => { if (!t) return; g.font = fOf(k); g.globalAlpha = q.a * (k && !q.list ? 0.82 : 1); g.fillText(t, tx, lineY(k)); });
       if (tk) {
         // the row of notes: the newest in full, the older ones fainter; when the row is full a new
         // note pushes it left and the oldest fades out at the left edge

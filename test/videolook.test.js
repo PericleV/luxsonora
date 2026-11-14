@@ -1,7 +1,7 @@
 // Video look: path geometry, labels, grades, fades, looks, the sound analysis, GIF ranges.
 import { describe, it, expect } from "vitest";
 import { pathGeometry, LINE_STYLES } from "../src/export/paths.js";
-import { labelFor, notesLabel, timbreLabel, placeLabels, LABEL_MODES, placeNoteTimes, tickerAt } from "../src/export/labels.js";
+import { labelFor, notesLabel, measuresLabel, placeEvents, chordSymbol, eventName, noteTracks, chordLine, LABEL_MODES, MEASURES, tickerAt } from "../src/export/labels.js";
 import { gradePixel, GRADES, fadeAt, fadeAudio, LOOKS, LOOK_KEYS, pickLook, PLATFORMS, safeArea } from "../src/export/look.js";
 import { analyzeAudio, analyzeNotes, valueAt, BANDS } from "../src/export/reactive.js";
 import { defaultVideo, frameSize, gifRange, EYES, BOTTOMS, mixHex, COVER_OUTS } from "../src/export/video.js";
@@ -23,44 +23,51 @@ describe("path geometry", () => {
 });
 
 describe("labels", () => {
-  const F = { idx: 0, lead: [64, 67, 69], chord: [57, 60, 64], root: 5, tim: { m: { att: -0.6, leg: 0.05, bri: 0.3, res: 0, col: -0.02 }, src: { sharp: 0.67, smooth: 0.2, ent: 0.51, sat: 0.5, warm: 0.4 } } };
-  const stats = { mu: { sharp: 0.49, smooth: 0.7, ent: 0.31, sat: 0.7, warm: 0.35 } };
-  it("offer the notes and the timbre, no detected names", () => {
+  const F = { idx: 0, t0: 0, t1: 8, chord: [57, 60, 64, 67], root: 5, s: 0.8, reg: { edge: 0.25, L: 0.6 }, tim: { src: { sharp: 0.67, smooth: 0.2, ent: 0.51, sat: 0.5, warm: 0.4 } } };
+  const stats = { maxE: 0.5, mu: { sharp: 0.49, smooth: 0.7, ent: 0.31, sat: 0.7, warm: 0.35 } };
+  const ION = [0, 2, 4, 5, 7, 9, 11];
+  it("offer the notes and the measures, no detected names", () => {
     expect(Object.keys(LABEL_MODES)).toEqual(["off", "notes", "timbre", "custom"]);
   });
-  it("the notes: the melody as played, and the chord under it", () => {
-    const t = notesLabel(F, [0, 2, 4, 5, 7, 9, 11]).split("\n");
-    expect(t[0]).toBe("E4 G4 A4"); expect(t[1]).toMatch(/^chord vi: A C E$/);
-    expect(notesLabel({ ...F, lead: [] })).toBe("");
-    expect(notesLabel({ ...F, lead: Array(12).fill(60) }).split("\n")[0]).toBe("C4 C4 C4 C4 C4 C4 C4 C4 …");
+  it("name chords by their symbol", () => {
+    expect(chordSymbol([57, 60, 64])).toBe("Am"); expect(chordSymbol([55, 59, 62, 65, 69])).toBe("G9");
+    expect(chordSymbol([52, 55, 60])).toBe("C/E"); expect(chordSymbol([48, 55])).toBe("C⁵"); expect(chordSymbol([60])).toBe(null);
+    expect(chordSymbol([57, 60, 64, 67])).toBe("Am7");
+    expect(eventName([64])).toBe("E4"); expect(eventName([64, 76])).toBe("E4"); expect(eventName([60, 61, 62])).toBe("C·C♯·D");
+    expect(chordLine(F, ION)).toBe("chord vi · Am7");
   });
-  it("the timbre: the two strongest changes, then the measures behind them", () => {
-    const t = timbreLabel(F, stats).split("\n");
-    expect(t).toEqual(["Faster attack, brighter", "edge sharpness 0.67 · image mean 0.49", "entropy 0.51 · image mean 0.31"]);
-    expect(timbreLabel({ ...F, tim: { ...F.tim, m: { att: 0, leg: 0, bri: 0.05, res: 0, col: 0 } } }, stats)).toBe("Like the rest of the picture");
-    const all = placeLabels({ points: [F, F], stats, modeIv: [0, 2, 4, 5, 7, 9, 11] });
-    expect(all.notes.length).toBe(2); expect(all.timbre[1]).toBe(all.timbre[0]);
+  it("the notes of a chosen track: by place, notes struck together as one chord", () => {
+    const sc = { points: [{ t0: 0, t1: 4 }, { t0: 4, t1: 8 }], notes: [
+      { layer: "lead", t: 0, midi: 64 }, { layer: "lead", t: 0, midi: 76 }, { layer: "lead", t: 1, midi: 67 }, { layer: "lead", t: 5, midi: 69 },
+      { layer: "harm", t: 0, midi: 57 }, { layer: "harm", t: 0, midi: 60 }, { layer: "harm", t: 0, midi: 64 }, { layer: "harm", t: 4, midi: 53 }, { layer: "harm", t: 4, midi: 57 }, { layer: "harm", t: 4, midi: 60 },
+      { layer: "lead", t: -1, midi: 50, intro: true }, { layer: "perc", t: 0, midi: 36 }] };
+    const L = placeEvents(sc, 0.5, "lead");
+    expect(L.map(l => l.map(e => e.name))).toEqual([["E4", "G4"], ["A4"]]); expect(L[0][1].s).toBe(0.5);
+    expect(placeEvents(sc, 0.5, "harm").map(l => l.map(e => e.name))).toEqual([["Am"], ["F"]]);
+    expect(noteTracks(sc, { lead: "Melody" })).toEqual([["lead", "Melody"], ["harm", "harm"]]);
+    expect(notesLabel(L[0], F, ION)).toBe("E4 G4\nchord vi · Am7");
+    expect(notesLabel([], F, ION)).toBe("");
+    expect(notesLabel(Array(12).fill({ name: "C4" }), F).split("\n")[0]).toBe("C4 C4 C4 C4 C4 C4 C4 C4 …");
   });
-  it("the notes can follow the melody: the last six played, the newest sliding in", () => {
-    const notes = [60, 62, 64, 65, 67, 69, 71, 72].map((m, i) => ({ layer: "lead", t: i, midi: m, point: 0 }));
-    notes.push({ layer: "lead", t: 4, midi: 79, point: 0 }, { layer: "lead", t: 0, midi: 50, point: 0, intro: true }, { layer: "harm", t: 1, midi: 40, point: 0 });
-    const L = placeNoteTimes({ points: [{}, {}], notes }, 0.5);
-    expect(L[0].map(x => x.name)).toEqual(["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]); expect(L[1]).toEqual([]);
-    expect(L[0][4].s).toBe(2);
-    expect(tickerAt(L[0], -1)).toEqual({ names: ["C4"], slots: 6, u: 1, full: false });
-    const a = tickerAt(L[0], 1.07); expect(a.names).toEqual(["C4", "D4", "E4"]); expect(a.full).toBe(false); expect(a.u).toBeCloseTo(0.5, 6);
-    const b = tickerAt(L[0], 3.5); expect(b.names).toEqual(["D4", "E4", "F4", "G4", "A4", "B4", "C5"]); expect(b.full).toBe(true);
-    const c = tickerAt(L[0], 3.0); expect(c.names).toEqual(["C4", "D4", "E4", "F4", "G4", "A4", "B4"]); expect(c.full).toBe(true); expect(c.u).toBe(0);
+  it("the notes can follow the music: the last six played, the newest sliding in", () => {
+    const L = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"].map((name, i) => ({ s: i * 0.5, name }));
+    expect(tickerAt(L, -1)).toEqual({ names: ["C4"], slots: 6, u: 1, full: false });
+    const a = tickerAt(L, 1.07); expect(a.names).toEqual(["C4", "D4", "E4"]); expect(a.full).toBe(false); expect(a.u).toBeCloseTo(0.5, 6);
+    const b = tickerAt(L, 3.5); expect(b.names).toEqual(["D4", "E4", "F4", "G4", "A4", "B4", "C5"]); expect(b.full).toBe(true);
+    const c = tickerAt(L, 3.0); expect(c.names).toEqual(["C4", "D4", "E4", "F4", "G4", "A4", "B4"]); expect(c.full).toBe(true); expect(c.u).toBe(0);
     expect(tickerAt([], 1)).toBe(null);
   });
-  it("the user's own text by point number (empty shows nothing); details can be left out", () => {
-    const auto = { notes: ["E4 G4\nchord I: C E G"], timbre: ["Brighter\nentropy 0.51 · image mean 0.31"] };
-    expect(labelFor("custom", 0, auto, { 1: " Turnul " })).toBe("Turnul");
-    expect(labelFor("custom", 1, auto, { 1: "x" })).toBe("");
-    expect(labelFor("notes", 0, auto, {})).toBe("E4 G4\nchord I: C E G");
-    expect(labelFor("timbre", 0, auto, {}, false)).toBe("Brighter");
-    expect(labelFor("auto", 0, auto, {}, false)).toBe("E4 G4");
-    expect(labelFor("off", 0, auto, { 1: "x" })).toBe("");
+  it("the measures: the ticked ones, one per line, with the mean if asked", () => {
+    expect(measuresLabel(F, stats)).toBe("Edges 0.50\nEntropy 0.51\nSaturation 0.50");
+    expect(measuresLabel(F, stats, { edges: true, warmth: true }, true)).toBe("Edges 0.50 · mean 0.30\nWarmth 0.40 · mean 0.35");
+    expect(measuresLabel(F, stats, { brightness: true, saliency: true }, true)).toBe("Brightness 0.60\nSaliency 0.80");
+    expect(measuresLabel(F, stats, {})).toBe("");
+    expect(Object.keys(MEASURES).length).toBe(8);
+  });
+  it("the user's own text by point number (empty shows nothing)", () => {
+    expect(labelFor("custom", 0, null, { 1: " Turnul " })).toBe("Turnul");
+    expect(labelFor("custom", 1, null, { 1: "x" })).toBe("");
+    expect(labelFor("off", 0, null, { 1: "x" })).toBe("");
   });
 });
 

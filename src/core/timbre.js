@@ -19,6 +19,12 @@ import { CAT } from "./theory.js";
 export const DIMS = ["att", "leg", "bri", "res", "col"];
 export const DIM_NAME = { att: "Attack", leg: "Legato", bri: "Brightness", res: "Resonance", col: "Colour" };
 export const DIM_SOURCE = { att: "edge sharpness", leg: "smoothness", bri: "entropy", res: "saturation", col: "warmth" };
+// the feature each dimension reads (zoneFeatures), and what a negative or positive modulation does
+export const DIM_KEY = { att: "sharp", leg: "smooth", bri: "ent", res: "sat", col: "warm" };
+export const MOD_WORDS = {
+  att: ["faster attack", "slower attack"], leg: ["more detached", "more legato"], bri: ["darker", "brighter"],
+  res: ["drier", "more resonant"], col: ["cooler", "warmer"]
+};
 export const DEPTH = { att: 1.5, leg: 1.0, bri: 1.5, res: 1.0, col: 0.35 };
 // Depth per layer and dimension (the bass only receives brightness).
 export const LAYER_DEPTH = {

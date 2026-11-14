@@ -1,10 +1,10 @@
 // Video look: path geometry, labels, grades, fades, looks, the sound analysis, GIF ranges.
 import { describe, it, expect } from "vitest";
 import { pathGeometry, LINE_STYLES } from "../src/export/paths.js";
-import { colourLabel, objectAt, labelFor, autoLabels, hueName } from "../src/export/labels.js";
+import { labelFor, notesLabel, timbreLabel, placeLabels, LABEL_MODES } from "../src/export/labels.js";
 import { gradePixel, GRADES, fadeAt, fadeAudio, LOOKS, LOOK_KEYS, pickLook, PLATFORMS, safeArea } from "../src/export/look.js";
 import { analyzeAudio, analyzeNotes, valueAt, BANDS } from "../src/export/reactive.js";
-import { defaultVideo, frameSize, gifRange, EYES, BOTTOMS, mixHex } from "../src/export/video.js";
+import { defaultVideo, frameSize, gifRange, EYES, BOTTOMS, mixHex, COVER_OUTS } from "../src/export/video.js";
 
 const tl = [{ x: 0.1, y: 0.2 }, { x: 0.5, y: 0.8 }, { x: 0.9, y: 0.3 }, { x: 0.4, y: 0.1 }];
 
@@ -23,26 +23,32 @@ describe("path geometry", () => {
 });
 
 describe("labels", () => {
-  const objs = [{ name: "boat", x: 0.4, y: 0.5, w: 0.2, h: 0.2 }, { name: "person", x: 0.45, y: 0.55, w: 0.05, h: 0.1 }, { name: "dog", x: 0.8, y: 0.8, w: 0.05, h: 0.05 }];
-  it("name the smallest object under a place, else a near one, else nothing", () => {
-    expect(objectAt(objs, 0.47, 0.6).name).toBe("person");
-    expect(objectAt(objs, 0.42, 0.52).name).toBe("boat");
-    expect(objectAt(objs, 0.86, 0.84).name).toBe("dog");
-    expect(objectAt(objs, 0.05, 0.05)).toBe(null);
+  const F = { idx: 0, lead: [64, 67, 69], chord: [57, 60, 64], root: 5, tim: { m: { att: -0.6, leg: 0.05, bri: 0.3, res: 0, col: -0.02 }, src: { sharp: 0.67, smooth: 0.2, ent: 0.51, sat: 0.5, warm: 0.4 } } };
+  const stats = { mu: { sharp: 0.49, smooth: 0.7, ent: 0.31, sat: 0.7, warm: 0.35 } };
+  it("offer the notes and the timbre, no detected names", () => {
+    expect(Object.keys(LABEL_MODES)).toEqual(["off", "notes", "timbre", "custom"]);
   });
-  it("describe colour and light when there is no object", () => {
-    expect(hueName(30)).toBe("orange"); expect(hueName(220)).toBe("blue"); expect(hueName(350)).toBe("red");
-    expect(colourLabel({ L: 0.85, sat: 0.6, hue: 40, edge: 0.2 })).toBe("bright warm light");
-    expect(colourLabel({ L: 0.15, sat: 0.5, hue: 220, edge: 0.2 })).toBe("deep blue shadow");
-    expect(colourLabel({ L: 0.5, sat: 0.05, hue: 0, edge: 0.2 })).toBe("grey area");
-    const sc = { points: [{ x: 0.47, y: 0.6, idx: 0, reg: { L: 0.5, sat: 0.4, hue: 100 } }, { x: 0.1, y: 0.1, idx: 1, reg: { L: 0.5, sat: 0.4, hue: 100, edge: 0.7 } }] };
-    expect(autoLabels(sc, objs)).toEqual(["Person", "Green detail"]);
+  it("the notes: the melody as played, and the chord under it", () => {
+    const t = notesLabel(F, [0, 2, 4, 5, 7, 9, 11]).split("\n");
+    expect(t[0]).toBe("E4 G4 A4"); expect(t[1]).toMatch(/^chord vi: A C E$/);
+    expect(notesLabel({ ...F, lead: [] })).toBe("");
+    expect(notesLabel({ ...F, lead: Array(12).fill(60) }).split("\n")[0]).toBe("C4 C4 C4 C4 C4 C4 C4 C4 …");
   });
-  it("use the user's own text by point number; empty shows nothing", () => {
-    expect(labelFor("custom", 0, ["Auto"], { 1: " Turnul " })).toBe("Turnul");
-    expect(labelFor("custom", 1, ["Auto", "B"], { 1: "x" })).toBe("");
-    expect(labelFor("auto", 1, ["Auto", "B"], {})).toBe("B");
-    expect(labelFor("off", 0, ["A"], { 1: "x" })).toBe("");
+  it("the timbre: the two strongest changes, then the measures behind them", () => {
+    const t = timbreLabel(F, stats).split("\n");
+    expect(t).toEqual(["Faster attack, brighter", "edge sharpness 0.67 · image mean 0.49", "entropy 0.51 · image mean 0.31"]);
+    expect(timbreLabel({ ...F, tim: { ...F.tim, m: { att: 0, leg: 0, bri: 0.05, res: 0, col: 0 } } }, stats)).toBe("Like the rest of the picture");
+    const all = placeLabels({ points: [F, F], stats, modeIv: [0, 2, 4, 5, 7, 9, 11] });
+    expect(all.notes.length).toBe(2); expect(all.timbre[1]).toBe(all.timbre[0]);
+  });
+  it("the user's own text by point number (empty shows nothing); details can be left out", () => {
+    const auto = { notes: ["E4 G4\nchord I: C E G"], timbre: ["Brighter\nentropy 0.51 · image mean 0.31"] };
+    expect(labelFor("custom", 0, auto, { 1: " Turnul " })).toBe("Turnul");
+    expect(labelFor("custom", 1, auto, { 1: "x" })).toBe("");
+    expect(labelFor("notes", 0, auto, {})).toBe("E4 G4\nchord I: C E G");
+    expect(labelFor("timbre", 0, auto, {}, false)).toBe("Brighter");
+    expect(labelFor("auto", 0, auto, {}, false)).toBe("E4 G4");
+    expect(labelFor("off", 0, auto, { 1: "x" })).toBe("");
   });
 });
 
@@ -70,12 +76,21 @@ describe("look", () => {
     for (const p of Object.values(PLATFORMS)) if (p.shape) { const f = frameSize(p.shape, p.size, 3000, 2000); expect(f.W % 2 + f.H % 2).toBe(0); }
     expect(frameSize("portrait", 1080, 10, 10)).toEqual({ W: 1080, H: 1350 });
     expect(frameSize("wide", 2160, 10, 10)).toEqual({ W: 3840, H: 2160 });
-    // the image's own size: even sides, at most 3840 px and 8.8 MP, at least 240 px
+    // the image's own size: even sides, at most 3840 px long, 2160 px on the short side (what a
+    // graphics card encodes) and 8.8 MP, at least 240 px
     expect(frameSize("image", "original", 1601, 1067)).toEqual({ W: 1602, H: 1068 });
-    const big = frameSize("image", "original", 6000, 4000); expect(big.W).toBeLessThanOrEqual(3840); expect(big.W * big.H).toBeLessThanOrEqual(8.8e6 + 4000); expect(big.W / big.H).toBeCloseTo(1.5, 2);
+    const big = frameSize("image", "original", 6000, 4000); expect(big.W).toBeLessThanOrEqual(3840); expect(big.W * big.H).toBeLessThanOrEqual(8.8e6 + 4000); expect(big.W / big.H).toBeCloseTo(1.5, 2); expect(big.H).toBeLessThanOrEqual(2160);
+    expect(frameSize("image", "original", 2960, 2974)).toEqual({ W: 2160, H: 2170 });
+    expect(frameSize("image", "original", 4000, 4000)).toEqual({ W: 2160, H: 2160 });
     expect(frameSize("image", "original", 100, 50)).toEqual({ W: 480, H: 240 });
     expect(frameSize("square", "original", 3000, 2000)).toEqual({ W: 2000, H: 2000 });
     const s = safeArea("vertical"); expect(s.top + s.bottom).toBeLessThan(0.5);
+  });
+  it("the cover leaves by a transition that belongs to the look", () => {
+    const d = defaultVideo();
+    expect(Object.keys(COVER_OUTS)).toEqual(["fade", "zoom", "iris", "cut"]);
+    expect(d.coverOut).toBe("fade"); expect(d.coverFade).toBeGreaterThan(0.5);
+    expect(LOOK_KEYS).toContain("coverOut"); expect(LOOK_KEYS).toContain("coverFade");
   });
 });
 

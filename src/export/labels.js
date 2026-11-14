@@ -1,47 +1,52 @@
-// Labels on the places in the video: what the eye is looking at.
+// Labels on the places in the video: what the music does there.
 //
-// Detected: the name of the object under the point (COCO-SSD objects, the smallest
-// box that contains it, else the nearest box centre within 12% of the image); without one, a
-// short description of the region's colour and light ("warm highlight", "deep blue shadow").
-// Custom: the user's own text for each point (an empty text shows no label).
-export const LABEL_MODES = { off: "Off", auto: "Detected", custom: "My own" };
+// Notes: the notes the melody plays at the place, and under them its chord.
+// Timbre: how the place changes the sound against the rest of the picture (the two strongest
+// changes, as the Focus point tab names them), and under them the measures behind them: the
+// place's value and the picture's mean.
+// My own: the user's own text for each point (an empty text shows no label).
+// A label may have several lines: the first is the label, the others its details, drawn smaller.
+import { midiName } from "../core/theory.js";
+import { romanOf } from "../core/compose.js";
+import { DIMS, DIM_SOURCE, DIM_KEY, MOD_WORDS } from "../core/timbre.js";
 
-const HUES = [[15, "red"], [40, "orange"], [65, "golden"], [160, "green"], [195, "teal"], [255, "blue"], [290, "violet"], [335, "pink"], [360, "red"]];
-export function hueName(h) { for (const [lim, name] of HUES) if (h < lim) return name; return "red"; }
+export const LABEL_MODES = { off: "Off", notes: "Notes", timbre: "Timbre", custom: "My own" };
 
-// reg: the region's features ({ L, sat, hue, edge }) in [0, 1] (hue in degrees)
-export function colourLabel(reg) {
-  if (!reg) return "";
-  const L = reg.L ?? 0.5, sat = reg.sat ?? 0, light = L > 0.72 ? "bright" : L < 0.22 ? "deep" : L < 0.4 ? "dark" : "";
-  const what = L > 0.7 ? "highlight" : L < 0.3 ? "shadow" : (reg.edge ?? 0) > 0.5 ? "detail" : "tone";
-  if (sat < 0.12) return [L > 0.6 ? "pale" : L < 0.3 ? "dark" : "grey", what === "tone" ? "area" : what].join(" ");
-  const h = hueName(reg.hue ?? 0), warm = ["red", "orange", "golden", "pink"].includes(h);
-  return [light, light === "bright" && warm ? "warm" : h, what].filter(Boolean).join(" ").replace("warm highlight", "warm light");
+const cap = s => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const MAX_NOTES = 8;
+
+// The notes of a place: its melody as played (at most eight, then "…"), and its chord.
+export function notesLabel(F, modeIv) {
+  const ns = (F.lead || []).map(midiName);
+  if (!ns.length) return "";
+  const line = ns.length > MAX_NOTES ? ns.slice(0, MAX_NOTES).join(" ") + " …" : ns.join(" ");
+  const chord = F.chord && F.chord.length ? `chord ${modeIv && F.root !== undefined ? romanOf(F.root, modeIv) + ": " : ""}${F.chord.map(m => midiName(m).replace(/-?\d+$/, "")).join(" ")}` : "";
+  return chord ? line + "\n" + chord : line;
 }
 
-// the object at point (x, y) among [{ name, x, y, w, h }]
-export function objectAt(objects, x, y) {
-  if (!objects || !objects.length) return null;
-  let best = null, area = Infinity;
-  for (const o of objects) if (x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h && o.w * o.h < area) { best = o; area = o.w * o.h; }
-  if (best) return best;
-  let near = null, d = 0.12;
-  for (const o of objects) { const e = Math.hypot(o.x + o.w / 2 - x, o.y + o.h / 2 - y); if (e < d) { near = o; d = e; } }
-  return near;
+// The timbre of a place: its two strongest changes, and the measures behind them.
+export function timbreLabel(F, stats) {
+  const m = F.tim && F.tim.m; if (!m) return "";
+  const top = DIMS.map(d => [d, m[d] || 0]).filter(([, v]) => Math.abs(v) >= 0.1).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2);
+  if (!top.length) return "Like the rest of the picture";
+  const head = cap(top.map(([d, v]) => MOD_WORDS[d][v < 0 ? 0 : 1]).join(", "));
+  const src = F.tim.src || {}, mu = (stats && stats.mu) || {};
+  const f = x => (typeof x === "number" ? x.toFixed(2) : "?");
+  return [head, ...top.map(([d]) => `${DIM_SOURCE[d]} ${f(src[DIM_KEY[d]])} · image mean ${f(mu[DIM_KEY[d]])}`)].join("\n");
 }
 
-// The automatic label of each point of a score (array, by point index).
-export function autoLabels(sc, objects) {
-  return sc.points.map(F => {
-    const o = objectAt(objects, F.x, F.y);
-    if (o) return o.name.charAt(0).toUpperCase() + o.name.slice(1);
-    const c = colourLabel(F.reg);
-    return c ? c.charAt(0).toUpperCase() + c.slice(1) : `Point ${F.idx + 1}`;
-  });
+// Every place's labels of each kind: { notes: [...], timbre: [...] }, by point index.
+export function placeLabels(sc) {
+  const pts = (sc && sc.points) || [];
+  return { notes: pts.map(F => notesLabel(F, sc.modeIv)), timbre: pts.map(F => timbreLabel(F, sc.stats)) };
 }
-// The label shown for point i (0-based): custom text by point number, or the automatic one.
-export function labelFor(mode, i, auto, custom) {
+
+// The label shown for point i (0-based): the user's text by point number, or the place's notes or
+// timbre; `detail: false` keeps only the first line. ("auto", the detected names of old
+// projects, shows the notes.)
+export function labelFor(mode, i, auto, custom, detail = true) {
   if (mode === "custom") return ((custom && custom[String(i + 1)]) || "").trim();
-  if (mode === "auto") return (auto && auto[i]) || "";
-  return "";
+  if (mode === "auto") mode = "notes";
+  const t = (auto && auto[mode] && auto[mode][i]) || "";
+  return detail ? t : t.split("\n")[0];
 }

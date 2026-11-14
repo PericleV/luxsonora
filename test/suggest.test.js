@@ -19,11 +19,28 @@ describe("style suggestion", () => {
     for (const s of Object.keys(STYLES)) expect(SUGGEST_PROFILES[s], s).toBeTruthy();
     for (const s of Object.keys(SUGGEST_PROFILES)) expect(STYLES[s], s).toBeTruthy();
   });
-  it("gives three distinct styles with a score and a reason", () => {
-    const r = suggestStyles(analyze(synthImage(200, 133, 1)));
-    expect(r.length).toBe(3); expect(new Set(r.map(x => x.style)).size).toBe(3);
-    for (const x of r) { expect(x.score).toBeGreaterThan(0); expect(x.score).toBeLessThanOrEqual(1); expect(x.reason.length).toBeGreaterThan(3); }
-    expect(r[0].score).toBeGreaterThanOrEqual(r[2].score);
+  it("gives five styles, one from each family, each with a score and a reason", () => {
+    for (const seed of [1, 2, 3, 5, 8, 13]) {
+      const r = suggestStyles(analyze(synthImage(200, 133, seed)));
+      expect(r.length).toBe(5); expect(new Set(r.map(x => x.style)).size).toBe(5);
+      // really different: five families
+      expect(new Set(r.map(x => x.group)).size).toBe(5);
+      for (const x of r) { expect(x.score).toBeGreaterThan(0); expect(x.score).toBeLessThanOrEqual(1); expect(x.reason.length).toBeGreaterThan(3); expect(x.group.length).toBeGreaterThan(2); }
+      // the closest first: by how much better than usual each fits
+      for (let k = 1; k < r.length; k++) expect(r[k - 1].rank).toBeGreaterThanOrEqual(r[k].rank);
+    }
+  });
+  it("without the spread the best ones come whatever their family, and no style wins far more often than the others", () => {
+    const r = suggestStyles(analyze(synthImage(200, 133, 1)), 3, undefined, { spread: false });
+    expect(r.length).toBe(3);
+    // over a grid of very different pictures (a third of them nearly empty, a third very busy) no
+    // style is first in more than a fifth of them, and most styles are first somewhere
+    const first = {}; let n = 0;
+    for (let L = 0.15; L <= 0.86; L += 0.14) for (let sat = 0.05; sat <= 0.56; sat += 0.1) for (let hue = 0; hue < 360; hue += 45) for (const detail of [0.2, 0.5, 0.8]) {
+      const t = suggestStyles(pic({ L, warm: 0.3 + 0.4 * ((hue / 45) % 2), sat, hue, detail, contrast: 0.2 + 0.6 * detail }))[0].style; first[t] = (first[t] || 0) + 1; n++;
+    }
+    expect(Math.max(...Object.values(first)) / n).toBeLessThan(0.2);
+    expect(Object.keys(first).length).toBeGreaterThanOrEqual(18);
   });
   it("a calm green landscape suggests the calm styles", () => {
     const t = top(pic({ L: 0.58, warm: 0.55, sat: 0.35, hue: 110, detail: 0.35, contrast: 0.35 }));

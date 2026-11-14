@@ -17,7 +17,7 @@ import { pickAudioCodec, encodeAudioData, resampleChannels, tick } from "./audio
 import { pathGeometry, drawPath } from "./paths.js";
 import { FONTS, QUALITY, safeArea, drawSafeGuides, drawVignette, drawGrain, fadeAt } from "./look.js";
 import { analyzeNotes, valueAt, bandsAt, BANDS } from "./reactive.js";
-import { labelFor } from "./labels.js";
+import { labelFor, placeLabels } from "./labels.js";
 
 export const SHAPES = { image: "Like the image", wide: "16:9", square: "1:1", portrait: "4:5", vertical: "9:16" };
 export const VIDEO_THEMES = {
@@ -72,14 +72,14 @@ export function defaultVideo() {
     theme: "gold", pathColor: VIDEO_THEMES.gold.path, pointColor: VIDEO_THEMES.gold.point,
     path: "draw", lineShape: "straight", line: "glow", lineWidth: 3, pathDone: 1, pathAhead: 0.25,
     points: "visited", placeDone: 0.7, placeAhead: 0.35, numbers: true, passages: true, eye: "dot",
-    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0",
+    labels: "off", labelText: {}, labelKeep: false, labelIn: "rise", labelOut: "fade", labelInSecs: 0.35, labelOutSecs: 0.5, labelHold: 0, labelPos: "auto", labelSize: 1, labelBgOp: 0.78, labelLine: false, labelOff: {}, labelBeat: "off", labelBeatAmt: 0.5, labelFill: "solid", labelBg2: "#6D5DF0", labelDetail: true,
     barThick: 1, barGain: 1, barGap: 1, barRound: false,
     rippleFill: "solid", rippleColor2: "#6D5DF0",
     placeNow: "same", placeNowOp: 1, placeFill: 1, placeLineW: 1,
     fx: { pulse: true, ripple: false, spotlight: true, glow: true, flash: true }, strength: 0.6, react: 0.4, dim: 0.1,
     grade: "none", gradeAmt: 0.6, vignette: 0.25, grain: 0,
     caption: "title", title: "", subtitle: "info", subText: "", titleColor: "#FFFFFF", subColor: "#FFFFFF", eyeColor: "#FFFFFF", labelColor: "#FFFFFF", labelBg: "#080A0E", font: "geist", titlePos: "tl", titleWhen: "always", titleSecs: 4.5, textSize: 1,
-    cover: "climax", coverTime: 5, coverHold: 0.5,
+    cover: "climax", coverTime: 5, coverHold: 0.5, coverOut: "fade", coverFade: 1.2,
     pathFill: "solid", pathColor2: VIDEO_THEMES.gold.point, glow: 0.6, dashLen: 3.2, dashGap: 2.6, curve: 0.3,
     placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
     spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
@@ -106,6 +106,8 @@ export function mixHex(a, b, t) {
   return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, "0")).join("");
 }
 export const COVERS = { off: "Off", climax: "The climax", time: "A moment", image: "My own image" };
+// how the cover gives way to the video
+export const COVER_OUTS = { fade: "Fades", zoom: "Zooms in and fades", iris: "Opens from the first place", cut: "Cut" };
 export const BOTTOM_FILLS = { solid: "One colour", gradient: "Gradient", reactive: "Follows the sound" };
 export const PATH_FILLS = { solid: "One colour", gradient: "Along the path", story: "Follows the story" };
 export const PLACE_STYLES = { ring: "Ring", filled: "Filled", dashed: "Dashed", dot: "Dot", none: "No circle" };
@@ -128,8 +130,10 @@ export const MAX_SIDE = 3840;
 export function frameSize(shape, size, iw, ih) {
   if (size === "original") {
     if (shape === "image" || !shape) {
-      // at most 3840 px long and 8.8 MP (what H.264 level 5.1 can encode)
-      const a = clamp(iw / ih, 1 / 2.4, 2.4), k = Math.min(1, MAX_SIDE / Math.max(iw, ih), Math.sqrt(8.8e6 / (iw * ih)));
+      // at most 3840 px long and 2160 px across (the 4K frame, upright or lying): what graphics
+      // cards encode, several times faster than the browser's own encoder, which a larger frame
+      // would fall back to; and at most 8.8 MP (what H.264 level 5.1 can encode)
+      const a = clamp(iw / ih, 1 / 2.4, 2.4), k = Math.min(1, MAX_SIDE / Math.max(iw, ih), 2160 / Math.min(iw, ih), Math.sqrt(8.8e6 / (iw * ih)));
       let W = iw * k, H = ih * k; if (a !== iw / ih) { if (a >= 1) H = W / a; else W = H * a; }
       const up = Math.max(1, 240 / Math.min(W, H));
       return { W: even(W * up), H: even(H * up) };
@@ -284,7 +288,7 @@ export function videoScene(sc, src, opts, caption = {}, extra = {}) {
   const spb = 60 / sc.bpm, tl = videoTimeline(sc), env = soundEnvelope(sc);
   const geos = {};
   return {
-    sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || [],
+    sc, src, blur: small, o: opts, tl, env, total: sc.total * spb, spb, caption, auto: extra.auto || placeLabels(sc),
     an: extra.an || analyzeNotes(sc, env), passages: sc.notes.filter(n => n.passage && n.layer === "lead"),
     maps: extra.maps || null, mapOf: sc.points.map(F => autoMap(F)), onsets: onsetsOf(sc, spb),
     geo(shape, tension = 0.5) { const k = shape + "|" + tension; return geos[k] || (geos[k] = pathGeometry(tl, shape === "curved", 18, tension)); }
@@ -314,7 +318,7 @@ function patchCanvas(D) {
   return PATCH_CV;
 }
 function ring(g, x, y, r, col, a, w) { if (a <= 0 || r <= 0) return; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.strokeStyle = hexA(col, a); g.lineWidth = w; g.stroke(); }
-function pill(g, x, y, w, h) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, h / 2); else g.rect(x, y, w, h); }
+function pill(g, x, y, w, h, rad = h / 2) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, rad); else g.rect(x, y, w, h); }
 // The cover: the first frame of the video (what messaging apps show as its preview), held for a
 // moment and then blended into the video, instead of fading in from black. A frame of the video
 // (at the climax, or at a chosen second) or the user's own image, filling the frame.
@@ -635,7 +639,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       }
       // label: while the eye is there (fading in 0.35 s, out 0.5 s), or kept at the visited opacity
       if (labelsOn && reached.length) {
-        const j = cur ? gz.i : reached[reached.length - 1], text = labelFor(o.labels, j, S.auto, o.labelText);
+        const j = cur ? gz.i : reached[reached.length - 1], text = labelFor(o.labels, j, S.auto, o.labelText, o.labelDetail !== false);
         if (text) {
           // it comes in when the eye arrives and leaves when the eye does, or after its own time
           // (Stays for) if that comes first; kept labels settle at the visited opacity instead
@@ -690,10 +694,17 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
     const lbeat = o.labelBeat && o.labelBeat !== "off" ? clamp(valueAt(S.an, S.an.beat, sec)) * (o.labelBeatAmt ?? 0.5) * 0.45 : 0, lfill = o.labelFill || "solid";
     const lpal = [o.labelBg || "#080a0e", o.labelBg2 || o.pathColor, o.pointColor, o.pathColor];
     S._labelHits = [];
-    g.save(); g.font = `600 ${22 * u * lsz}px ${Fnt.css}`; g.textBaseline = "middle";
+    // a label of several lines: the first as before, its details under it, smaller
+    const ls = u * lsz, fHead = `600 ${22 * ls}px ${Fnt.css}`, fDet = `500 ${15 * ls}px ${Fnt.css}`;
+    g.save(); g.font = fHead; g.textBaseline = "middle";
     for (const q of labelQueue) {
-      const full = Fnt.caps ? q.text.toUpperCase() : q.text, text = q.chars < 1 ? full.slice(0, Math.max(1, Math.ceil(full.length * q.chars))) : full;
-      const tw = g.measureText(full).width + 22 * u * lsz, th = 36 * u * lsz, gap = (o.labelLine ? 28 : 10) * u;
+      const lines = q.text.split("\n").map((t, k) => (k === 0 && Fnt.caps ? t.toUpperCase() : t)), nl = lines.length;
+      // typed: the characters appear across the lines, in order
+      let left = q.chars < 1 ? Math.max(1, Math.ceil(lines.reduce((a, t) => a + t.length, 0) * q.chars)) : Infinity;
+      const shown = lines.map(t => { const s = t.slice(0, Math.max(0, left)); left -= t.length; return s; });
+      let wMax = 0; lines.forEach((t, k) => { g.font = k ? fDet : fHead; wMax = Math.max(wMax, g.measureText(t).width); }); g.font = fHead;
+      const tw = wMax + 22 * ls, th = nl === 1 ? 36 * ls : (16 + 24 + 19 * (nl - 1)) * ls, gap = (o.labelLine ? 28 : 10) * u;
+      const lineY = k => (nl === 1 ? 1 * u : k === 0 ? -th / 2 + 20 * ls : -th / 2 + (8 + 24 + 19 * (k - 1) + 9.5) * ls);
       // where it sits: where it was dragged to (kept relative to its place), else above the place
       // (below it near the top), or on the side that was asked
       const off = o.labelOff && o.labelOff[q.key];
@@ -730,10 +741,12 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       else if (lfill === "cycle") g.fillStyle = hexA(lpal[(q.key - 1) % lpal.length], bgA);
       else if (lfill === "pulse") g.fillStyle = hexA(mixHex(lpal[0], lpal[1], clamp(valueAt(S.an, S.an.beat, sec) * 1.2)), bgA);
       else g.fillStyle = hexA(lpal[0], bgA);
-      pill(g, -tw / 2, -th / 2, tw, th); g.fill();
+      pill(g, -tw / 2, -th / 2, tw, th, nl === 1 ? th / 2 : 14 * ls); g.fill();
       g.lineWidth = 1.2 * u; g.strokeStyle = hexA(o.pointColor, 0.8); g.stroke();
-      g.fillStyle = o.labelColor || "#fff";
-      if (q.chars < 1) { g.textAlign = "left"; g.fillText(text, -tw / 2 + 11 * u * lsz, 1 * u); } else { g.textAlign = "center"; g.fillText(text, 0, 1 * u); }
+      g.fillStyle = o.labelColor || "#fff"; g.textAlign = q.chars < 1 ? "left" : "center";
+      const tx = q.chars < 1 ? -tw / 2 + 11 * ls : 0;
+      shown.forEach((t, k) => { if (!t) return; g.font = k ? fDet : fHead; g.globalAlpha = q.a * (k ? 0.82 : 1); g.fillText(t, tx, lineY(k)); });
+      g.font = fHead; g.globalAlpha = q.a;
       g.restore();
     }
     g.restore();
@@ -890,8 +903,22 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
   const fa = fadeAt(sec, S.total, withCover ? 0 : o.fadeIn || 0, o.fadeOut || 0);
   if (fa > 0) { g.fillStyle = `rgba(0,0,0,${fa})`; g.fillRect(0, 0, W, H); }
   if (withCover) {
-    const hold = o.coverHold ?? 0.5, xf = Math.max(0.4, o.fadeIn || 0.6), ca = sec <= hold + 1e-9 ? 1 : 1 - ease((sec - hold) / xf);
-    if (ca > 0.001) { const cc = coverCanvas(S, W, H); if (cc) { g.globalAlpha = ca; g.drawImage(cc, 0, 0, W, H); g.globalAlpha = 1; } }
+    // the cover is held, then gives way over its own time: a fade, a slow zoom into the picture
+    // while it fades, a circle that opens from the first place, or a plain cut
+    const hold = o.coverHold ?? 0.5, kind = o.coverOut || "fade", xf = kind === "cut" ? 0 : Math.max(0.1, o.coverFade ?? 1.2), tt = sec <= hold + 1e-9 ? 0 : xf > 0 ? clamp((sec - hold) / xf) : 1, e2 = ease(tt);
+    if (tt < 1) {
+      const cc = coverCanvas(S, W, H);
+      if (cc) {
+        g.save();
+        if (kind === "zoom") { const z = 1 + 0.12 * e2; g.globalAlpha = 1 - e2; g.translate(W / 2, H / 2); g.scale(z, z); g.translate(-W / 2, -H / 2); g.drawImage(cc, 0, 0, W, H); }
+        else if (kind === "iris") {
+          // the video shows through a growing circle centred on the first place; the cover stays outside it
+          const p0 = tl[0], cx = p0 ? X(p0.x) : W / 2, cy = p0 ? Y(p0.y) : H / 2, far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy));
+          g.beginPath(); g.rect(0, 0, W, H); g.arc(cx, cy, far * e2, 0, Math.PI * 2, true); g.clip("evenodd"); g.drawImage(cc, 0, 0, W, H);
+        } else { g.globalAlpha = 1 - e2; g.drawImage(cc, 0, 0, W, H); }
+        g.restore();
+      }
+    }
   }
   if (opt.preview && o.safe && (o.shape === "vertical" || o.shape === "portrait")) drawSafeGuides(g, W, H, o.shape, u);
   g.restore();
@@ -904,9 +931,10 @@ const WEBM_VIDEO = [["V_VP9", "vp09.00.41.08"], ["V_VP8", "vp8"], ["V_AV1", "av0
 export async function pickVideoCodec(W, H, fps, bpp = 0.14, container = "mp4") {
   if (typeof VideoEncoder === "undefined") return null;
   const bitrate = Math.round(W * H * fps * bpp);
-  for (const [mux, codec] of container === "webm" ? WEBM_VIDEO : MP4_VIDEO) {
-    const config = { codec, width: W, height: H, bitrate, framerate: fps, latencyMode: "quality", ...(mux === "avc" ? { avc: { format: "avc" } } : {}) };
-    try { if ((await VideoEncoder.isConfigSupported(config)).supported) return { mux, codec, config }; } catch (e) { /* next */ }
+  // the graphics card's encoder first (several times faster), then the browser's own
+  for (const hw of ["prefer-hardware", null]) for (const [mux, codec] of container === "webm" ? WEBM_VIDEO : MP4_VIDEO) {
+    const config = { codec, width: W, height: H, bitrate, framerate: fps, latencyMode: "quality", ...(hw ? { hardwareAcceleration: hw } : {}), ...(mux === "avc" ? { avc: { format: "avc" } } : {}) };
+    try { if ((await VideoEncoder.isConfigSupported(config)).supported) return { mux, codec, config, hardware: !!hw }; } catch (e) { /* next */ }
   }
   return null;
 }
@@ -966,7 +994,7 @@ export async function encodeVideo(S, { W, H, fps = 30, audio, container = "mp4",
   if (err) throw err;
   muxer.finalize();
   if (onProgress) onProgress(1);
-  return { blob: new Blob([target.buffer], { type: webm ? "video/webm" : "video/mp4" }), codec: vc.codec, audio: ac ? ac.codec : null };
+  return { blob: new Blob([target.buffer], { type: webm ? "video/webm" : "video/mp4" }), codec: vc.codec, hardware: !!vc.hardware, audio: ac ? ac.codec : null };
 }
 
 // The time range of a GIF: 8 s around the climax, the first 10 s, or the whole piece.

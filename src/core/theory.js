@@ -406,6 +406,14 @@ export function objectAt(sem, x, y) {
 export const LAYERS = ["lead", "harm", "bass", "pad", "perc"];
 export const LAYER_NAME = { lead: "Melody", harm: "Harmony", bass: "Bass", pad: "Pad", perc: "Rhythm" };
 // Drum kit of each style (see rhythm.js)
+// The styles in five families, as the menus list them (and the suggestions take one from each).
+export const STYLE_GROUPS = [
+  ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
+  ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
+  ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
+  ["Band", ["pop", "rock", "postrock", "folk", "metal"]],
+  ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
+];
 // styles kept in the code but not offered yet (not in the menus, not suggested)
 export const HIDDEN_STYLES = new Set(["acappella"]);
 export const PERC_NAME = { acappella: "No drums", lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };

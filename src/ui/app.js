@@ -5,8 +5,8 @@ import { computeSaliency } from "../core/saliency.js";
 import { gazePath, readPoints, coverage, backgroundZone, saliencyAt, newId, DEFAULT_RADIUS } from "../core/focus.js";
 import { hashBytes } from "../core/util.js";
 import { clusterRegions, buildMotifs } from "../core/motifs.js";
-import { setSpelling, pcName, midiName, MODES, STYLES, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
-import { DIMS, DIM_NAME, DIM_SOURCE } from "../core/timbre.js";
+import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
+import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
@@ -43,7 +43,6 @@ import { AUDIO_FORMATS, encodeAudio, masterGain, wavEncode } from "../export/aud
 import { defaultVideo, frameSize, videoScene, drawVideoFrame, encodeVideo, encodeGif, gifRange, posterPng, hasCover } from "../export/video.js";
 import { editCanvas, editCanvasAsync, ensureFont, fadeAudio, QUALITY, safeArea } from "../export/look.js";
 import { analyzeAudio } from "../export/reactive.js";
-import { autoLabels } from "../export/labels.js";
 import qrUrl from "../assets/instagram-qr.webp";
 import LOGO from "../assets/logo.svg?raw";
 import { initExport } from "./exportTab.js";
@@ -276,13 +275,6 @@ function renderWhy() {
 }
 
 /* ============ styles: groups and one-line descriptions for the dropdown ============ */
-const STYLE_GROUPS = [
-  ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
-  ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
-  ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
-  ["Band", ["pop", "rock", "postrock", "folk", "metal"]],
-  ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
-];
 const STYLE_DESC = {
   ambient: "Slow chords over a held bass note. No real drums, just soft shakers, bells and pads.",
   minimal: "A steady pulse and patterns that repeat and slowly shift, on marimba and vibraphone. Think Steve Reich.",
@@ -315,16 +307,16 @@ const STYLE_DESC = {
   techno: "Four on the floor, an off-beat bass, minimal stabs and an acid line. Dark and hypnotic."
 };
 
-// The three styles that suit the picture best (core/suggest.js), as buttons: the name and why.
+// The five styles that suit the picture, one from each family (core/suggest.js), as buttons: the name and why.
 let WHY_OPEN = false;
 function styleSuggestHtml(cur) {
   if (!A) return "";
   const list = suggestStyles(A), ex = explainStyles(A, list);
   // why: the picture's five measures in words, then each style's fit, in plain sentences
   const why = `<details class="sugg-why"${WHY_OPEN ? " open" : ""}><summary>Why these styles?</summary>
-    <p>This picture: ${ex.measures.map(m => `${m.name.toLowerCase()} ${nf(m.value)} (${m.level})`).join(", ")}; its main colour is ${esc(ex.family)}. Each style has a profile on the same measures, and the closest three are suggested.</p>
+    <p>This picture: ${ex.measures.map(m => `${m.name.toLowerCase()} ${nf(m.value)} (${m.level})`).join(", ")}; its main colour is ${esc(ex.family)}. Each style has a profile on the same measures. One style is suggested from each of the five families, the one that fits this picture better than it fits pictures in general, the closest first.</p>
     ${ex.styles.map(x => `<p><b>${esc(STYLES[x.style].name)}</b> (${Math.round(x.score * 100)}% match). ${esc(STYLE_DESC[x.style] || "")} ${esc(x.lines.join(" "))}</p>`).join("")}</details>`;
-  return `<span class="sugg-k">Suits this picture:</span>${list.map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" data-style="${x.style}" title="${esc(x.reason)}"><b>${esc(STYLES[x.style].name)}</b><small>${esc(x.reason)}</small></button>`).join("")}${why}`;
+  return `<span class="sugg-k">Suits this picture:</span>${list.map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" data-style="${x.style}" title="${esc(x.group ? x.group + ": " + x.reason : x.reason)}"><b>${esc(STYLES[x.style].name)}</b><small>${esc(x.reason)}</small></button>`).join("")}${why}`;
 }
 // the explanation stays open or closed as you left it
 document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("sugg-why")) WHY_OPEN = e.target.open; }, true);
@@ -1385,20 +1377,32 @@ function envPoints(T) {
   for (let i = 0; i <= 80; i++) { const t = (end * i) / 80; pts.push([t, level(t)]); }
   return pts;
 }
-function adsrSvg(list) {
+// list: [[colour, envelope, dashed]]
+function adsrSvg(list, label = "Envelope") {
   const W = 300, H = 80, top = 6, base = H - 4, tmax = Math.max(...list.map(([, T]) => T.a + 0.5 + T.r * 1.2));
-  const paths = list.map(([l, T]) => {
+  const paths = list.map(([c, T, dash]) => {
     const d = envPoints(T).map(([t, y], i) => `${i ? "L" : "M"}${(2 + (t / tmax) * (W - 4)).toFixed(1)} ${(base - (base - top) * y).toFixed(1)}`).join(" ");
-    return `<path d="${d}" fill="none" stroke="var(--lane-${l})" stroke-width="1.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+    return `<path d="${d}" fill="none" stroke="${c}" stroke-width="${dash ? 1.2 : 1.8}"${dash ? ' stroke-dasharray="4 4" opacity="0.6"' : ""} stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
   }).join("");
-  return `<svg class="adsr" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Envelopes of the layers"><line x1="2" y1="${base}" x2="${W - 2}" y2="${base}" class="base" vector-effect="non-scaling-stroke"/>${paths}</svg>`;
+  return `<svg class="adsr" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}"><line x1="2" y1="${base}" x2="${W - 2}" y2="${base}" class="base" vector-effect="non-scaling-stroke"/>${paths}</svg>`;
 }
-const MOD_TXT = {
-  att: ["faster attack", "slower attack"], leg: ["more detached", "more legato"], bri: ["darker", "brighter"],
-  res: ["drier", "more resonant"], col: ["cooler", "warmer"]
+// The instruments of a place that the picture shapes: melody, harmony, bass and the parts the
+// orchestration added (shaped like the harmony), each with its timbre here and its depth.
+function pointInstruments(sc, F) {
+  const out = ["lead", "harm", "bass"].filter(l => sc.inst[l] && F.tim[l]).map(l => ({ l, T: F.tim[l], depth: LAYER_DEPTH[l] }));
+  for (const L of sc.extra || []) if (!L.only && F.timX && F.timX[L.id] && sc.inst[L.id]) out.push({ l: L.id, T: F.timX[L.id], depth: LAYER_DEPTH.harm });
+  return out;
+}
+// a recorded instrument takes only its brightness (the filter) and its release from the picture
+const SAMPLE_DIMS = new Set(["leg", "bri"]);
+const MOD_VAL = {
+  att: (b, T) => ["attack", fsec(b.a), fsec(T.a)],
+  leg: (b, T) => (T.type === "pluck" ? ["decay", fsec(b.d), fsec(T.d)] : ["release", fsec(b.r), fsec(T.r)]),
+  bri: (b, T) => ["filter", fhz(b.cut), fhz(T.cut)],
+  res: (b, T) => ["Q", nf(b.q, 1), nf(T.q, 1)],
+  col: (b, T) => ["colour", nf(b.col), nf(T.col)]
 };
-const SRC_KEY = { att: "sharp", leg: "smooth", bri: "ent", res: "sat", col: "warm" };
-const PT = {};
+const PT = { layer: "lead" };
 function initPointEditor() {
   $("#pan-point").innerHTML = `<div id="pointHead"></div>
     <div class="pedit" id="pointEdit">
@@ -1440,13 +1444,25 @@ function renderPoint() {
   const stepTxt = F.idx === 0 ? "starts from the height in the image" : F.step > 0 ? `rises ${F.step} steps (upward saccade)` : `falls ${-F.step} steps (downward saccade)`;
   const kv = rows => rows.map(([a, b, c]) => `<div class="kv"><dt>${a}</dt><dd>${esc(b)}${c ? `<span>${esc(c)}</span>` : ""}</dd></div>`).join("");
   const maxE = sc.stats.maxE;
-  const mods = DIMS.map(d => {
-    const m = F.tim.m[d], k = SRC_KEY[d], left = m < 0 ? 50 + m * 50 : 50, wd = Math.abs(m) * 50;
-    const txt = Math.abs(m) < 0.1 ? "close to the instrument" : MOD_TXT[d][m < 0 ? 0 : 1];
-    return `<div class="mod"><b>${DIM_NAME[d]}</b><span class="mbar" aria-hidden="true"><i style="left:${left}%;width:${wd}%"></i></span><span>${txt}</span>
-      <small>${DIM_SOURCE[d]} ${nf(S[k])}, image mean ${nf(sc.stats.mu[k])}</small></div>`;
-  }).join("");
-  const prow = l => { const T = F.tim[l]; return `<tr><td>${LAYER_NAME[l]}<span>${esc(sc.inst[l].name)}</span></td><td>${fsec(T.a)}</td><td>${fsec(T.type === "pluck" ? T.d : T.r)}</td><td>${fhz(T.cut)}</td><td>${nf(T.q, 1)}</td></tr>`; };
+  // the timbre, one instrument at a time: what this place does to it, from what in the picture
+  const insts = pointInstruments(sc, F), cur = insts.find(x => x.l === PT.layer) || insts[0];
+  let timbreHtml = "";
+  if (cur) {
+    PT.layer = cur.l;
+    const own = sc.inst[cur.l], rec = cur.T.type === "sample", amt = P.timbre ?? 1;
+    const mods = DIMS.map(d => {
+      const k = DIM_KEY[d], used = cur.depth[d] > 0 && (!rec || SAMPLE_DIMS.has(d)), e = used ? clamp(cur.depth[d] * amt * F.tim.m[d], -1, 1) : 0;
+      const left = e < 0 ? 50 + e * 50 : 50, wd = Math.abs(e) * 50;
+      const txt = !used ? (rec && cur.depth[d] > 0 ? "not on a recorded instrument" : "the picture leaves it") : Math.abs(e) < 0.1 ? "close to the instrument" : MOD_WORDS[d][e < 0 ? 0 : 1];
+      const [what, from, to] = MOD_VAL[d](own, cur.T);
+      return `<div class="mod${used ? "" : " off"}"><b>${DIM_NAME[d]}</b><span class="mbar" aria-hidden="true"><i style="left:${left}%;width:${wd}%"></i></span><span>${txt}</span>
+        <small>${DIM_SOURCE[d]} ${nf(F.tim.src[k])}, image mean ${nf(sc.stats.mu[k])}${used && from !== to ? ` · ${what} ${from} → ${to}` : ""}</small></div>`;
+    }).join("");
+    timbreHtml = `<div class="seg seg-sm seg-wrap tinst" role="radiogroup" aria-label="Instrument">${insts.map(x => `<button type="button" role="radio" aria-checked="${x === cur}" data-tlayer="${esc(x.l)}" title="${esc(layerName(x.l))}: ${esc(sc.inst[x.l].name)}" style="--dot:${laneColor(x.l)}">${esc(layerName(x.l))}</button>`).join("")}</div>
+    <p class="tname"><b>${esc(own.name)}</b> ${rec ? "a recorded instrument: the picture changes its brightness and its release" : cur.depth.att ? "the full line is this place, the dashed one the instrument as it is" : "the picture changes only its brightness"}</p>
+    ${adsrSvg([[laneColor(cur.l), own, true], [laneColor(cur.l), cur.T, false]], `Envelope of the ${layerName(cur.l).toLowerCase()} here and as it is`)}
+    <div class="mods">${mods}</div>`;
+  }
   $("#pointHead").innerHTML = `<div class="pointhead"><div><h2>Focus point ${F.idx + 1} <span>of ${sc.points.length}</span></h2>
       <p class="sub">Family ${F.letter}, ${ordinal(F.visit)}${F.variant !== "original" ? ` (${F.variant})` : ""}${F.obj ? `, on “${esc(F.obj.name)}”` : ""}</p></div>
       <div class="nav"><button type="button" class="icon-btn" data-nav="-1" aria-label="Previous focus point">${ICON.prev}</button><button type="button" class="icon-btn" data-nav="1" aria-label="Next focus point">${ICON.next}</button></div></div>`;
@@ -1458,11 +1474,7 @@ function renderPoint() {
     <div class="share"><div class="sharebar"><span style="width:${(F.share * 100).toFixed(1)}%"></span></div>
       <p>${nf(F.sec, 1)} s of ${sc.seconds} s (${Math.round(F.share * 100)}%), ${nf1(F.dur)} beats. Saliency here ${nf(F.s)}.</p></div>
     <h3>Timbre</h3>
-    ${adsrSvg([["lead", F.tim.lead], ["harm", F.tim.harm], ["bass", F.tim.bass]])}
-    <div class="legend"><span style="--dot:var(--lane-lead)">${esc(sc.inst.lead.name)}</span><span style="--dot:var(--lane-harm)">${esc(sc.inst.harm.name)}</span><span style="--dot:var(--lane-bass)">${esc(sc.inst.bass.name)}</span></div>
-    <div class="mods">${mods}</div>
-    <table class="ptab"><thead><tr><th>Layer</th><th>Attack</th><th>Decay</th><th>Filter</th><th>Q</th></tr></thead>
-      <tbody>${prow("lead")}${prow("harm")}${prow("bass")}</tbody></table>
+    ${timbreHtml}
     ${F.obj && CAT[F.obj.category] && P.wSem > 0 ? `<p class="note">The object “${esc(F.obj.name)}” pulls the timbre toward ${CAT[F.obj.category].label}.</p>` : ""}
     <h3>Music</h3>
     <dl>${kv([
@@ -1977,6 +1989,8 @@ function applySettings(j) {
   // projects from before the generated intro had none, and a one-bar ending
   if (!("intro" in j.settings)) P.intro = "off";
   if (!("circleSize" in j.settings)) P.circleSize = "same";
+  // the detected names are gone from the labels: those projects show the notes
+  if (P.video && P.video.labels === "auto") P.video.labels = "notes";
   // projects from before the returns were exact keep theirs as they were (up to that many)
   if (!("returnsExact" in j.settings)) P.returnsExact = false;
   if (!("drums" in j.settings) || !P.drums || typeof P.drums !== "object") P.drums = {};
@@ -2335,15 +2349,49 @@ function doExport() {
 /* ---- video: scene, sound analysis, labels, grade, preview, exports ---- */
 // The image for the video, at most 2.5 × the frame's long side (zooming in stays sharp), graded.
 let VSRC = null, VGRADE = null;
-function videoSource(longSide, final = false) {
-  const max = Math.round(longSide * 2.5), k = Math.min(1, max / Math.max(SRC.width, SRC.height));
-  let c = SRC;
+// The picture the video can use. The working copy is at most 2048 px, much less than a camera's
+// picture, so a video "like the image" came out smaller and softer than the original. For a photo
+// opened from a file, the size the video may have is the original's (the frame chosen, at most
+// 3840 px long and 8.8 megapixels), and for the export the file is drawn again at the size needed,
+// with the same frame and the same source settings (hiResSource). Phones and low-memory devices
+// keep the working copy: the larger picture would take a few hundred megabytes for a moment.
+const LOW_MEM = typeof navigator !== "undefined" && ((navigator.deviceMemory && navigator.deviceMemory <= 4) || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || ""));
+function videoDims() {
+  if (!SRC) return { w: 0, h: 0, hi: false };
+  if (!ORIG || !ORIG.file || !BASE || BASE.kind !== "photo" || !INFO || LOW_MEM) return { w: SRC.width, h: SRC.height, hi: false };
+  const c = P.src.crop, fw = Math.round(INFO.w * (1 - c.l - c.r)), fh = Math.round(INFO.h * (1 - c.t - c.b));
+  return Math.max(fw, fh) > Math.max(SRC.width, SRC.height) * 1.15 ? { w: fw, h: fh, hi: true } : { w: SRC.width, h: SRC.height, hi: false };
+}
+let HIRES = null;
+async function hiResSource(longWanted) {
+  const d = videoDims(); if (!d.hi) return null;
+  const k = Math.min(1, 3840 / Math.max(d.w, d.h), Math.sqrt(8.8e6 / (d.w * d.h)), longWanted / Math.max(d.w, d.h));
+  const w = Math.max(2, Math.round(d.w * k)), h = Math.max(2, Math.round(d.h * k));
+  // nothing to gain over the working copy
+  if (Math.max(w, h) < Math.max(SRC.width, SRC.height) * 1.15) return null;
+  const c = P.src.crop, key = JSON.stringify([INFO.hash, c, P.src, w, h]);
+  if (HIRES && HIRES.key === key) return HIRES.c;
+  try {
+    const fullW = Math.round(INFO.w * k), fullH = Math.round(INFO.h * k);
+    const bmp = await createImageBitmap(ORIG.file, { resizeWidth: fullW, resizeHeight: fullH, resizeQuality: "high" });
+    const cv = makeCanvas(w, h), g = cv.getContext("2d", { willReadFrequently: true });
+    g.drawImage(bmp, -Math.round(c.l * fullW), -Math.round(c.t * fullH)); if (bmp.close) bmp.close();
+    // the same reading as the working copy: linear light, then the source settings
+    const lin = fromRGBA8(g.getImageData(0, 0, w, h).data, w, h, Math.max(w, h));
+    g.putImageData(new ImageData(processImage(lin.data, lin.w, lin.h, lin.ch, "photo", null, P.src), lin.w, lin.h), 0, 0);
+    HIRES = { key, c: cv };
+    return cv;
+  } catch (e) { console.warn("Full-resolution picture unavailable:", e); return null; }
+}
+function videoSource(longSide, final = false, from = SRC) {
+  const max = Math.round(longSide * 2.5), k = Math.min(1, max / Math.max(from.width, from.height));
+  let c = from;
   if (k < 1) {
-    if (VSRC && VSRC.src === SRC && VSRC.max === max) c = VSRC.c;
+    if (VSRC && VSRC.src === from && VSRC.max === max) c = VSRC.c;
     else {
-      c = makeCanvas(Math.round(SRC.width * k), Math.round(SRC.height * k)); const g = c.getContext("2d");
-      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(SRC, 0, 0, c.width, c.height);
-      VSRC = { src: SRC, max, c };
+      c = makeCanvas(Math.round(from.width * k), Math.round(from.height * k)); const g = c.getContext("2d");
+      g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; g.drawImage(from, 0, 0, c.width, c.height);
+      VSRC = { src: from, max, c };
     }
   }
   // the image edit (levels, curves, white balance, tones) and the colour grade, once per settings.
@@ -2374,21 +2422,7 @@ function videoCaption(sc) {
     point: i => { const F = sc.points[i]; return `Point ${i + 1} · ${SECTION_NAME[F.section] || "Development"} · chord ${romanOf(F.root, sc.modeIv)}`; }
   };
 }
-// objects for the labels: the placement's, or a detection run from the Export tab
-const LABEL_OBJ = { hash: null, objects: null, job: false };
-function labelObjects() { return (ATTN.objects && ATTN.objects.length ? ATTN.objects : null) || (SEM && SEM.objects && SEM.objects.length ? SEM.objects : null) || (LABEL_OBJ.hash === (A && A.hash) ? LABEL_OBJ.objects : null); }
-const currentAutoLabels = () => (SCORE ? autoLabels(SCORE, labelObjects()) : []);
-async function detectObjects() {
-  if (!A || LABEL_OBJ.job) return;
-  LABEL_OBJ.job = true; EXPORT && EXPORT.labelNote("Downloading the object detector (about 5 MB, only the first time)…");
-  try {
-    const r = await objectsMap(SRC, A.W, A.H);
-    LABEL_OBJ.hash = A.hash; LABEL_OBJ.objects = r.objects;
-    EXPORT && EXPORT.labelNote(r.objects.length ? `Found: ${[...new Set(r.objects.map(o => o.name))].join(", ")}. Spots that aren't on any of them get a colour description.` : "No objects found, so each spot gets a description of its colour.");
-  } catch (e) { console.warn("Object detector unavailable:", e); EXPORT && EXPORT.labelNote("The object detector couldn't load, maybe you're offline. Each spot gets a description of its colour instead."); }
-  finally { LABEL_OBJ.job = false; VSCENE = null; refreshLabels(); drawStage(); }
-}
-function refreshLabels() { if (EXPORT && SCORE) EXPORT.renderLabels(currentAutoLabels(), !!labelObjects()); }
+function refreshLabels() { if (EXPORT && SCORE) EXPORT.renderLabels(SCORE.points.length); }
 // the sound analysis for the preview: from the notes at once, from the rendered audio once the
 // piece has been rendered in the background (only when the look reacts to the sound)
 let AN = { key: null, an: null, job: false };
@@ -2414,7 +2448,7 @@ function scheduleAnalysis() {
 let COVER = { img: null, id: 0 };
 function sceneFor(sc, src) {
   const an = AN.key === masterKey() ? AN.an : null;
-  const S = videoScene(sc, src, P.video, videoCaption(sc), { an: an || undefined, auto: currentAutoLabels(), maps: P.video.patch ? videoMaps() : null });
+  const S = videoScene(sc, src, P.video, videoCaption(sc), { an: an || undefined, maps: P.video.patch ? videoMaps() : null });
   S.coverImg = COVER.img; S.coverImgId = COVER.id;
   return S;
 }
@@ -2466,15 +2500,18 @@ function initVideoDrag() {
   cv.addEventListener("pointerup", end, true); cv.addEventListener("pointercancel", end, true);
 }
 function drawVideoPreview(cv) {
-  const wrap = $("#lightbox"), o = P.video, { W, H } = frameSize(o.shape, o.size, SRC.width, SRC.height), ar = H / W;
+  // the preview is drawn at the size it is shown (everything in the frame scales with it), so its
+  // helper layers are small and it stays smooth; XW × XH is what the export will be
+  const wrap = $("#lightbox"), o = P.video, vd = videoDims(), { W: XW, H: XH } = frameSize(o.shape, o.size, vd.w, vd.h), ar = XH / XW;
   const small = window.matchMedia("(max-width: 980px)").matches;
   const cw = wrap.clientWidth - 16, chMax = small ? Math.min(window.innerHeight * 0.6, cw * ar) : wrap.clientHeight - 16;
   let w = cw, h = cw * ar; if (h > chMax) { h = chMax; w = h / ar; }
   if (small) wrap.style.height = h + 16 + "px";
   const dpr = window.devicePixelRatio || 1;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
+  const W = Math.max(2, Math.round(w * dpr)), H = Math.max(2, Math.round(h * dpr));
   stageGeom = { w, h }; PV = { w, h, W, H };
-  if (EXPORT) EXPORT.sizeNote(`The video will be ${W} × ${H} px${o.size === "original" ? ", the image's own size" : ""}${o.shape !== "image" ? ` (${o.shape === "wide" ? "16:9" : o.shape === "square" ? "1:1" : o.shape === "portrait" ? "4:5" : "9:16"})` : ""}.`);
+  if (EXPORT) EXPORT.sizeNote(`The video will be ${XW} × ${XH} px${o.size === "original" ? (vd.hi ? ", from the original picture" : ", the image's own size") : ""}${o.shape !== "image" ? ` (${o.shape === "wide" ? "16:9" : o.shape === "square" ? "1:1" : o.shape === "portrait" ? "4:5" : "9:16"})` : ""}.`);
   const src = videoSource(Math.min(1600, Math.max(w, h) * dpr));
   if (!VSCENE || VSCENE.sc !== SCORE || VSCENE.src !== src || (P.video.patch && !VSCENE.maps)) VSCENE = sceneFor(SCORE, src);
   VSCENE.o = o;
@@ -2488,21 +2525,31 @@ function drawVideoPreview(cv) {
 async function videoJob(say, longSide) {
   const m = await renderMaster(say), o = P.video;
   await ensureFont(o.font);
-  const S = sceneFor(SCORE, videoSource(longSide, true));
+  // the original file at the size this video needs, when it has more to give than the working copy
+  say("Preparing the picture");
+  const hi = await hiResSource(longSide);
+  const S = sceneFor(SCORE, videoSource(longSide, true, hi || SRC));
   S.an = AN.key === masterKey() && AN.an ? AN.an : analyzeAudio(m.chs, m.sr, 60);
   const chs = o.fadeSound && (o.fadeIn > 0 || o.fadeOut > 0) ? fadeAudio(m.chs, m.sr, o.fadeIn || 0, o.fadeOut || 0) : m.chs;
   return { S, audio: { chs, sr: m.sr, gain: m.gain } };
 }
+// (development) encodes the first seconds of the video without saving it: its size, the encoder, how long it took
+async function exportProbe(seconds = 5) {
+  const o = P.video, vd = videoDims(), { W, H } = frameSize(o.shape, o.size, vd.w, vd.h), t0 = performance.now();
+  const { S, audio } = await videoJob(() => {}, Math.max(W, H)), t1 = performance.now(), n = Math.min(audio.chs[0].length, Math.round(seconds * audio.sr));
+  const r = await encodeVideo(S, { W, H, fps: o.fps, audio: { ...audio, chs: audio.chs.map(c => c.subarray(0, n)) }, bpp: (QUALITY[o.quality] || QUALITY.high).bpp });
+  return { W, H, source: [S.src.width, S.src.height], fromOriginal: vd.hi, prepareMs: Math.round(t1 - t0), encodeMs: Math.round(performance.now() - t1), seconds, codec: r.codec, hardware: r.hardware, bytes: r.blob.size };
+}
 function exportVideo(container = "mp4") {
   return exportJob("video", async say => {
-    const o = P.video, { W, H } = frameSize(o.shape, o.size, SRC.width, SRC.height);
+    const o = P.video, vd = videoDims(), { W, H } = frameSize(o.shape, o.size, vd.w, vd.h);
     const { S, audio } = await videoJob(say, Math.max(W, H)), label = container === "webm" ? "WebM" : "video";
     say(`Encoding ${label} ${W}×${H}`);
     const r = await encodeVideo(S, { W, H, fps: o.fps, audio, container, bpp: (QUALITY[o.quality] || QUALITY.high).bpp, onProgress: x => say(`Encoding ${label} ${W}×${H}`, x), cancelled: () => EXPORT_CANCEL });
     const name = `${fileBase()}.${container}`;
     await DL.save({ filename: name, data: r.blob });
     const vc = r.codec.startsWith("avc") ? "H.264" : r.codec.split(".")[0].toUpperCase(), ac = r.audio ? (r.audio.startsWith("mp4a") ? " + AAC" : " + Opus") : ", no sound";
-    return `Saved ${name} (${W}×${H}, ${o.fps} fps, ${vc}${ac}, ${(r.blob.size / 1e6).toFixed(1)} MB)`;
+    return `Saved ${name} (${W}×${H}, ${o.fps} fps, ${vc}${ac}${r.hardware ? ", encoded by the graphics card" : ""}, ${(r.blob.size / 1e6).toFixed(1)} MB)`;
   });
 }
 function exportGif() {
@@ -2519,7 +2566,7 @@ function exportGif() {
 }
 function exportPoster() {
   return exportJob("poster", async say => {
-    const o = P.video, { W, H } = frameSize(o.shape, o.size, SRC.width, SRC.height);
+    const o = P.video, vd = videoDims(), { W, H } = frameSize(o.shape, o.size, vd.w, vd.h);
     const { S } = await videoJob(say, Math.max(W, H));
     // the frame at the playhead; at the very start, the moment the eye reaches the climax
     let sec = (Math.min(currentBeat(), SCORE.total) * 60) / SCORE.bpm;
@@ -2535,7 +2582,7 @@ const typing = el => el && (el.isContentEditable || ["INPUT", "SELECT", "TEXTARE
 export function init() {
   // inspection hook for development builds only
   // development hook for the browser checks (not in the production build)
-  if (import.meta.env && import.meta.env.DEV) window.__sonification = { P, PATH, get points() { return POINTS; }, get score() { return SCORE; }, recipeJson, openProject, scoreHash: () => SCORE && scoreHash(SCORE), renderMaster, invalidateMusic: () => invalidate(LV.MUSIC) };
+  if (import.meta.env && import.meta.env.DEV) window.__sonification = { P, PATH, get points() { return POINTS; }, get score() { return SCORE; }, recipeJson, openProject, scoreHash: () => SCORE && scoreHash(SCORE), renderMaster, videoDims, hiResSource, exportProbe, invalidateMusic: () => invalidate(LV.MUSIC) };
   for (const host of Object.keys(SLIDERS)) {
     const el = $("#" + host);
     for (const d of SLIDERS[host]) { const s = makeSlider(d, P, onParam); SL[d.key] = s; if (d.adv) s.el.classList.add("adv-only"); el.appendChild(s.el); }
@@ -2598,6 +2645,7 @@ export function init() {
   $("#pan-point").addEventListener("click", e => {
     const nav = e.target.closest("[data-nav]");
     if (nav) { selectPoint(SEL + Number(nav.dataset.nav)); return; }
+    const ti = e.target.closest("[data-tlayer]"); if (ti) { PT.layer = ti.dataset.tlayer; renderPoint(); $(`#pan-point [data-tlayer="${CSS.escape(PT.layer)}"]`)?.focus(); return; }
     if (e.target.closest("[data-hear]")) audition(SEL);
     const mv = e.target.closest("[data-move]"); if (mv) movePoint(SEL, Number(mv.dataset.move));
     if (e.target.closest("[data-del]")) deletePoint(SEL);
@@ -2650,7 +2698,7 @@ export function init() {
   $("#brandLogo").innerHTML = LOGO;
   if (store.get("welcomeDone")) showGuide(); else showWelcome();
   EXPORT = initExport({ P, onLook: () => { if (exportView()) { drawStage(); scheduleAnalysis(); } }, onAudio: exportAudio, onMidi: exportMidi, onZip: doExport,
-    onVideo: () => exportVideo("mp4"), onWebm: () => exportVideo("webm"), onGif: exportGif, onPoster: exportPoster, onDetect: detectObjects,
+    onVideo: () => exportVideo("mp4"), onWebm: () => exportVideo("webm"), onGif: exportGif, onPoster: exportPoster,
     onFont: k => ensureFont(k).then(() => { if (exportView()) drawStage(); }), onCancel: () => { EXPORT_CANCEL = true; }, onCoverFile: loadCover });
   ensureFont(P.video.font);
   initVideoDrag();

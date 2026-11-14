@@ -384,7 +384,7 @@ function swellFx(ctx, out, t, durSec, vel, noise, kind) {
 const DUCKED = ["harm", "bass", "pad"];
 function pump(G, t, amount) {
   const rec = 0.11 * (60 / G.bpm);
-  for (const l of [...DUCKED, ...(G.extraIds || [])]) { const p = G.duck[l].gain; p.setValueAtTime(1 - amount, t); p.setTargetAtTime(1, t + 0.012, rec); }
+  for (const l of [...DUCKED, ...(G.extraIds || [])]) { const d = G.duck[l]; if (!d) continue; const p = d.gain; p.setValueAtTime(1 - amount, t); p.setTargetAtTime(1, t + 0.012, rec); }
 }
 
 // Expression (CC11, perform.js): each layer's level follows its curve, ramping between the places.
@@ -451,19 +451,69 @@ export function playNote(G, n, t0, durSec, from = n.t) {
 }
 
 // Offline render of exactly T seconds, with a master fade over the last 0.4 s.
-// opts: { specs (sampled instruments to load, see samples.js), kit (drum kit) }.
+// opts: { specs (sampled instruments to load, see samples.js), kit (drum kit), drums (the kit's
+// pieces), parallel (false: one graph, as it always was) }.
+//
+// The cost of a render adds up over the layers (their voices), and one audio graph renders on
+// one thread: a minute of music with ten layers took about a minute. So each layer is rendered
+// alone, in its own offline context (the browser gives each its own thread), and the results are
+// mixed in a last, light one: every stem enters where its fader used to feed the master bus and
+// the reverb and delay sends, so the routing, and the sound, are the same. The sidechain's pump
+// is scheduled in every stem from the kicks of the score. Devices with little memory or few
+// cores keep the single graph (a stem is 21 MB a minute).
 export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}) {
   const sr = 44100, spb = 60 / sc.bpm, T = sc.total * spb, len = Math.round(T * sr);
-  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-  const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, sc.extra || []);
-  G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); G.kit = opts.kit || null;
-  if (opts.drums) applyDrums(G, opts.drums, true);
-  if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
-  const g0 = G.out.gain.value;
-  G.out.gain.setValueAtTime(g0, Math.max(0, T - 0.4)); G.out.gain.linearRampToValueAtTime(0, T);
-  scheduleExpression(G, sc, 0, 0);
-  for (const n of sc.notes) if (audible(mix, n.layer)) playNote(G, n, n.t * spb, n.dur * spb);
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext, extra = sc.extra || [];
+  const sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0);
+  const layers = [...new Set(sc.notes.filter(n => audible(mix, n.layer)).map(n => n.layer))];
+  const nav = typeof navigator !== "undefined" ? navigator : {};
+  const parallel = opts.parallel ?? ((nav.hardwareConcurrency || 2) >= 4 && !(nav.deviceMemory && nav.deviceMemory <= 4) && !/iPhone|iPad|iPod|Android/i.test(nav.userAgent || ""));
+  const fadeOut = G => { const g0 = G.out.gain.value; G.out.gain.setValueAtTime(g0, Math.max(0, T - 0.4)); G.out.gain.linearRampToValueAtTime(0, T); };
+  if (!parallel || layers.length < 2) {
+    const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, extra);
+    G.sidechain = sidechain; G.kit = opts.kit || null;
+    if (opts.drums) applyDrums(G, opts.drums, true);
+    if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
+    fadeOut(G);
+    scheduleExpression(G, sc, 0, 0);
+    for (const n of sc.notes) if (audible(mix, n.layer)) playNote(G, n, n.t * spb, n.dur * spb);
+    return await ctx.startRendering();
+  }
+  // the kicks that pump the other layers (as playNote decides it: not a swell, not a silenced piece)
+  const kicks = sidechain > 0 && audible(mix, "perc") ? sc.notes.filter(n => n.layer === "perc" && n.midi === 36 && !n.swell) : [];
+  const stems = await Promise.all(layers.map(async layer => {
+    const ctx = new OAC(2, len, sr), G = buildStem(ctx, layer, mix, fx, sc.bpm, extra);
+    G.sidechain = sidechain; G.kit = opts.kit || null;
+    if (opts.drums) applyDrums(G, opts.drums, true);
+    const specs = (opts.specs || []).filter(x => x.layer === layer);
+    if (specs.length) await prepareSamples(G, specs, 60000);
+    scheduleExpression(G, sc, 0, 0);
+    if (layer !== "perc" && kicks.length) { const pz = G.pieces && G.pieces[36], k = ((pz && pz.vol) ?? 1) / (G.percBoost || 1); if (k > 0.001) for (const n of kicks) pump(G, n.t * spb, sidechain); }
+    for (const n of sc.notes) if (n.layer === layer) playNote(G, n, n.t * spb, n.dur * spb);
+    return [layer, await ctx.startRendering()];
+  }));
+  // the mix: the whole graph, each stem entering at its fader (set to 1: the stem already has its level)
+  const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, extra);
+  fadeOut(G);
+  for (const [layer, buf] of stems) {
+    if (!G.fader[layer]) continue;
+    G.fader[layer].gain.value = 1;
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(G.fader[layer]); src.start(0);
+  }
   return await ctx.startRendering();
+}
+// One layer alone: its voices → input → drive → EQ → duck → fader → out, with the same settings
+// the full graph gives that layer.
+function buildStem(ctx, layer, mix, fx, bpm, extra) {
+  const inp = ctx.createGain(), drive = ctx.createWaveShaper(), eq = eqChain(ctx, layerEq(fx, layer)), duck = ctx.createGain(), fader = ctx.createGain();
+  drive.oversample = "4x";
+  inp.connect(drive); drive.connect(eq.input); eq.output.connect(duck); duck.connect(fader); fader.connect(ctx.destination);
+  const baseGain = {}; for (const L of extra) baseGain[L.id] = (ROLES[L.role] || {}).gain ?? 0.45;
+  const L = layerFx(fx, layer);
+  drive.curve = L.drive > 0.001 ? driveCurve(L.drive) : null;
+  setEq(eq, layerEq(fx, layer), 0);
+  fader.gain.value = layerGain(mix, layer, baseGain[layer]);
+  return { ctx, stem: layer, bus: { [layer]: inp }, drive: { [layer]: drive }, eq: { [layer]: eq }, duck: { [layer]: duck }, fader: { [layer]: fader }, baseGain, extraIds: extra.map(x => x.id), sidechain: 0, noise: makeNoise(ctx), bpm };
 }
 
 /*

@@ -1,11 +1,11 @@
-// Style suggestion: the three styles that suit a picture best, from the analysis the app already
+// Style suggestion: five styles that suit a picture, one from each family, from the analysis the app already
 // does (no model, nothing downloaded). Each style has a profile on five measures of the image,
 // each 0-1: lightness, warmth of the colours, saturation, detail (entropy and edges together) and
 // contrast (the spread of lightness), plus the colour families it likes. A picture scores each
 // style by how close it is to the profile, and gets a short reason in words.
-import { clamp } from "./util.js";
+import { clamp, mulberry32 } from "./util.js";
 import { colourOf } from "./expert.js";
-import { HIDDEN_STYLES } from "./theory.js";
+import { HIDDEN_STYLES, STYLE_GROUPS } from "./theory.js";
 
 // [lightness, warmth, saturation, detail, contrast, colour families]
 const PROFILE = {
@@ -57,28 +57,62 @@ export function pictureMeasures(A) {
   return { values: [clamp(g.brightness ?? 0.5), clamp(g.warmth01 ?? 0.5), clamp((g.sat ?? 0.3) / 0.6), detail, contrast], family: colourOf({ hue: g.hue, hueStr: g.hueStr }) };
 }
 
-// The best `count` styles for a picture: [{ style, score (0-1), reason }], best first.
-export function suggestStyles(A, count = 3, styles = Object.keys(PROFILE).filter(s => !HIDDEN_STYLES.has(s))) {
+// How well a style's profile fits five measures and a colour family: 0-1. The colour bonus is
+// smaller for a style that likes many colours (one that likes them all would win it every time).
+function fit(values, family, p) {
+  let sc = 0;
+  for (let k = 0; k < 5; k++) sc += WEIGHT[k] * (1 - Math.min(1, Math.abs(values[k] - p[k]) * 2));
+  if (p[5].includes(family)) sc += HUE_BONUS * Math.min(1, 2.5 / p[5].length);
+  return clamp(sc / MAX);
+}
+// How well each style fits pictures in general: its mean fit over 600 pictures drawn the way
+// photographs tend to be (lightness, warmth and detail around the middle, colour low to medium,
+// every colour family). A style with a middle-of-the-road profile fits everything a little, so
+// it is judged by how much better than usual it fits this picture, in units of how much its
+// fit varies (a style with an extreme profile swings widely, and would win too often otherwise).
+const FAMILIES = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta", "grey"];
+const USUAL = (() => {
+  const rnd = mulberry32(7), g = () => (rnd() + rnd() + rnd()) / 3, sum = {}, sq = {}, N = 600;
+  for (const st of Object.keys(PROFILE)) { sum[st] = 0; sq[st] = 0; }
+  for (let i = 0; i < N; i++) {
+    const v = [0.15 + 0.7 * g(), 0.2 + 0.6 * g(), clamp((0.05 + rnd() * rnd()) / 0.6), clamp(0.5 * (0.2 + 0.7 * g()) + 0.5 * rnd()), 0.15 + 0.85 * rnd()], fam = FAMILIES[Math.floor(rnd() * FAMILIES.length)];
+    for (const st of Object.keys(PROFILE)) { const f = fit(v, fam, PROFILE[st]); sum[st] += f; sq[st] += f * f; }
+  }
+  // the usual fit of each style and how much it varies from picture to picture
+  const out = {};
+  for (const st of Object.keys(PROFILE)) { const m = sum[st] / N; out[st] = { mean: m, sd: Math.max(0.03, Math.sqrt(Math.max(0, sq[st] / N - m * m))) }; }
+  return out;
+})();
+const GROUP_OF = Object.fromEntries(STYLE_GROUPS.flatMap(([g, keys]) => keys.map(k => [k, g])));
+
+/*
+ * The styles that suit a picture: [{ style, score (0-1, the fit), reason, group }], best first.
+ * By default one from each of the five families (the best of each), so the five are really
+ * different; `spread: false` gives the best `count` whatever their family. They are ranked by how
+ * much better than usual the style fits this picture; `score` stays the plain fit.
+ */
+export function suggestStyles(A, count = 5, styles = Object.keys(PROFILE).filter(s => !HIDDEN_STYLES.has(s)), { spread = true } = {}) {
   const M = pictureMeasures(A), out = [];
   for (const st of styles) {
     const p = PROFILE[st]; if (!p) continue;
-    let sc = 0;
     const fits = [];
     for (let k = 0; k < 5; k++) {
       const d = Math.abs(M.values[k] - p[k]), f = 1 - Math.min(1, d * 2);
-      sc += WEIGHT[k] * f;
       // a reason: a measure the picture shows clearly (far from the middle) that the style likes
       if (f > 0.7 && Math.abs(M.values[k] - 0.5) > 0.12) fits.push([Math.abs(M.values[k] - 0.5) * f, WORDS[k][M.values[k] > 0.5 ? 1 : 0]]);
     }
-    const hueHit = p[5].includes(M.family);
-    if (hueHit) sc += HUE_BONUS;
+    const hueHit = p[5].includes(M.family), score = fit(M.values, M.family, p);
     fits.sort((a, b) => b[0] - a[0]);
     const words = fits.slice(0, 2).map(x => x[1]);
     if (hueHit && M.family !== "grey" && words.length < 2) words.push(`${M.family} tones`);
-    out.push({ style: st, score: clamp(sc / MAX), reason: words.length ? words.join(", ") : "a balanced picture" });
+    out.push({ style: st, score, rank: USUAL[st] ? (score - USUAL[st].mean) / USUAL[st].sd : score, reason: words.length ? words.join(", ") : "a balanced picture", group: GROUP_OF[st] || "" });
   }
-  out.sort((a, b) => b.score - a.score || a.style.localeCompare(b.style));
-  return out.slice(0, count);
+  out.sort((a, b) => b.rank - a.rank || a.style.localeCompare(b.style));
+  if (!spread) return out.slice(0, count);
+  // one from each family first (its best), then the rest by rank
+  const seen = new Set(), first = [], rest = [];
+  for (const x of out) { if (x.group && !seen.has(x.group)) { seen.add(x.group); first.push(x); } else rest.push(x); }
+  return [...first, ...rest].slice(0, count);
 }
 export const SUGGEST_PROFILES = PROFILE;
 

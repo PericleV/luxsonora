@@ -45,7 +45,7 @@ export const TITLE_WHEN = { always: "Always", intro: "First seconds" };
 export const SUBTITLES = { info: "Style, key and tempo", custom: "My own", none: "None" };
 export const BOTTOMS = { bars: "Sound bars", spectrum: "Spectrum", wave: "Waveform", line: "Progress line", none: "None" };
 // the texture of a place, shown when the eye arrives: which view of the analysis, and how it appears
-export const PATCH_MAPS = { auto: "Auto (what shaped its sound)", edges: "Edges", texture: "Texture", attention: "Eye map", regions: "Regions", colour: "Colour areas", picture: "The picture" };
+export const PATCH_MAPS = { auto: "Auto (what shaped its sound)", edges: "Edges", texture: "Texture", attention: "Eye map", regions: "Regions", colour: "Colour areas", lines: "Lines and directions", depth: "Depth (sharp near, soft far)", picture: "The picture" };
 export const PATCH_ANIMS = { rise: "Rises", reveal: "Changes its texture", both: "Rises and changes" };
 // the ripple: which track sets it off
 export const RIPPLE_TRACKS = { off: "Off", perc: "Drums", bass: "Bass", lead: "Melody", harm: "Harmony", pad: "Pad" };
@@ -322,7 +322,12 @@ function ring(g, x, y, r, col, a, w) { if (a <= 0 || r <= 0) return; g.beginPath
 // nothing, for example a layer since removed); computed once per track.
 function eventsOf(S, o) {
   const tr = (o && o.labelTrack) || "lead"; S._ev = S._ev || {};
-  if (!S._ev[tr]) { const e = placeEvents(S.sc, S.spb, tr); S._ev[tr] = tr === "lead" || e.some(l => l.length) ? e : eventsOf(S, { labelTrack: "lead" }); }
+  if (!S._ev[tr]) {
+    const e = placeEvents(S.sc, S.spb, tr);
+    // a track this piece does not play: its first track that does (a raw piece has no melody track)
+    const first = [...new Set(S.sc.notes.map(n => n.layer))].find(l => l !== "perc" && l !== tr);
+    S._ev[tr] = e.some(l => l.length) || !first ? e : eventsOf(S, { labelTrack: first });
+  }
   return S._ev[tr];
 }
 // What the label of place j says: the user's text, the notes of the chosen track (and the

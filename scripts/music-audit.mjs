@@ -18,6 +18,13 @@
 //   range      a note outside MIDI 24-100
 //   ending     the last chord is not the tonic, the melody's last note is not a tone of it, or a
 //              note starts after the end
+//   lone       a short pitched note (under two beats) alone on its track: nothing else on that
+//              track within four beats before or after it (the intro and the ending aside; a held
+//              note alone is a pedal or a chord, not a lone hit)
+//   thin       a track (not the drums) with fewer than six notes that sound for less than a
+//              quarter of the piece
+//   loud       a lone note at least 1.3 times as loud as its track's median
+// Options: --band (the picture chooses the band), --enrich (Enriched), --style=<key>, --examples.
 // Counts are per minute of music, so styles with different lengths compare.
 import { synthImage } from "../test/helpers.js";
 import { analyze } from "../src/core/analyze.js";
@@ -31,6 +38,7 @@ import { STYLES } from "../src/core/theory.js";
 const RULES_OFF = process.argv.includes("--rules-off") ? { modulate: false, contrast: false, cadences: false, picardy: false, leap: false, parallels: false, peak: false } : null;
 const EXAMPLES = process.argv.includes("--examples") || !!(typeof process !== "undefined" && process.env.AUDIT_EXAMPLES);
 const ONLY = (process.argv.find(a => a.startsWith("--style=")) || "").slice(8);
+const MODE = { ...(process.argv.includes("--band") ? { pictureBand: true } : {}), ...(process.argv.includes("--enrich") ? { enrich: true } : {}) };
 const IMAGES = [[200, 133, 1], [133, 200, 7], [200, 133, 3], [180, 180, 11], [240, 120, 5]].map(([w, h, s]) => ({ name: `img${s}`, img: synthImage(w, h, s) }));
 const BASE = { count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7 };
 const CONFIGS = [
@@ -175,12 +183,25 @@ export function auditScore(sc) {
   if (tonic && !new Set(sc.cadence.chord.map(pc)).has(pc(sc.pc))) hit("ending", "cadence chord lacks the tonic");
   for (const n of sc.notes) if (n.t > sc.total + 1e-6) hit("ending", `${where(n)} after the end`);
   if (tonic) for (const n of sc.notes) if (n.layer === "lead" && !n.dbl && n.point === -2 && !tonic.has(pc(n.midi))) hit("ending", `${where(n)} is not a tone of the final chord`);
+  // lone notes and thin tracks
+  const sustained = new Set(["pad", ...(sc.extra || []).filter(L => L.role === "drone" || L.role === "sustain").map(L => L.id)]);
+  for (const [l, ns] of Object.entries(byLayer)) {
+    const body = ns.filter(n => !n.intro && n.point !== -2 && n.point !== -3);
+    if (body.length < 6 && body.reduce((a, n) => a + n.dur, 0) < 0.25 * sc.body) hit("thin", `${l}: ${body.length} notes`);
+    if (sustained.has(l)) continue;
+    const vels = body.map(n => n.vel).sort((a, b) => a - b), med = vels[Math.floor(vels.length / 2)] || 64;
+    for (const n of body) {
+      if (n.dur >= 2 || body.some(m => m !== n && Math.abs(m.t - n.t) <= 4 + 1e-9)) continue;
+      hit("lone", `${where(n)} vel=${n.vel}`);
+      if (n.vel >= 1.3 * med) hit("loud", `${where(n)} vel=${n.vel} median ${med}`);
+    }
+  }
   const per = {}; for (const k of Object.keys(cnt)) per[k] = cnt[k] / minutes;
   return { per, cnt, ex, minutes };
 }
 
 // ---- run
-const KEYS = ["clash", "stale", "outOfMode", "parallel", "accNCT", "padNCT", "melNCT", "unresolved", "bassRoot", "crossing", "restrike", "leap", "offgrid", "pileup", "mud", "range", "ending"];
+const KEYS = ["clash", "stale", "outOfMode", "parallel", "accNCT", "padNCT", "melNCT", "unresolved", "bassRoot", "crossing", "restrike", "leap", "offgrid", "pileup", "mud", "range", "ending", "lone", "thin", "loud"];
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
 if (isMain) {
   const rows = [], worst = [];
@@ -188,7 +209,7 @@ if (isMain) {
     if (ONLY && style !== ONLY) continue;
     const tot = Object.fromEntries(KEYS.map(k => [k, 0])); let mins = 0;
     for (const I of IMAGES) for (const C of CONFIGS) {
-      const P = { ...BASE, ...C, style, ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
+      const P = { ...BASE, ...C, style, ...MODE, ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
       mins += r.minutes; for (const k of KEYS) tot[k] += r.cnt[k] || 0;
       worst.push({ label: `${style} ${I.name} ${C.duration}s ${C.orch} ${C.connect}`, r });
     }

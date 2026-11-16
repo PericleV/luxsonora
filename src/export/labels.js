@@ -107,6 +107,13 @@ export const MEASURES = {
   saturation: { name: "Saturation", at: F => F.tim.src.sat, mean: st => st.mu.sat },
   warmth: { name: "Warmth", at: F => F.tim.src.warm, mean: st => st.mu.warm },
   brightness: { name: "Brightness", at: F => F.reg.L },
+  vertical: { name: "Vertical lines", at: F => F.enrich.vert },
+  horizontal: { name: "Horizontal lines", at: F => F.enrich.horiz },
+  diagonal: { name: "Diagonal lines", at: F => F.enrich.diag },
+  pattern: { name: "Repetition", at: F => F.enrich.pattern },
+  depth: { name: "Depth", at: F => F.enrich.depth },
+  contrast: { name: "Colour contrast", at: F => F.enrich.contrast },
+  grain: { name: "Grain", at: F => F.enrich.grain },
   saliency: { name: "Saliency", at: F => F.s }
 };
 export const DEFAULT_MEASURES = { edges: true, entropy: true, saturation: true };

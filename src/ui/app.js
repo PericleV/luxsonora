@@ -3,13 +3,14 @@ import { clamp, clampInt, lerp } from "../core/util.js";
 import { analyze } from "../core/analyze.js";
 import { computeSaliency } from "../core/saliency.js";
 import { gazePath, readPoints, coverage, backgroundZone, saliencyAt, newId, DEFAULT_RADIUS } from "../core/focus.js";
-import { hashBytes } from "../core/util.js";
+import { hashBytes, boxBlur } from "../core/util.js";
+import { ENRICH, ENRICH_KEYS, enrichBase, enrichOn, linesWord } from "../core/enrich.js";
 import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
 import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT } from "../core/gen.js";
-import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable, RAW_CC, RAW_CC_DESC } from "../core/raw.js";
+import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable, RAW_CC, RAW_CC_DESC, ENRICH_READS } from "../core/raw.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
@@ -56,7 +57,7 @@ const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
   style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
-  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, rawBpm: 0, rawScale: true, rawTracks: [], rawCut: [], rawCC: {}, layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, enrich: false, enrichUse: {}, rawBpm: 0, rawScale: true, rawTracks: [], rawCut: [], rawCC: {}, layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
   // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
@@ -608,7 +609,8 @@ function openNewSong(fresh = false) {
       <div class="frame" id="nsFrame"></div></details>
     <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblGen">How the song is made</div><div class="seg" id="nsGen" role="radiogroup" aria-labelledby="nsLblGen"></div><p class="snote" id="nsGenNote"></p>
-      <div class="no-raw"><label class="toggle"><input type="checkbox" id="nsBand"${pictureBandOf(P) ? " checked" : ""}><span>The picture chooses the band</span></label><p class="snote" id="nsBandNote"></p></div></div>
+      <div class="no-raw"><label class="toggle"><input type="checkbox" id="nsBand"${pictureBandOf(P) ? " checked" : ""}><span>The picture chooses the band</span></label><p class="snote" id="nsBandNote"></p></div>
+      <label class="toggle"><input type="checkbox" id="nsEnrich"${P.enrich ? " checked" : ""}><span>Enriched</span></label><p class="snote">More readings of the picture for a fuller piece: the direction of the lines, repetition, depth, colour contrast, grain and light. The Piece tab lists them, to turn any off.</p></div>
     <div class="field"><div class="flabel" id="nsLblDur">Duration</div><div class="seg" id="nsDur" role="radiogroup" aria-labelledby="nsLblDur"></div></div>
     <div class="field"><div class="srow"><label class="flabel" for="nsCount">Focus points</label><b id="nsCountVal" class="mono"></b></div>
       <input type="range" id="nsCount" min="2" max="24" step="1" value="${Math.min(24, fresh ? sug : P.count || sug)}">
@@ -707,7 +709,7 @@ function openNewSong(fresh = false) {
     if ($b("#nsStyle").value !== P.style) resetInstrumentChoice();
     P.style = $b("#nsStyle").value; P.duration = dur; P.placement = $b("#nsPlace").value; P.count = Number($b("#nsCount").value); P.returns = Number($b("#nsBack").value); P.returnsExact = true;
     if (P.melody !== mel) { P.melody = mel; STORY.failed = false; }
-    P.connect = conn; P.orch = orch; P.circleSize = circle; P.gen = gen; P.pictureBand = band;
+    P.connect = conn; P.orch = orch; P.circleSize = circle; P.gen = gen; P.pictureBand = band; P.enrich = $b("#nsEnrich").checked;
     if (P.groove !== groove) { P.groove = groove; GROOVE.failed = false; }
     SL.reverb.set(STYLES[P.style].reverb, false); ATTN.failed = false;
   };
@@ -990,6 +992,8 @@ function buildStaticOverlays() {
   OV.edge = e; OV.reg = r;
 }
 const HEAT = [[0, [20, 40, 90, 0]], [0.35, [47, 111, 179, 120]], [0.7, [242, 177, 69, 190]], [1, [255, 246, 220, 235]]];
+// a fully saturated colour for a hue in degrees, 0-255
+function hueRgb(h) { const f = n => { const k = (n + h / 60) % 6; return 255 * (1 - Math.max(0, Math.min(k, 4 - k, 1))); }; return [f(5), f(3), f(1)]; }
 function heat(v) {
   for (let i = 1; i < HEAT.length; i++) if (v <= HEAT[i][0]) {
     const [a0, c0] = HEAT[i - 1], [a1, c1] = HEAT[i], t = (v - a0) / (a1 - a0);
@@ -1015,7 +1019,17 @@ function videoMaps() {
     texture: mk(p => { const h = heat(clamp((regions[labels[p]].entropy ?? 0.5) * 1.1)); return [h[0], h[1], h[2], 255]; }),
     attention: mk(p => { const h = heat(SAL.map[p]); return [h[0], h[1], h[2], 255]; }),
     regions: mk(p => { const x = p % W, y = (p / W) | 0, l = labels[p], bnd = (x < W - 1 && labels[p + 1] !== l) || (y < H - 1 && labels[p + W] !== l), c = rgb[CL.assign[l] % rgb.length]; return bnd ? [255, 255, 255, 255] : [c[0], c[1], c[2], 255]; }),
-    colour: mk(p => { const l = labels[p] * 4, n = sum[l + 3] || 1; return [sum[l] / n, sum[l + 1] / n, sum[l + 2] / n, 255]; })
+    colour: mk(p => { const l = labels[p] * 4, n = sum[l + 3] || 1; return [sum[l] / n, sum[l + 1] / n, sum[l + 2] / n, 255]; }),
+    // the readings of Enriched: the direction of the lines as a colour (horizontal red, vertical
+    // cyan, the diagonals between), bright where the edge is strong; and the depth, sharp areas
+    // (near) bright, soft ones (far) dark
+    lines: mk(p => { const x = p % W, y = (p / W) | 0; if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) return [10, 12, 18, 255];
+      const L = A.L, gx = L[p - W + 1] + 2 * L[p + 1] + L[p + W + 1] - L[p - W - 1] - 2 * L[p - 1] - L[p + W - 1], gy = L[p + W - 1] + 2 * L[p + W] + L[p + W + 1] - L[p - W - 1] - 2 * L[p - W] - L[p - W + 1];
+      let a = Math.atan2(gy, gx) + Math.PI / 2; a = ((a % Math.PI) + Math.PI) % Math.PI;
+      const v = clamp(mag[p] / p95), c = hueRgb((a / Math.PI) * 360); return [10 + c[0] * v, 12 + c[1] * v, 18 + c[2] * v, 255]; }),
+    depth: (() => { const L = A.L, lap = new Float32Array(N); for (let p = 0; p < N; p++) { const x = p % W, y = (p / W) | 0; if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue; lap[p] = Math.abs(4 * L[p] - L[p - 1] - L[p + 1] - L[p - W] - L[p + W]); }
+      const sm = boxBlur(lap, W, H, 3, 2), base = enrichBase(A), lo = base.sharp[0], hi = base.sharp[1];
+      return mk(p => { const h = heat(clamp((sm[p] - lo) / Math.max(1e-6, hi - lo))); return [h[0], h[1], h[2], 255]; }); })()
   };
   VMAPS = { A, SAL, maps };
   return maps;
@@ -1299,7 +1313,8 @@ function drawTimeline() {
       const rowH = Math.max(2, Math.min(4, lh / (span + 1)));
       for (const n of ns) {
         const y = y0 + (1 - (n.midi - lo) / span) * (lh - rowH);
-        g.globalAlpha = (on ? 1 : 0.18) * (l === "pad" ? 0.55 : 0.95);
+        // a note's intensity follows its volume: a soft one is drawn faint, a loud one full
+        g.globalAlpha = (on ? 1 : 0.18) * (l === "pad" ? 0.6 : 1) * (0.28 + 0.72 * Math.min(1, n.vel / 110));
         const nw = Math.max(1.5, X(n.t + n.dur) - X(n.t) - 1);
         g.fillRect(X(n.t), y, nw, rowH);
         if (n.rawKey) { TL_NOTES.push({ key: n.rawKey, x0: X(n.t) - 1, x1: X(n.t) + Math.max(4, nw) + 1, y0: y - 3, y1: y + rowH + 3 }); if (RSEL.has(n.rawKey)) { g.globalAlpha = 1; g.strokeStyle = text; g.lineWidth = 1.5; g.strokeRect(X(n.t) - 1, y - 1.5, nw + 2, rowH + 3); } }
@@ -1459,6 +1474,20 @@ function envPoints(T) {
   for (let i = 0; i <= 80; i++) { const t = (end * i) / 80; pts.push([t, level(t)]); }
   return pts;
 }
+// The readings of Enriched at a place, and what they did there (when it is on)
+function enrichRows(sc, F) {
+  const e = F.enrich, on = k => !sc.raw && enrichOn(P, k), pct = v => Math.round(v * 100) + "%";
+  const clear = Math.max(e.vert, e.horiz, e.diag) - 0.34 > 0.06 && e.order > 0.05, w = clear ? linesWord(e) : "no clear direction", harm = (sc.slots || []).find(S => S.point === F.idx && S.enriched);
+  const sus = sc.notes.some(n => n.sus && n.point === F.idx), shaker = sc.notes.some(n => n.layer === "perc" && n.point === F.idx && n.enrich);
+  return [
+    ["Lines", `${w}, ${pct(Math.max(e.vert, e.horiz, e.diag))} (vertical ${pct(e.vert)}, horizontal ${pct(e.horiz)}, diagonal ${pct(e.diag)})`, on("lines") && clear ? (w === "vertical" ? "shorter notes" : w === "horizontal" ? "legato" : "arpeggios") + (harm ? `; accompaniment: ${HARM_NAME[harm.harmKind] || harm.harmKind}` : "") : "how ordered: " + pct(e.order)],
+    ["Repetition", pct(e.pattern) + (e.period && e.pattern > 0.3 ? `, every ${e.period} px` : ""), on("pattern") && e.pattern > 0.7 ? "its motif repeats as it is" + (harm && harm.harmKind === "ostinato" ? ", its accompaniment too" : "") : ""],
+    ["Depth", pct(e.depth) + (e.depth > 0.6 ? " (far)" : e.depth < 0.4 ? " (near)" : ""), on("depth") ? (e.depth > 0.5 ? "softer and darker" : "closer and brighter") : ""],
+    ["Colour contrast", pct(e.contrast), on("contrast") && sus ? "a 4-3 suspension in the harmony, resolved" : ""],
+    ["Grain", pct(e.grain), on("grain") && shaker ? "a soft shaker on the drums" : ""],
+    ["Light", e.lightX > 0.1 ? "from the right" : e.lightX < -0.1 ? "from the left" : "centred", on("light") ? "the melody leans toward it" : ""]
+  ];
+}
 // list: [[colour, envelope, dashed]]
 function adsrSvg(list, label = "Envelope") {
   const W = 300, H = 80, top = 6, base = H - 4, tmax = Math.max(...list.map(([, T]) => T.a + 0.5 + T.r * 1.2));
@@ -1559,6 +1588,8 @@ function renderPoint() {
     <h3>Timbre</h3>
     ${timbreHtml || (sc.raw ? '<p class="snote">Raw: the instruments play as they are; the picture sets the notes, not the timbre.</p>' : "")}
     ${F.obj && CAT[F.obj.category] && P.wSem > 0 ? `<p class="note">The object “${esc(F.obj.name)}” pulls the timbre toward ${CAT[F.obj.category].label}.</p>` : ""}
+    ${F.enrich ? `<h3>Readings${P.enrich ? " (Enriched)" : ""}</h3>
+    <dl>${kv(enrichRows(sc, F))}</dl>` : ""}
     ${sc.raw ? `<h3>Music (raw)</h3>
     <dl>${kv(sc.raw.tracks.map(T => { const ns = sc.notes.filter(n => n.layer === T.id && n.point === F.idx); return [layerName(T.id), `${ns.length} ${T.id === "perc" ? "hit" : "note"}${ns.length === 1 ? "" : "s"}${T.id !== "perc" && ns.length ? ": " + ns.slice(0, 8).map(n => midiName(n.midi)).join(" ") + (ns.length > 8 ? " …" : "") : ""}`, `reads the ${(RAW_READS[T.read] || T.read).toLowerCase()}: ${RAW_READ_DESC[T.read] || ""}`]; }).concat([["Stereo", panTxt, "from the horizontal position"]]))}</dl>` : `<h3>Music</h3>
     <dl>${kv([
@@ -2209,6 +2240,9 @@ function bandSummary(sc) {
 function initGen() {
   GEN_SEG = makeSeg($("#genSeg"), Object.entries(GEN_MODES), genOf(P), setGen);
   $("#bandPick").addEventListener("change", e => { P.pictureBand = e.target.checked; if (P.gen !== "raw") P.gen = "composed"; invalidate(LV.MUSIC); });
+  $("#enrichList").innerHTML = ENRICH_KEYS.map(k => `<label class="toggle"><input type="checkbox" data-en="${k}"><span>${esc(ENRICH[k].name)}<small>${esc(ENRICH[k].does)}</small></span></label>`).join("");
+  $("#enrichOn").addEventListener("change", e => { P.enrich = e.target.checked; invalidate(LV.MUSIC); });
+  $("#enrichList").addEventListener("change", e => { const k = e.target.dataset.en; if (!k) return; P.enrichUse = { ...(P.enrichUse || {}), [k]: e.target.checked }; invalidate(LV.MUSIC); });
   const keyOpts = `<option value="auto">From the picture</option>${NOTE_SH.map((n, i) => `<option value="${i}">${n}${[1, 3, 6, 8, 10].includes(i) ? " / " + NOTE_FL[i] : ""}</option>`).join("")}`;
   $("#rawBox").innerHTML = `
     <div class="field"><div class="flabel" id="lblRawTempo">Tempo</div><div class="seg seg-sm" id="rawTempoSeg" role="radiogroup" aria-labelledby="lblRawTempo"></div>
@@ -2248,6 +2282,9 @@ function renderRaw() {
   const raw = P.gen === "raw";
   GEN_SEG.set(genOf(P)); $("#genNote").textContent = GEN_DESC[genOf(P)] || "";
   $("#bandPick").checked = pictureBandOf(P);
+  $("#enrichOn").checked = P.enrich === true; $("#enrichList").hidden = P.enrich !== true;
+  $("#enrichList").querySelectorAll("[data-en]").forEach(c => { c.checked = !P.enrichUse || P.enrichUse[c.dataset.en] !== false; });
+  $("#enrichNote").textContent = P.enrich ? (raw ? "Five more readings of the picture: tracks can read the direction of the lines, repetition, depth, colour contrast and grain, and the light leans the sound toward it." : "Six more readings of the picture shape the piece, always under the genre's rules: the articulation, the accompaniment, the distance, suspensions, a shaker, the stereo.") : "Off: the piece as it is. On: more readings of the picture for a fuller piece.";
   $("#bandNote").textContent = [BAND_DESC[pictureBandOf(P) ? "on" : "off"], bandSummary(SCORE)].filter(Boolean).join(" ");
   document.body.classList.toggle("gen-raw", raw);
   // the controls a raw piece does not use (its tempo and key are in the Raw panel)
@@ -2257,7 +2294,7 @@ function renderRaw() {
   const bpm = $("#rawBpm"); $("#rawBpmRow").hidden = !set; bpm.value = set ? P.rawBpm : Math.round(SCORE ? SCORE.bpm : 100); $("#rawBpmVal").textContent = bpm.value + " BPM"; fillRange(bpm);
   $("#rawTempoNote").textContent = SCORE ? `${set ? "Set" : "From the picture"}: ${nf1(SCORE.bpm)} BPM${set && Math.abs(SCORE.bpm - P.rawBpm) > 0.5 ? `, the nearest tempo that fits ${SCORE.seconds} s in whole bars` : ""}.` : "";
   $("#rawKey").value = P.keyMode === "manual" ? String(P.keyPc) : "auto"; $("#rawScaleSel").value = P.scale || "auto"; $("#rawScaleOn").checked = P.rawScale !== false;
-  const opts = cur => Object.entries(RAW_READS).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}</option>`).join("");
+  const opts = cur => Object.entries(RAW_READS).filter(([k]) => P.enrich || !ENRICH_READS.has(k) || k === cur).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}</option>`).join("");
   const list = rawList(), one = list.length < 2, cut = (SCORE && SCORE.raw && SCORE.raw.cut) || 0;
   $("#rawCutNote").innerHTML = cut ? `${cut} note${cut === 1 ? "" : "s"} deleted. <button type="button" class="linkbtn" id="rawRestore">Bring them back</button>` : "";
   $("#rawList").innerHTML = list.map(t => { const drums = t.preset === DRUMS_KEY, lane = drums ? "perc" : t.id, iname = drums ? "Drum kit: " + PERC_NAME[P.style] : (LIBRARY[t.preset] || {}).name || t.preset; return `<li data-id="${esc(t.id)}" style="--dot:${laneColor(lane)}"><span class="odot" aria-hidden="true"></span>
@@ -2279,7 +2316,7 @@ function pickRawInstrument(id) {
   const items = [...(hasDrums ? [] : [{ key: DRUMS_KEY, name: "Drum kit: " + PERC_NAME[P.style], group: "Drums", sub: "kick, snare and hi-hat, from the picture" }]),
     ...Object.entries(LIBRARY).filter(([k]) => rawPlayable(k)).map(([k, v]) => ({ key: k, name: v.name, group: band.has(k) ? bandName : v.family || (v.type === "sample" ? "Recommended (sampled)" : "Synthesizers") }))];
   items.sort((a, b) => (b.group === "Drums") - (a.group === "Drums") || (b.group === bandName) - (a.group === bandName) || a.group.localeCompare(b.group));
-  const readOpts = cur => Object.entries(RAW_READS).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}: ${esc(RAW_READ_DESC[k])}</option>`).join("");
+  const readOpts = cur => Object.entries(RAW_READS).filter(([k]) => P.enrich || !ENRICH_READS.has(k) || k === cur).map(([k, n]) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(n)}: ${esc(RAW_READ_DESC[k])}</option>`).join("");
   openPicker({
     title: T ? `${RAW_READS[T.read]} track: instrument` : "Add a track", items, current: T ? T.preset : "", searchLabel: "Search instruments",
     note: T ? "Sampled instruments download when first used." : "Pick its instrument; then choose what it reads in the Raw panel.",
@@ -2627,7 +2664,13 @@ function videoCaption(sc) {
     point: i => { const F = sc.points[i]; return `Point ${i + 1} · ${SECTION_NAME[F.section] || "Development"} · chord ${romanOf(F.root, sc.modeIv)}`; }
   };
 }
-function refreshLabels() { if (EXPORT && SCORE) EXPORT.renderLabels(SCORE.points.length, noteTracks(SCORE, Object.fromEntries(laneKeys().map(l => [l, layerName(l) + (extraOf(l) ? ": " + extraOf(l).name : "")])))); }
+// the tracks of the piece, by name, for the Export tab: what a Notes label and a ripple can follow
+function refreshLabels() {
+  if (!EXPORT || !SCORE) return;
+  const names = Object.fromEntries(laneKeys().map(l => [l, l === "perc" ? "Drums" : layerName(l) + (SCORE.inst[l] ? ": " + SCORE.inst[l].name : "")]));
+  const playing = laneKeys().filter(l => SCORE.notes.some(n => n.layer === l));
+  EXPORT.renderLabels(SCORE.points.length, noteTracks(SCORE, names), playing.map(l => [l, names[l]]));
+}
 // the sound analysis for the preview: from the notes at once, from the rendered audio once the
 // piece has been rendered in the background (only when the look reacts to the sound)
 let AN = { key: null, an: null, job: false };

@@ -30,6 +30,7 @@ export const RULES_INFO = {
   rightOfWay: { group: "voices", name: "Melody has right of way", desc: "A note of an added instrument that is off the chord and a semitone from the melody note sounding with it moves to a chord tone clear of the melody." },
   develop: { group: "melody", name: "Long places develop their motif", desc: "A place of two bars or more plays its motif, then its sequence, its inversion and a close that comes home, a statement a bar, instead of holding a few notes for bars." },
   strays: { group: "voices", name: "No stray notes", desc: "An added instrument's lone note, far from the rest of its part, is left out (an ornament keeps it, softer, with a grace note); an instrument with almost nothing to play in this picture is replaced by the next one in the style's list, or stays out." },
+  lone: { group: "voices", name: "No lone notes", desc: "A short note alone on its track, with nothing else on it for four beats either side, becomes a small figure: two or three tones of the chord, an eighth apart, each softer than the one before, instead of one hit that falls out of place." },
   approach: { group: "voices", name: "Bass approach notes", desc: "In the styles that use them, the bass walks into the next chord by a step." },
   stopDown: { group: "genre", name: "Break before the climax", desc: "In trailer styles (epic, metal) everything stops for half a beat right before the climax." },
   sidechain: { group: "genre", name: "Pumping (sidechain)", desc: "In electronic styles the other parts duck on every kick." },

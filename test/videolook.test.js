@@ -62,7 +62,7 @@ describe("labels", () => {
     expect(measuresLabel(F, stats, { edges: true, warmth: true }, true)).toBe("Edges 0.50 · mean 0.30\nWarmth 0.40 · mean 0.35");
     expect(measuresLabel(F, stats, { brightness: true, saliency: true }, true)).toBe("Brightness 0.60\nSaliency 0.80");
     expect(measuresLabel(F, stats, {})).toBe("");
-    expect(Object.keys(MEASURES).length).toBe(8);
+    expect(Object.keys(MEASURES).length).toBe(15);
   });
   it("the user's own text by point number (empty shows nothing)", () => {
     expect(labelFor("custom", 0, null, { 1: " Turnul " })).toBe("Turnul");

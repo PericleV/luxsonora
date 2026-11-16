@@ -19,8 +19,11 @@
 // chosen in the Piece tab); off, every semitone can sound.
 import { clamp, clampInt } from "./util.js";
 import { LIBRARY } from "./instruments.js";
+import { enrichAt } from "./enrich.js";
 
-export const RAW_READS = { height: "Height", light: "Brightness", colour: "Colour", saturation: "Saturation", warmth: "Warmth", edges: "Edges", texture: "Texture" };
+export const RAW_READS = { height: "Height", light: "Brightness", colour: "Colour", saturation: "Saturation", warmth: "Warmth", edges: "Edges", texture: "Texture", direction: "Direction", pattern: "Repetition", depth: "Depth", contrast: "Colour contrast", grain: "Grain" };
+// the readings Enriched adds (enrich.js), offered while it is on
+export const ENRICH_READS = new Set(["direction", "pattern", "depth", "contrast", "grain"]);
 export const RAW_READ_DESC = {
   height: "high in the picture, high notes",
   light: "bright areas high, dark areas low",
@@ -28,7 +31,12 @@ export const RAW_READ_DESC = {
   saturation: "vivid colours high, muted ones low",
   warmth: "warm colours high, cool ones low",
   edges: "a short note each time the eye crosses an edge",
-  texture: "more notes where the picture is busy"
+  texture: "more notes where the picture is busy",
+  direction: "the angle of the lines: horizontal low, vertical in the middle, the other diagonal high",
+  pattern: "high where the picture repeats itself",
+  depth: "far, soft-focus areas low, sharp ones high",
+  contrast: "high where opposite colours meet",
+  grain: "high where the picture is grainy"
 };
 // A raw piece has its own tracks (P.rawTracks): [{ id, read, preset }], preset "drums" for the
 // style's drum kit (one at most, on the rhythm track). It starts with one: the height of the eye,
@@ -36,7 +44,7 @@ export const RAW_READ_DESC = {
 export const DRUMS_KEY = "drums";
 export const READ_ORDER = ["height", "colour", "light", "texture", "edges", "saturation", "warmth"];
 // the colour of a raw track's lane (the role whose colour it takes)
-export const READ_ROLE = { height: "counter", light: "sustain", colour: "ornament", saturation: "double", warmth: "drone", edges: "pulse", texture: "runs" };
+export const READ_ROLE = { height: "counter", light: "sustain", colour: "ornament", saturation: "double", warmth: "drone", edges: "pulse", texture: "runs", direction: "ostinato", pattern: "ostinato", depth: "sustain", contrast: "double", grain: "runs" };
 // instruments a raw track can play: any but the texture wavetables (they need a place's wave)
 export const rawPlayable = k => k === DRUMS_KEY || (!!LIBRARY[k] && LIBRARY[k].type !== "wave");
 export function rawTrackList(P, defaultPreset) {
@@ -98,18 +106,20 @@ const DRUMS = [36, 38, 42];
  * The raw notes of a score (sc: a composed score, for its places, times, key, instruments and
  * timbres). tracks: [{ id, read }]. Returns the notes, in time order.
  */
-export function rawNotes(sc, A, tracks, { scale = true } = {}) {
+export function rawNotes(sc, A, tracks, { scale = true, lean = 0 } = {}) {
   const total = sc.total, pos = rawPath(sc.points, total);
   // the piece's scale (its melody's: a pentatonic when one is chosen)
   const pcs = scale ? new Set((sc.melIv || sc.modeIv).map(v => (((v + sc.pc) % 12) + 12) % 12)) : null;
   // the samples along the path, on the finest grid, shared by the tracks
   const G = 0.25, cache = new Map();
-  const at = t => { const k = Math.round(t / G); let s = cache.get(k); if (!s) { const p = pos(k * G); s = { ...rawSample(A, p.x, p.y), x: p.x, j: p.j }; cache.set(k, s); } return s; };
+  // the readings of Enriched only where a track asks for them (they cost more)
+  const needE = tracks.some(t => ENRICH_READS.has(t.read));
+  const at = t => { const k = Math.round(t / G); let s = cache.get(k); if (!s) { const p = pos(k * G); s = { ...rawSample(A, p.x, p.y), x: p.x, j: p.j }; if (needE) s.en = enrichAt(A, p.x, p.y, 0.035); cache.set(k, s); } return s; };
   const notes = [];
   for (const { id, read, preset } of tracks) {
     const perc = id === "perc", [lo, hi, step0, hold] = perc ? [0, 0, 0.25, 0] : trackShape(preset), step = read === "edges" || read === "texture" ? 0.25 : step0;
     const timOf = () => (perc ? undefined : sc.inst[id]);
-    const panOf = x => clamp((x - 0.5) * 1.2, -0.7, 0.7) * (id === "bass" || id === "pad" ? 0.3 : 1);
+    const panOf = x => clamp((x - 0.5) * 1.2 + lean, -0.8, 0.8);
     const velOf = s => clampInt(Math.round(40 + 70 * (read === "light" ? 0.4 + 0.6 * s.sat : 0.6 * s.L + 0.4 * s.edge)), 1, 127);
     const pitchOf = (s, v) => {
       if (read === "colour") {
@@ -120,7 +130,8 @@ export function rawNotes(sc, A, tracks, { scale = true } = {}) {
       }
       return snap(lo + clamp(v) * (hi - lo), pcs, lo, hi);
     };
-    const value = s => (read === "height" ? 1 - s.y : read === "light" ? s.L : read === "saturation" ? s.sat : read === "warmth" ? s.warm : read === "texture" ? s.L : s.L);
+    const value = s => (read === "height" ? 1 - s.y : read === "light" ? s.L : read === "saturation" ? s.sat : read === "warmth" ? s.warm : read === "texture" ? s.L
+      : read === "direction" ? Math.abs(Math.sin(s.en.angle)) * (s.en.diag > Math.max(s.en.vert, s.en.horiz) ? 1.4 : 1) / 1.4 : read === "pattern" ? s.en.pattern : read === "depth" ? 1 - s.en.depth : read === "contrast" ? s.en.contrast : read === "grain" ? s.en.grain : s.L);
     // each note keeps what the picture was under it (for its controllers and its track's effects)
     // and a key that names it while the piece stays the same (to delete it or change it)
     const push = (t, dur, midi, s) => notes.push({

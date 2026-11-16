@@ -360,7 +360,8 @@ export function doubleNotes(score) {
   for (const nn of lead) {
     const F = score.points[nn.point];
     if (!F || (!L.only && F.tension < thr)) continue;
-    const below = nn.midi - 12 >= 48, m = (d % 2 === 0) === below ? nn.midi - 12 : nn.midi + 12;
+    // an octave away, below or above, never above the top of the range (MIDI 96)
+    const below = nn.midi - 12 >= 48, m0 = (d % 2 === 0) === below ? nn.midi - 12 : nn.midi + 12, m = m0 > 96 ? nn.midi - 12 : m0;
     notes.push({ layer: L.id, t: nn.t, dur: nn.dur, midi: m, vel: Math.max(1, Math.round(nn.vel * 0.7)), tim: (F.timX && F.timX[L.id]) || score.inst[L.id], pan: ROLES.double.pan, point: nn.point, ...(nn.chromatic ? { chromatic: true } : {}) });
   }
   });
@@ -412,6 +413,50 @@ export function tidyStrays(notes, layers, body, slotAt) {
       if (g !== null && n.t - 0.25 >= 0) notes.push({ ...n, t: n.t - 0.25, dur: 0.25, midi: g, vel: Math.max(1, Math.round(n.vel * 0.72)), grace: true });
     });
     if (drop.size) for (let k = notes.length - 1; k >= 0; k--) if (drop.has(notes[k])) notes.splice(k, 1);
+  }
+  return notes;
+}
+
+/*
+ * No lone notes: a short note (under two beats) alone on its track, with no other note of that
+ * track starting within four beats before or after it, falls out of place as one hit. It becomes a
+ * small figure instead: the note, then one or two more tones of the chord sounding there, an eighth
+ * apart, each softer than the one before (78%, then 60%), the last held a little longer; it climbs
+ * for the melody and the ornaments and falls for the accompaniment (away from the melody), and
+ * stays inside its chord and before the ending. A note at the very end of its chord is led into
+ * instead, by one or two softer tones before it. The drums, the intro, the cadence and held notes
+ * are left as they are.
+ */
+export function figureLoneNotes(notes, body, slotAt, extra = []) {
+  const roleOf = l => ((extra.find(L => L.id === l) || {}).role) || l;
+  const byLayer = {};
+  for (const n of notes) if (n.layer !== "perc" && !n.intro && n.point !== -2 && n.point !== -3 && n.t < body - 1e-9) (byLayer[n.layer] = byLayer[n.layer] || []).push(n);
+  for (const [l, ns] of Object.entries(byLayer)) {
+    const role = roleOf(l), prefUp = l === "lead" || role === "ornament" || role === "counter" || role === "runs" || role === "double";
+    // the track's own register: a figure stays inside it (a track with few notes, within a fifth)
+    const lo = Math.min(...ns.map(n => n.midi)), hi = Math.max(...ns.map(n => n.midi));
+    const toneSet = (n, S, dir) => { const out = [], a = ns.length >= 3 ? lo : n.midi - 7, b = ns.length >= 3 ? hi : n.midi + 7; for (let k = 1; out.length < 2 && k <= 12; k++) { const m = n.midi + dir * k; if (m < Math.max(28, a) || m > Math.min(96, b)) break; if (S.pcs.has(PCS(m))) out.push(m); } return out; };
+    for (const n of ns) {
+      if (n.dur >= 2 || n.figure || ns.some(m => m !== n && Math.abs(m.t - n.t) <= 4 + 1e-9)) continue;
+      const S = slotAt(n.t); if (!S || !S.pcs) continue;
+      const end = Math.min(S.t1, body);
+      // the preferred way, or the other when the register leaves no room
+      let up = prefUp, tones = toneSet(n, S, up ? 1 : -1);
+      if (!tones.length) { up = !up; tones = toneSet(n, S, up ? 1 : -1); }
+      const fig = tones.filter((m, i) => n.t + 0.5 * (i + 1) + 0.25 <= end + 1e-9);
+      if (!fig.length) {
+        // no room after it (the chord ends): the figure leads into the note instead, softer, from
+        // the other side
+        let lead = toneSet(n, S, up ? -1 : 1); if (!lead.length) lead = toneSet(n, S, up ? 1 : -1);
+        const pre = lead.filter((m, i) => n.t - 0.5 * (i + 1) >= S.t0 - 1e-9 && n.t - 0.5 * (i + 1) >= 0);
+        if (!pre.length) continue;
+        n.figure = true;
+        pre.forEach((m, i) => notes.push({ ...n, t: n.t - 0.5 * (i + 1), dur: 0.5, midi: m, vel: Math.max(1, Math.round(n.vel * (i === 0 ? 0.7 : 0.55))), glide: null, figure: true, ...(n.dbl ? { dbl: true } : {}) }));
+        continue;
+      }
+      n.dur = Math.min(n.dur, 0.5); n.figure = true;
+      fig.forEach((m, i) => notes.push({ ...n, t: n.t + 0.5 * (i + 1), dur: i === fig.length - 1 ? Math.min(1, end - (n.t + 0.5 * (i + 1))) : 0.5, midi: m, vel: Math.max(1, Math.round(n.vel * (i === 0 ? 0.78 : 0.6))), glide: null, figure: true, ...(n.dbl ? { dbl: true } : {}) }));
+    }
   }
   return notes;
 }

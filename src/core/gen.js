@@ -176,7 +176,10 @@ export function genreLayers(style, level, A, { samples = true, avoid = [], richn
   const own = STYLE_BAND[style] || [], more = BAND_MORE[style] || [], over = BAND_TYP[style] || {};
   const band = [...own.map(([k, r], i) => [k, r, over[k] ?? 1 - 0.05 * i]), ...more.map(([k, r]) => [k, r, over[k] ?? 0.55])].filter(([k, r]) => ROLES[r] && usable(k, samples));
   // without sampled instruments, the style's synthesizer for each role
-  const cands = band.length ? band : order.map(r => [roleInstrument(style, r, false), r, 1]).filter(([k]) => LIBRARY[k]);
+  // only roles the genre plays; a drone (a low note held for bars, which rubs against a harmony
+  // voiced low) only where the genre has one among its first roles
+  const roleOk = r => order.includes(r) && (r !== "drone" || order.indexOf("drone") < 4);
+  const cands = (band.length ? band : order.map(r => [roleInstrument(style, r, false), r, 1]).filter(([k]) => LIBRARY[k])).filter(([, r]) => roleOk(r));
   const scored = cands.map(([k, r, typ], i) => ({ k, r, i, s: W_TYP * typ + W_FIT * (0.6 * roleFit(r, pic) + 0.4 * instrumentFit(k, pic)) + 0.15 * (1 - Math.max(0, order.indexOf(r)) / order.length) + JITTER * pictureDraw(A, r + ":" + k) }))
     .sort((a, b) => b.s - a.s || a.i - b.i);
   // avoid: the names of the instruments on the main tracks

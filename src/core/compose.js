@@ -12,10 +12,11 @@ import { dramaticArc, dynamics } from "./arc.js";
 import { rhythmPart, areaDrive, DRUM_NAME } from "./rhythm.js";
 import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
-import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
+import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, figureLoneNotes, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
 import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf } from "./gen.js";
 import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY, applyRawEdits } from "./raw.js";
+import { enrichAt, enrichOn, enrichHarmKind, applyEnrich, GENERIC_HARM } from "./enrich.js";
 
 export const SCORE_VERSION = 2;
 
@@ -54,7 +55,9 @@ export function compose(args) {
   sc.extra = tonal.map(t => ({ id: t.id, role: READ_ROLE[t.read], preset: t.preset, name: LIBRARY[t.preset].name, read: t.read, gain: 0.8 }));
   for (const F of sc.points) delete F.timX;
   const tracks = list.map(t => ({ id: t.preset === DRUMS_KEY ? "perc" : t.id, read: t.read, preset: t.preset }));
-  sc.notes = rawNotes(sc, args.A, tracks, { scale: P.rawScale !== false });
+  // Enriched: the light leans the whole piece toward it
+  const lean = enrichOn(P, "light") ? 0.35 * (enrichAt(args.A, 0.5, 0.5).lightX || 0) : 0;
+  sc.notes = rawNotes(sc, args.A, tracks, { scale: P.rawScale !== false, lean });
   sc.raw = { tracks, scale: P.rawScale !== false, bpm: fixed ? P.rawBpm : null };
   sc.omit = ["lead", "harm", "bass", "pad", ...(list.some(t => t.preset === DRUMS_KEY) ? [] : ["perc"])];
   sc.cadence = null; sc.modulation = null; sc.picardy = false;
@@ -113,6 +116,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   used.forEach((f, idx) => {
     // the area read by the point: its Gaussian footprint when available, else its region
     const r = f.zone || A.regions[f.region], ci = f.family ?? cl.assign[f.region], dur = plan.dur[idx];
+    // the readings of Enriched (enrich.js), kept on every place for the tabs and the video
+    const en = enrichAt(A, f.x, f.y, f.r ?? 0.07);
     const target = Math.round((1 - f.y) * range * n) - Math.round(n * 0.2 * range);
     let deg, step = 0;
     if (prevDeg === null) deg = target;
@@ -126,7 +131,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
 
     const v = (visits.get(ci) ?? -1) + 1; visits.set(ci, v);
     const mo = motifs[ci]; let iv = mo.iv.slice(), w = mo.w.slice(), variant = "original";
-    if (v > 0) {
+    // Enriched: a place that repeats a pattern keeps its motif as it is
+    if (v > 0 && enrichOn(P, "pattern") && en.pattern > 0.7) variant = "repeated (the pattern)";
+    else if (v > 0) {
       const vv = (v - 1) % 3;
       if (vv === 0) variant = "repeated";
       else if (vv === 1) { variant = "inverted"; iv = iv.map(x => -x); }
@@ -202,7 +209,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     let bm = degMidi(root, modeIv, 36 + pcOff); while (bm < 33) bm += 12; while (bm > 47) bm -= 12;
 
     const share = dur / plan.total;
-    out.push({ ...f, idx, t0: t, t1: t + dur, dur, sec: dur * spb, share, weight: plan.weights[idx], deg, step, leapShift, cluster: ci, letter: mo.letter, visit: v, variant, root, chord, bass: bm, lead, tim, pan, obj, regionSal: sal.region[r.id ?? f.region], reg: r, vel, dyn, tension: D, section, tones, glides: { harm: glide("harm", 0), bass: glide("bass", 0) } });
+    out.push({ ...f, idx, t0: t, t1: t + dur, dur, sec: dur * spb, share, weight: plan.weights[idx], deg, step, leapShift, cluster: ci, letter: mo.letter, visit: v, variant, root, chord, bass: bm, lead, tim, pan, obj, regionSal: sal.region[r.id ?? f.region], reg: r, enrich: en, vel, dyn, tension: D, section, tones, glides: { harm: glide("harm", 0), bass: glide("bass", 0) } });
     prevDeg = deg; prevVel = vel; prevTim = tim; prevPan = pan; t += dur;
   });
 
@@ -325,6 +332,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   slots.forEach((S, k) => {
     const F = S.F, D = F.tension, sec = F.section, dyn = dynamics(D), ad = areaDrive(F), next = slots[k + 1];
     S.harmKind = pickKind(R.harm, D, ad.tex, sec, arcOn);
+    // Enriched: the place's lines or its pattern choose among the generic accompaniments
+    if (P.enrich && GENERIC_HARM.has(S.harmKind) && !S.cadence && !(arcOn && sec === "intro")) { const k = enrichHarmKind(P, F.enrich); if (k) { S.harmKind = k; S.enriched = true; } }
     let bKind = pickKind(R.bass, D, ad.tex, sec, arcOn);
     // the bass enters after the introduction (drone-based styles keep a pedal; epic keeps its pulse)
     if (arcOn && sec === "intro" && bKind !== "pedal" && P.style !== "epic") bKind = "rest";
@@ -557,6 +566,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   doubleNotes({ notes, points: out, extra, inst, body: plan.body, buildUp: P.buildUp ?? 0.5 });
   // no stray notes on the added layers (a lone note far from the rest of its part)
   if (extra.length && ruleOn(P, "strays")) tidyStrays(notes, extra, plan.body, slotAt);
+  // no lone notes: a short note alone on its track becomes a small, fading figure of the chord
+  if (ruleOn(P, "lone")) figureLoneNotes(notes, plan.body, slotAt, extra);
   // Expert rules on the notes: silence, octave, dynamics, and the added instruments kept to their places
   if (P.expert && P.expert.length) applyExpertNotes(P.expert, notes, out, spb);
   if (extra.length && ruleOn(P, "rightOfWay")) melodyRightOfWay(notes, extra, slotAt);
@@ -564,6 +575,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   if (ruleOn(P, "lowClear")) clearLowRegister(notes, extra, slotAt);
   if (ruleOn(P, "restrikes")) trimRestrikes(notes, extra);
   if (ruleOn(P, "stale")) clipAtChanges(notes, slots, extra, plan.body);
+  // Enriched: articulation, distance, suspensions, a shaker, the stereo (enrich.js), once every
+  // track is written (the pad and the added tracks too, so a suspension can avoid them)
+  if (P.enrich) applyEnrich(notes, out, slots, P, { modeIv, pcOff, degMidi });
   // no ending: the piece stops with its last place (nothing generated after it)
   if (plan.end === 0) for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.point === -2 || nn.t >= plan.total - 1e-9) notes.splice(k, 1); else if (nn.t + nn.dur > plan.total) nn.dur = plan.total - nn.t; }
   // the generated intro: everything so far moves later by its length, and the intro is written before it
@@ -585,6 +599,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     if (notes.some(nn => nn.intro && nn.layer === "perc" && nn.swell)) for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.layer === "perc" && !nn.intro && (nn.swell || nn.roll) && nn.t < I + 4 - 1e-9) notes.splice(k, 1); }
   }
   const T = plan.total + I;
+  // every note inside the instruments' range (MIDI 24-96): one above it moves down an octave, one
+  // below it up (the same note of the scale, so nothing new rubs)
+  for (const nn of notes) if (nn.layer !== "perc" && Number.isFinite(nn.midi)) { while (nn.midi > 96) nn.midi -= 12; while (nn.midi < 24) nn.midi += 12; }
   for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.t >= T - 1e-9) notes.splice(k, 1); else if (nn.t + nn.dur > T) nn.dur = T - nn.t; }
   notes.sort((a, b) => a.t - b.t || a.midi - b.midi);
   return {
@@ -594,7 +611,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     cadence: plan.end > 0 ? { t: tc + I, chord: cadChord, lead: cadLead, bass: cadBass } : null,
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
     extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name, ...(L.only ? { only: true, rule: L.rule } : {}) })), expert: P.expert && P.expert.length ? P.expert : null, orch: P.orch === "custom" ? "custom" : (P.orch || "small"),
-    slots: [...(introSlot ? [introSlot] : []), ...slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null, expert: S.expert || null }))],
+    slots: [...(introSlot ? [introSlot] : []), ...slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null, expert: S.expert || null, ...(S.enriched ? { enriched: true } : {}) }))],
     modulation: mod ? { t0: mod.t0, t1: mod.t1, shift: mod.shift, dir: mod.dir, keyPc: mod.keyPc } : null, picardy: !!picardyOn, rules: P.rules || null, sidechain: ruleOn(P, "sidechain") ? R.sidechain || 0 : 0, buildUp: P.buildUp ?? 0.5
   };
 }

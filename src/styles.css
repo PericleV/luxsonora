@@ -598,6 +598,9 @@ body.gen-raw .no-raw,.newsong.gen-raw .no-raw{display:none!important}
 .rawsel .btn-sm{padding:3px 9px;font-size:12px;min-height:0}
 .ui-simple body.gen-raw #layerFx{display:block!important}
 .ccdlg .slider small{display:block;color:var(--text-3);font-size:11.5px}
+.enrichlist{display:grid;gap:6px;margin:4px 0 0 4px}
+.enrichlist[hidden]{display:none}
+.enrichlist .toggle small{display:block;color:var(--text-3);font-size:11.5px;font-weight:400}
 .dlg-pickhead{display:grid;gap:4px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
 .dlg-pickhead .pl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media (max-width:560px){

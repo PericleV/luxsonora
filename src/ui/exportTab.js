@@ -401,13 +401,19 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     const inp = e.target.closest("input[data-i]"); if (!inp) return;
     V.labelText = { ...(V.labelText || {}), [inp.dataset.i]: inp.value }; look();
   });
-  // one text box per place (count: how many places the path has); the tracks a Notes label can follow
-  let TRACKS = [["lead", "Melody"]];
-  function renderLabels(count = NPTS, tracks = TRACKS) {
-    NPTS = count || 0; TRACKS = tracks && tracks.length ? tracks : TRACKS;
-    const ts = $("#xLabelTrack"), sig = TRACKS.map(t => t.join(":")).join("|");
-    if (ts.dataset.sig !== sig) { ts.innerHTML = TRACKS.map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join(""); ts.dataset.sig = sig; }
-    ts.value = TRACKS.some(([k]) => k === V.labelTrack) ? V.labelTrack : "lead";
+  // one text box per place (count: how many places the path has); the tracks a Notes label can
+  // follow, and the tracks a ripple can follow: the ones this piece plays (the added layers and the
+  // raw tracks too). A choice the piece no longer has moves to its first track.
+  let TRACKS = [["lead", "Melody"]], RIPPLES = Object.entries(RIPPLE_TRACKS).filter(([k]) => k !== "off");
+  const fillSel = (el, items) => { const sig = items.map(t => t.join(":")).join("|"); if (el.dataset.sig !== sig) { el.innerHTML = items.map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join(""); el.dataset.sig = sig; } };
+  function renderLabels(count = NPTS, tracks = TRACKS, ripples = RIPPLES) {
+    NPTS = count || 0; TRACKS = tracks && tracks.length ? tracks : TRACKS; RIPPLES = ripples && ripples.length ? ripples : RIPPLES;
+    const ts = $("#xLabelTrack"); fillSel(ts, TRACKS);
+    if (!TRACKS.some(([k]) => k === V.labelTrack)) V.labelTrack = TRACKS[0][0];
+    ts.value = V.labelTrack;
+    const rs = $("#xRipple"); fillSel(rs, [["off", RIPPLE_TRACKS.off], ...RIPPLES]);
+    if (V.ripple && V.ripple !== "off" && !RIPPLES.some(([k]) => k === V.ripple)) { V.ripple = RIPPLES[0][0]; look(); }
+    rs.value = V.ripple || "off";
     const list = $("#xLabelList"), focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.i : null;
     list.innerHTML = Array.from({ length: NPTS }, (_, i) => `<li><span class="mono">${i + 1}</span><input type="text" class="text-input" data-i="${i + 1}" maxlength="40" placeholder="Place ${i + 1}" value="${esc((V.labelText || {})[String(i + 1)] || "")}" aria-label="Label of place ${i + 1}"></li>`).join("");
     if (focus) { const el = list.querySelector(`input[data-i="${focus}"]`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }

@@ -17,7 +17,7 @@
 //   pattern   a place that repeats keeps its motif as it is and its accompaniment broken
 //   depth     a far place softer and darker, a near one closer and brighter
 //   contrast  a 4-3 suspension in the harmony, resolved halfway through the chord
-//   grain     a soft shaker on the drums where the picture is grainy
+//   grain     where the picture is grainy, the closed hi-hat turns into a shaker (nothing added)
 //   light     the melody and the added tracks lean toward the light in the stereo
 // Everything is measured on the analysed picture, so it is the same on every device.
 import { clamp, clampInt } from "./util.js";
@@ -27,7 +27,7 @@ export const ENRICH = {
   pattern: { name: "Repetition", does: "a repeating pattern keeps its motif and repeats its accompaniment" },
   depth: { name: "Depth", does: "far, soft-focus places sound further away, sharp ones closer" },
   contrast: { name: "Colour contrast", does: "opposite colours side by side bring a suspension that resolves" },
-  grain: { name: "Grain", does: "a grainy picture adds a soft shaker" },
+  grain: { name: "Grain", does: "where the picture is grainy, the hi-hat turns into a soft shaker" },
   light: { name: "Light", does: "the sound leans toward where the light comes from" }
 };
 export const ENRICH_KEYS = Object.keys(ENRICH);
@@ -172,15 +172,20 @@ export function applyEnrich(notes, points, slots, P, { modeIv, pcOff, degMidi })
     // no third after the middle (short notes in the first half only): the resolution is added there
     if (last && !notes.some(n => n.layer === "harm" && n.t >= mid - 1e-9 && n.t < S.t1 - 1e-9 && pc(n.midi) === third)) notes.push({ ...last, midi: last.midi - up, t: mid, dur: Math.max(0.25, Math.min(last.dur, S.t1 - mid)), glide: null, sus: false, resolve: true });
   }
-  // grain: a soft shaker where the picture is grainy, if the piece has drums
+  // grain: where the picture is grainy, the closed hi-hat becomes a shaker (the same hits, softer,
+  // so nothing is added to the groove); a grainy place with no hi-hat gets a shaker on the
+  // off-beat eighths only. Only in a piece that has drums.
   if (use("grain") && notes.some(n => n.layer === "perc" && n.point >= 0)) {
-    const has = new Set(notes.filter(n => n.layer === "perc" && n.midi === 70).map(n => Math.round(n.t * 4)));
     for (const F of points) {
-      const e = F.enrich; if (!e || e.grain < 0.55) continue;
-      const step = e.grain > 0.8 ? 0.25 : 0.5;
-      for (let t = Math.ceil(F.t0 / step) * step; t < F.t1 - 1e-9; t += step) {
-        if (has.has(Math.round(t * 4))) continue;
-        notes.push({ layer: "perc", t, dur: 0.05, midi: 70, vel: Math.round(22 + 40 * e.grain * (Math.abs(t % 1) < 1e-6 ? 1 : 0.75)), point: F.idx, enrich: ["grain"] });
+      const e = F.enrich; if (!e || e.grain < 0.7) continue;
+      const mine = notes.filter(n => n.layer === "perc" && n.t >= F.t0 - 1e-9 && n.t < F.t1 - 1e-9);
+      const hats = mine.filter(n => n.midi === 42 || n.midi === 44);
+      if (hats.length) { for (const n of hats) { n.midi = 70; n.vel = Math.max(1, Math.round(n.vel * 0.8)); n.enrich = ["grain"]; } continue; }
+      if (!mine.length) continue;
+      const has = new Set(mine.map(n => Math.round(n.t * 4)));
+      for (let t = Math.floor(F.t0) + 0.5; t < F.t1 - 1e-9; t += 1) {
+        if (t < F.t0 - 1e-9 || has.has(Math.round(t * 4))) continue;
+        notes.push({ layer: "perc", t, dur: 0.05, midi: 70, vel: Math.round(20 + 14 * e.grain), point: F.idx, enrich: ["grain"] });
       }
     }
   }

@@ -7,6 +7,7 @@ import { surroundZone } from "./focus.js";
 import { pathProfile, passage } from "./passages.js";
 import { expertLayers, applyExpertChords, applyExpertNotes } from "./expert.js";
 import { introNotes } from "./intro.js";
+import { cutTails } from "./rules.js";
 import { ruleOn, planModulation, applyPivots, transposeWindow, phraseCadences, contrastOf, leapRecovery, noParallels, melodyPeak, picardy } from "./rules.js";
 import { dramaticArc, dynamics } from "./arc.js";
 import { rhythmPart, areaDrive, DRUM_NAME } from "./rhythm.js";
@@ -599,6 +600,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     if (notes.some(nn => nn.intro && nn.layer === "perc" && nn.swell)) for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.layer === "perc" && !nn.intro && (nn.swell || nn.roll) && nn.t < I + 4 - 1e-9) notes.splice(k, 1); }
   }
   const T = plan.total + I;
+  // no ringing into the next chord (rules.js): the chords as they stand now (the intro moved them)
+  if (ruleOn(P, "tails")) cutTails(notes, [...slots.map(S => ({ t0: S.t0, pcs: new Set(S.chord.map(pcOf)) })), ...(plan.end > 0 ? [{ t0: tc + I, pcs: new Set(cadChord.map(pcOf)) }] : [])].sort((a, b) => a.t0 - b.t0), spb);
   // every note inside the instruments' range (MIDI 24-96): one above it moves down an octave, one
   // below it up (the same note of the scale, so nothing new rubs)
   for (const nn of notes) if (nn.layer !== "perc" && Number.isFinite(nn.midi)) { while (nn.midi > 96) nn.midi -= 12; while (nn.midi < 24) nn.midi += 12; }

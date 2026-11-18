@@ -11,6 +11,7 @@
 // layer's bus; one SampleLoader per sample rate caches the decoded buffers across graphs, and
 // a scheduler with a very long look-ahead dispatches every note immediately (our own scheduler
 // already feeds notes ahead of time, and an OfflineAudioContext never advances while we schedule).
+import { tuneFix } from "./tuning.js";
 import { GM } from "../core/gm.js";
 import { Soundfont, SplendidGrandPiano, ElectricPiano, DrumMachine, DrumAbuse, Mellotron, Mallet, SampleLoader, Scheduler, getMellotronNames, getMalletNames, getElectricPianoNames, getDrumAbuseMachineNames } from "smplr";
 
@@ -117,7 +118,9 @@ export function playSample(G, layer, n, t0, durSec, tim) {
   // a voice sings within its range: a note outside it moves by octaves into it
   let note = n.midi;
   if (tim.range) { while (note < tim.range[0]) note += 12; while (note > tim.range[1]) note -= 12; }
-  e.inst.start({ note, velocity: Math.max(1, Math.min(127, Math.round(n.vel * (tim.lvl ?? 1)))), time: t0, duration: durSec, lpfCutoffHz: Math.min(16000, tim.cut), ampRelease: Math.max(0.05, tim.r) });
+  // an instrument measured out of tune is detuned back, note by note (tuning.js)
+  const detune = tuneFix(tim.src, note);
+  e.inst.start({ note, velocity: Math.max(1, Math.min(127, Math.round(n.vel * (tim.lvl ?? 1)))), time: t0, duration: durSec, lpfCutoffHz: Math.min(16000, tim.cut), ampRelease: Math.max(0.05, tim.r), ...(detune ? { detune } : {}) });
   return true;
 }
 // Plays a drum hit on the selected kit; returns false when it can't (use the synthesized kit).

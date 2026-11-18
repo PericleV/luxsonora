@@ -169,6 +169,7 @@ Goal: an app that turns any image into harmonious music in a chosen style, that 
 - [x] Raw: notes selected and deleted on the timeline, controllers (CC11, CC1, CC74) from the picture under each note or set by hand, each track's reverb, chorus and delay from the picture or set by hand; a chorus on every track
 - [x] Enriched: lines and directions (HOG), repetition, depth, colour contrast, grain and light, in composed pieces (under the rules) and raw ones, shown in Focus point, the labels and the place textures; the ripple follows the tracks the piece plays
 - [x] No lone notes (a short note alone on its track becomes a soft figure of the chord), notes kept in MIDI 24-96, lanes shaded by loudness; the music audit measures lone notes and thin tracks and runs with --band and --enrich
+- [x] The sampled instruments measured for tuning and the out-of-tune ones (tape voices, some basses and the choir) detuned back note by note; no release ringing into a chord it rubs against; Enriched's grain turns hi-hats into a shaker instead of adding hits
 - [ ] Zoom and pan on the picture (Ctrl + wheel, Fit)
 - [x] Twelve more styles (Lo-fi chill, Neoclassical piano, Acoustic folk, Meditation, Post-rock, Chiptune, Trip-hop, Reggae, Baroque, East Asian, Drum and bass, Techno), the styles in five groups, and the three that suit a picture suggested from its analysis
 - [ ] Styles in 3/4 and 6/8 (waltz, folk jigs): the engine is in 4/4

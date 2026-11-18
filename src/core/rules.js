@@ -30,6 +30,7 @@ export const RULES_INFO = {
   rightOfWay: { group: "voices", name: "Melody has right of way", desc: "A note of an added instrument that is off the chord and a semitone from the melody note sounding with it moves to a chord tone clear of the melody." },
   develop: { group: "melody", name: "Long places develop their motif", desc: "A place of two bars or more plays its motif, then its sequence, its inversion and a close that comes home, a statement a bar, instead of holding a few notes for bars." },
   strays: { group: "voices", name: "No stray notes", desc: "An added instrument's lone note, far from the rest of its part, is left out (an ornament keeps it, softer, with a grace note); an instrument with almost nothing to play in this picture is replaced by the next one in the style's list, or stays out." },
+  tails: { group: "harmony", name: "No ringing into the next chord", desc: "A note's sound goes on after the note ends (its release). When it would ring into a chord it rubs against (a semitone from one of its notes), it stops as the chord changes; a note the two chords share keeps its tail." },
   lone: { group: "voices", name: "No lone notes", desc: "A short note alone on its track, with nothing else on it for four beats either side, becomes a small figure: two or three tones of the chord, an eighth apart, each softer than the one before, instead of one hit that falls out of place." },
   approach: { group: "voices", name: "Bass approach notes", desc: "In the styles that use them, the bass walks into the next chord by a step." },
   stopDown: { group: "genre", name: "Break before the climax", desc: "In trailer styles (epic, metal) everything stops for half a beat right before the climax." },
@@ -229,4 +230,24 @@ export function picardy(notes, tonicPc, from) {
   // a minor third held over from before (a pad or a section still sounding) ends where the major
   // chord begins: the two thirds together are the harshest clash a last chord can have
   for (const n of notes) if (n.layer !== "perc" && n.t < from - 1e-6 && n.t + n.dur > from + 1e-6 && pc(n.midi) === minor3) n.dur = Math.max(0.1, from - n.t - 0.02);
+}
+
+// No ringing into the next chord: a note whose release (the sound after it ends, about half of its
+// release time to fall by 13 dB) would carry into the next chord, where its pitch is not a note of
+// that chord and is a semitone from one, has its release cut so it fades by the chord change.
+// chords: [{ t0, pcs }] in time order (the cadence's chord included); spb: seconds per beat.
+export function cutTails(notes, chords, spb) {
+  const pcOf = m => ((m % 12) + 12) % 12;
+  for (const n of notes) {
+    if (n.layer === "perc" || !n.tim || !Number.isFinite(n.midi)) continue;
+    const end = n.t + n.dur, r = n.tim.r || 0.2, tail = (0.5 * r) / spb;
+    const C = chords.find(C => C.t0 > n.t + 1e-6 && C.t0 >= end - 0.05 && C.t0 < end + tail);
+    if (!C) continue;
+    const p = pcOf(n.midi);
+    if (C.pcs.has(p) || ![...C.pcs].some(q => pcOf(q - p) === 1 || pcOf(p - q) === 1)) continue;
+    // the release that fades it by the chord change (a fifth of a beat at least, so it does not click)
+    const room = Math.max(0.05, (C.t0 - end) * spb + 0.05), nr = Math.max(0.05, Math.min(r, 1.2 * room));
+    if (nr < r - 1e-6) n.tim = { ...n.tim, r: nr, ...(n.tim.type === "pluck" ? { d: Math.min(n.tim.d || nr, Math.max(nr, (n.dur * spb))) } : {}) };
+  }
+  return notes;
 }

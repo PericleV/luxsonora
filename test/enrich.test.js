@@ -66,6 +66,13 @@ describe("Enriched", () => {
         expect(sc.notes.some(m => m.layer === "harm" && !m.sus && m.t >= mid - 1e-6 && m.t < S.t1 && [third, third2].includes(((m.midi % 12) + 12) % 12)), `seed ${seed}`).toBe(true);
       }
     }
+    // the shaker adds nothing to the groove: the hits are as many as without Enriched (the grain
+    // turns hi-hats into a shaker; only a grainy place without hi-hats gets a few off-beats)
+    for (const seed of [1, 3, 5]) {
+      const on = run({ ...P0, enrich: true, enrichUse: { lines: false, pattern: false, depth: false, contrast: false, light: false } }, seed), off = run({ ...P0 }, seed);
+      const hits = sc => sc.notes.filter(n => n.layer === "perc").length;
+      expect(hits(on) - hits(off), `seed ${seed}`).toBeLessThanOrEqual(0.1 * hits(off));
+    }
     const amb = run({ ...P0, style: "meditation", enrich: true });
     if (!run({ ...P0, style: "meditation" }).notes.some(n => n.layer === "perc")) expect(amb.notes.some(n => n.layer === "perc")).toBe(false);
   });

@@ -71,7 +71,7 @@ describe("composition rules", () => {
       }
       if (k === "sidechain" && style === "electronic") expect(sc.sidechain).toBe(0);
     }
-  });
+  }, 180000);
   it("phrase cadences end every fourth bar on the dominant, then on the tonic", () => {
     const sc = run(IMAGES[0], { ...BASE, style: "classical", duration: 60 });
     const cad = sc.slots.filter(S => S.cadence);

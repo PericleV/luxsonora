@@ -21,7 +21,8 @@ const strip = sc => sc.notes.map(n => [n.layer, Math.round(n.t * 1e4), Math.roun
 describe("orchestration levels", () => {
   it("Small adds nothing: the piece is the five-layer one", () => {
     const a = run({ ...P0 }), b = run({ ...P0, orch: "small" });
-    expect(b.extra).toEqual([]);
+    // (the Movement track of held bars is its own rule, motion.js)
+    expect(b.extra.filter(L => L.id !== "xm")).toEqual([]);
     expect(strip(b)).toEqual(strip(a));
   });
   it("Medium adds 2-3 layers and Full 4-6, in the style's order", () => {
@@ -64,7 +65,7 @@ describe("extra layers", () => {
   });
   it("take custom layers with their instruments", () => {
     const sc = run({ ...P0, orch: "custom", layers: [{ id: "c1", role: "counter", preset: "x.softlead" }, { id: "c2", role: "ornament", preset: "x.glass" }] });
-    expect(sc.extra.map(L => L.id)).toEqual(["c1", "c2"]);
+    expect(sc.extra.map(L => L.id).filter(id => id !== "xm")).toEqual(["c1", "c2"]);
     expect(sc.inst.c1.name).toBe("Soft lead");
     expect(sc.notes.some(n => n.layer === "c1")).toBe(true);
     for (const role of Object.keys(ROLES)) expect(ROLES[role].gain).toBeGreaterThan(0);

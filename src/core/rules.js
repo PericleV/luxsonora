@@ -14,7 +14,7 @@ import { degMidi } from "./theory.js";
 
 // Every rule the composer uses that can be turned off, in groups (the key, the mode, the tempo, the
 // genre's chord grid and drum patterns and the final cadence are the frame and always apply).
-export const RULE_GROUPS = { harmony: "Harmony", melody: "Melody", voices: "Voices", genre: "Genre", craft: "Classical craft" };
+export const RULE_GROUPS = { harmony: "Harmony", melody: "Melody", voices: "Voices", genre: "Genre", craft: "Classical craft", colour: "Colour and effects" };
 export const RULES_INFO = {
   voiceLeading: { group: "harmony", name: "Smooth chord changes", desc: "Among the chords that hold the melody note, the one sharing the most notes with the previous chord is chosen, so the harmony moves smoothly." },
   contrast: { group: "harmony", name: "Contrast moves the chords", desc: "Similar places keep chords that share notes; a strong contrast in colour or light jumps to a more distant chord." },
@@ -31,6 +31,12 @@ export const RULES_INFO = {
   develop: { group: "melody", name: "Long places develop their motif", desc: "A place of two bars or more plays its motif, then its sequence, its inversion and a close that comes home, a statement a bar, instead of holding a few notes for bars." },
   strays: { group: "voices", name: "No stray notes", desc: "An added instrument's lone note, far from the rest of its part, is left out (an ornament keeps it, softer, with a grace note); an instrument with almost nothing to play in this picture is replaced by the next one in the style's list, or stays out." },
   tails: { group: "harmony", name: "No ringing into the next chord", desc: "A note's sound goes on after the note ends (its release). When it would ring into a chord it rubs against (a semitone from one of its notes), it stops as the chord changes; a note the two chords share keeps its tail." },
+  sweep: { group: "colour", name: "Filter sweeps with the tension", desc: "The harmony and the held added tracks open their filter as the tension rises and close it when it falls, as the pad does: brighter toward the climax, softer in the calm parts." },
+  echoes: { group: "colour", name: "Echoes at phrase ends", desc: "The last note of the melody at each place comes back twice, a dotted eighth and three eighths later, softer, left then right, where it belongs to the chord sounding then." },
+  shimmer: { group: "colour", name: "Shimmer", desc: "In ambient, meditation and film styles an airy octave above the pad, very soft, rising slowly." },
+  spread: { group: "colour", name: "Wide pad", desc: "The notes of the pad struck together fan out across the stereo, low on the left, high on the right." },
+  vinyl: { group: "colour", name: "Vinyl and tape", desc: "In lo-fi and trip-hop a soft hiss and the crackle of a record under the music." },
+  motion: { group: "voices", name: "Movement in held bars", desc: "Where the accompaniment only holds a chord for a whole bar, a figure of the genre moves under the melody on its own track: a string ostinato or a violin arpeggio (film and classical styles), an arpeggiator (electronic styles), a slow harp, celesta or piano arpeggio (calm styles). Tones of the chord only, between the harmony and the melody, softly." },
   lone: { group: "voices", name: "No lone notes", desc: "A short note alone on its track, with nothing else on it for four beats either side, becomes a small figure: two or three tones of the chord, an eighth apart, each softer than the one before, instead of one hit that falls out of place." },
   approach: { group: "voices", name: "Bass approach notes", desc: "In the styles that use them, the bass walks into the next chord by a step." },
   stopDown: { group: "genre", name: "Break before the climax", desc: "In trailer styles (epic, metal) everything stops for half a beat right before the climax." },

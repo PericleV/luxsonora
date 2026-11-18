@@ -79,7 +79,7 @@ export function auditScore(sc) {
     const S = sc.slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || sc.slots[sc.slots.length - 1];
     return S ? { pcs: S.pcs, rootPc: S.rootPc, S } : { pcs: new Set(), S: null };
   };
-  const pitched = sc.notes.filter(n => !PITCHED_SKIP.has(n.layer) && Number.isFinite(n.midi));
+  const pitched = sc.notes.filter(n => !PITCHED_SKIP.has(n.layer) && Number.isFinite(n.midi)).map(n => (n.echo ? { ...n, dbl: true } : n));
   const ex = {}, cnt = {};
   const hit = (k, msg) => { cnt[k] = (cnt[k] || 0) + 1; if (EXAMPLES) (ex[k] = ex[k] || []).length < 4 && ex[k].push(msg); };
   const where = n => `${n.layer} t=${n.t.toFixed(2)} midi=${n.midi}`;

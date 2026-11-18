@@ -186,3 +186,18 @@ describe("labels that move, the sound display's shape and the new ripples", () =
     expect(LOOK_KEYS).not.toContain("labelOff");
   });
 });
+
+describe("the place's texture moves with a track", () => {
+  it("each note gives a push that dies away", async () => {
+    const { onsetEnvelope, PATCH_MOVES, defaultVideo } = await import("../src/export/video.js");
+    const L = [[1, 1, 60], [2, 0.5, 62]];
+    expect(onsetEnvelope(L, 0.5)).toBe(0);
+    expect(onsetEnvelope(L, 1)).toBeCloseTo(1, 6);
+    expect(onsetEnvelope(L, 1.15)).toBeCloseTo(Math.exp(-1), 6);
+    expect(onsetEnvelope(L, 2)).toBeCloseTo(0.5, 2);
+    expect(onsetEnvelope(L, 3)).toBeLessThan(0.01);
+    expect(onsetEnvelope(null, 1)).toBe(0);
+    expect(Object.keys(PATCH_MOVES)).toEqual(["jump", "grow", "shake", "flash"]);
+    const d = defaultVideo(); expect(d.patchTrack).toBe("off"); expect(LOOK_KEYS).toContain("patchMove");
+  });
+});

@@ -3,7 +3,7 @@
 // redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
-import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, PLACE_NOW, COVER_OUTS, LABEL_INS, LABEL_OUTS, LABEL_POS, LABEL_BEATS, LABEL_FILLS, RIPPLE_FILLS, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
+import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, PATCH_MOVES, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, PLACE_NOW, COVER_OUTS, LABEL_INS, LABEL_OUTS, LABEL_POS, LABEL_BEATS, LABEL_FILLS, RIPPLE_FILLS, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
 import { LINE_SHAPES, LINE_STYLES } from "../export/paths.js";
 import { GRADES, FONTS, QUALITY, LOOKS, pickLook, defaultEdit, curveLUT, CURVE_X } from "../export/look.js";
 import { LABEL_MODES, MEASURES, DEFAULT_MEASURES } from "../export/labels.js";
@@ -132,7 +132,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div class="flabel xsub">What the analysis saw there</div>
       <div class="field"><div class="vtoggles">${tog("xPatch", "Show the texture of each place")}</div>
         <p class="snote">When the eye arrives, the place lifts out of the picture and shows what the analysis saw there.</p>
-        <div id="xPatchBox">${sel("xPatchMap", "What it shows", opts(PATCH_MAPS))}${seg("xPatchAnim", "How it appears")}${box("xPatchLook")}<div class="vtoggles">${tog("xPatchKeep", "Visited places keep their texture")}</div></div></div>`)}
+        <div id="xPatchBox">${sel("xPatchMap", "What it shows", opts(PATCH_MAPS))}${seg("xPatchAnim", "How it appears")}${box("xPatchLook")}${sel("xPatchTrack", "Moves with", "")}<div id="xPatchMoveBox">${seg("xPatchMove", "How it moves")}${box("xPatchMoveAmt")}</div><div class="vtoggles">${tog("xPatchKeep", "Visited places keep their texture")}</div></div></div>`)}
     ${group("labels", "Labels on places", `
       ${seg("xLabels", "Labels")}
       <p class="snote" id="xLabelAbout"></p>
@@ -246,6 +246,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["xLabels", "labels", Object.entries(LABEL_MODES), false, () => vis()],
     ["xBottom", "bottom", Object.entries(BOTTOMS), false, () => vis()],
     ["xPatchAnim", "patchAnim", Object.entries(PATCH_ANIMS)],
+    ["xPatchMove", "patchMove", Object.entries(PATCH_MOVES)],
     ["xRippleLook", "rippleLook", Object.entries(RIPPLE_LOOKS), false, () => vis()],
     ["xBarOrient", "barOrient", Object.entries(BAR_ORIENT), false, () => { V.barXY = null; vis(); }],
     ["xBarDir", "barDir", Object.entries(BAR_DIR)],
@@ -258,7 +259,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const segs = {};
   for (const [id, key, items, num, after] of SEGS) segs[id] = makeSeg($("#" + id), items, String(V[key]), v => { V[key] = num === "size" ? (v === "original" ? v : Number(v)) : num ? Number(v) : v; if (after) after(); look(); });
   // ---- selects
-  const SELS = [["xLabelPos", "labelPos"], ["xLabelTrack", "labelTrack"], ["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
+  const SELS = [["xLabelPos", "labelPos"], ["xLabelTrack", "labelTrack"], ["xPatchTrack", "patchTrack"], ["xPatchMap", "patchMap"], ["xRipple", "ripple"], ["xLine", "line"], ["xGrade", "grade"], ["xFont", "font", k => onFont(k)]];
   for (const [id, key, after] of SELS) $("#" + id).addEventListener("change", e => { V[key] = e.target.value; if (after) after(V[key]); vis(); look(); });
   // ---- sliders on P.video: [host, definition]
   const pct = (key, label, def, max = 1, help) => ({ key, label, min: 0, max, step: 0.05, def, scale: 100, unit: "%", help });
@@ -307,6 +308,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     ["#xPathTime", { key: "pathTrail", label: "Trail", min: 0, max: 10, step: 1, def: 0, unit: "places", help: "Only the last few places of the path stay drawn. At 0 the whole path stays." }],
     ["#xPatchLook", pct("patchOpacity", "Texture opacity", 0.6, 1, "How strongly the analysis view shows over the picture inside the place. Lower it when a view looks too harsh.")],
     ["#xPatchLook", pct("patchSoft", "Soft edge", 0.4, 1, "How much of the circle fades out towards its edge. At 0 the place is a sharp disc with a thin ring.")],
+    ["#xPatchMoveAmt", pct("patchMoveAmt", "Amount", 0.6, 1, "How far each note moves the place.")],
     ["#xRippleAmt", pct("rippleAmt", "Strength", 0.5, 1, "How far each wave travels and how wide it is.")],
     ["#xRippleAmt", pct("rippleBand", "Band opacity", 0.5, 1, "How much the wave's band shows. Lower it when the band is too bright.")],
     ["#xRippleAmt", pct("rippleSoft", "Soft edges", 0.6, 1, "How gradually the band fades at its edges. At 0 its edges are sharp.")],
@@ -414,6 +416,10 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     const rs = $("#xRipple"); fillSel(rs, [["off", RIPPLE_TRACKS.off], ...RIPPLES]);
     if (V.ripple && V.ripple !== "off" && !RIPPLES.some(([k]) => k === V.ripple)) { V.ripple = RIPPLES[0][0]; look(); }
     rs.value = V.ripple || "off";
+    // the track the place's texture moves with (the same list)
+    const pt = $("#xPatchTrack"); fillSel(pt, [["off", "Nothing (still)"], ...RIPPLES]);
+    if (V.patchTrack && V.patchTrack !== "off" && !RIPPLES.some(([k]) => k === V.patchTrack)) { V.patchTrack = RIPPLES[0][0]; look(); }
+    pt.value = V.patchTrack || "off";
     const list = $("#xLabelList"), focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.i : null;
     list.innerHTML = Array.from({ length: NPTS }, (_, i) => `<li><span class="mono">${i + 1}</span><input type="text" class="text-input" data-i="${i + 1}" maxlength="40" placeholder="Place ${i + 1}" value="${esc((V.labelText || {})[String(i + 1)] || "")}" aria-label="Label of place ${i + 1}"></li>`).join("");
     if (focus) { const el = list.querySelector(`input[data-i="${focus}"]`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
@@ -467,6 +473,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     sl.gradeAmt.el.hidden = V.grade === "none";
     $("#xLabelOffReset").hidden = !V.labelOff || !Object.keys(V.labelOff).length;
     sl.labelBeatAmt.el.hidden = !V.labelBeat || V.labelBeat === "off";
+    $("#xPatchMoveBox").hidden = !V.patchTrack || V.patchTrack === "off";
     $("#l_xLabelBg2").hidden = !["gradient", "pulse", "cycle"].includes(V.labelFill || "solid");
     $("#l_xLabelBg span").textContent = (V.labelFill || "solid") === "solid" ? "Background" : "First colour";
     $("#l_xRippleCol2").hidden = (V.rippleFill || "solid") !== "gradient"; $("#l_xRippleCol").hidden = V.rippleFill === "rainbow";

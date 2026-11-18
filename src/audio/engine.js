@@ -120,7 +120,7 @@ export function buildGraph(ctx, reverb, mix, fx = defaultFx(), bpm = 90, extra =
     duck[l].connect(cho[l].input); cho[l].output.connect(fader[l]);
     fader[l].connect(bus); fader[l].connect(rSend[l]); rSend[l].connect(revIn); fader[l].connect(dSend[l]); dSend[l].connect(dlyIn);
   }
-  const G = { ctx, master: out, out, makeup, wet, bus: inp, fader, duck, cho, sidechain: 0, baseGain, extraIds: extra.map(L => L.id), rSend, dSend, drive, eq, mEq, comp, limiter, pre, conv, damp, dly, tone, fb, dlyOut, chDry, chWet, chDelay, lfo, lfoGain, noise: makeNoise(ctx), irSize: fx.reverb.size, bpm };
+  const G = { ctx, master: out, out, makeup, wet, mbus: bus, bus: inp, fader, duck, cho, sidechain: 0, baseGain, extraIds: extra.map(L => L.id), rSend, dSend, drive, eq, mEq, comp, limiter, pre, conv, damp, dly, tone, fb, dlyOut, chDry, chWet, chDelay, lfo, lfoGain, noise: makeNoise(ctx), irSize: fx.reverb.size, bpm };
   updateGraph(G, fx, mix, reverb, t, true);
   return G;
 }
@@ -406,6 +406,29 @@ export function ccValueAt(curve, b) {
   for (let i = 0; i + 1 < curve.length; i++) { const [b0, v0] = curve[i], [b1, v1] = curve[i + 1]; if (b < b1) return v0 + ((v1 - v0) * (b - b0)) / Math.max(1e-9, b1 - b0); }
   return curve[curve.length - 1][1];
 }
+// Vinyl and tape (lo-fi, trip-hop; sc.vinyl): a soft hiss and the crackle of a record under the
+// music, into the master bus. The crackle is drawn from a fixed seed, so a render is always the
+// same: about six small clicks a second, each a few milliseconds of high-passed noise.
+export function scheduleVinyl(G, sc, fromBeat = 0, t0 = G.ctx.currentTime) {
+  if (!sc.vinyl || !G.mbus) return;
+  const ctx = G.ctx, spb = 60 / sc.bpm, end = sc.total * spb, from = fromBeat * spb, left = end - from;
+  if (left <= 0.05) return;
+  const noise = G.noise || makeNoise(ctx);
+  // the hiss
+  const hs = ctx.createBufferSource(); hs.buffer = noise; hs.loop = true;
+  const hf = ctx.createBiquadFilter(), hg = ctx.createGain(); hf.type = "bandpass"; hf.frequency.value = 5000; hf.Q.value = 0.6; hg.gain.value = 0.012;
+  hs.connect(hf); hf.connect(hg); hg.connect(G.mbus); hs.start(t0); hs.stop(t0 + left);
+  // the crackle
+  const cf = ctx.createBiquadFilter(), cg = ctx.createGain(); cf.type = "highpass"; cf.frequency.value = 2500; cg.gain.value = 1; cf.connect(cg); cg.connect(G.mbus);
+  const rnd = mulberry32(17);
+  for (let t = 0; t < end; t += 0.04 + 0.28 * rnd()) {
+    const v = 0.02 + 0.07 * rnd() ** 2, off = rnd() * 0.9;
+    if (t < from) continue;
+    const at = t0 + (t - from), src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = noise; g.gain.setValueAtTime(v, at); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.004 + 0.004 * rnd());
+    src.connect(g); g.connect(cf); src.start(at, off, 0.012);
+  }
+}
 export function scheduleExpression(G, sc, fromBeat = 0, t0 = G.ctx.currentTime) {
   if (!sc.cc) return;
   const spb = 60 / sc.bpm;
@@ -487,7 +510,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
     if (opts.drums) applyDrums(G, opts.drums, true);
     if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
     fadeOut(G);
-    scheduleExpression(G, sc, 0, 0);
+    scheduleExpression(G, sc, 0, 0); scheduleVinyl(G, sc, 0, 0);
     for (const n of sc.notes) if (audible(mix, n.layer)) playNote(G, n, n.t * spb, n.dur * spb);
     return await ctx.startRendering();
   }
@@ -506,7 +529,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
   }));
   // the mix: the whole graph, each stem entering at its fader (set to 1: the stem already has its level)
   const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, extra);
-  fadeOut(G);
+  fadeOut(G); scheduleVinyl(G, sc, 0, 0);
   for (const [layer, buf] of stems) {
     if (!G.fader[layer]) continue;
     G.fader[layer].gain.value = 1;

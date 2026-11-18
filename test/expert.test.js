@@ -26,7 +26,7 @@ describe("expert rules", () => {
     expect(spans.length).toBeGreaterThan(0); expect(mine.length).toBeGreaterThan(0);
     for (const n of mine) expect(spans.some(([a, b]) => n.t >= a - 1e-9 && n.t < b)).toBe(true);
     expect(sc.extra.some(L => L.id === "e1" && L.only)).toBe(true);
-    expect(base.extra.length).toBe(0);
+    expect(base.extra.filter(L => L.id !== "xm").length).toBe(0);
   });
   it("silences a track at the chosen place", () => {
     const sc = run({ ...BASE, style: "rock", expert: [rule(1, { type: "point", point: 2 }, { type: "mute", layer: "perc" })] });

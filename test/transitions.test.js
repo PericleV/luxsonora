@@ -59,7 +59,7 @@ describe("smooth transitions", () => {
       const a = jumps(on), b = jumps(off);
       expect(a.cut).toBeLessThan(b.cut); expect(a.pan).toBeLessThanOrEqual(b.pan);
       // the melody is tied across boundaries: no rest shorter than half a beat between points
-      const L = on.notes.filter(n => n.layer === "lead" && n.point >= 0 && !n.dbl && n.t < on.body).sort((a, b) => a.t - b.t);
+      const L = on.notes.filter(n => n.layer === "lead" && n.point >= 0 && !n.dbl && !n.echo && n.t < on.body).sort((a, b) => a.t - b.t);
       for (let i = 1; i < L.length; i++) if (L[i].point !== L[i - 1].point) { const gap = L[i].t - (L[i - 1].t + L[i - 1].dur); expect(gap < 1e-9 || gap >= 0.5 - 1e-9).toBe(true); }
     }
   });

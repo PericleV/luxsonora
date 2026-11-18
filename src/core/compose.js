@@ -18,6 +18,7 @@ import { hashBytes } from "./util.js";
 import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf } from "./gen.js";
 import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY, applyRawEdits } from "./raw.js";
 import { enrichAt, enrichOn, enrichHarmKind, applyEnrich, GENERIC_HARM } from "./enrich.js";
+import { motionNotes, motionPreset, MOTION_ID, colourPiece } from "./motion.js";
 
 export const SCORE_VERSION = 2;
 
@@ -397,6 +398,18 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   }
   const extra = [...autoL, ...expertL];
   for (const nn of xs) { const F = out[nn.point]; if (F && F.timX) nn.tim = F.timX[nn.layer]; notes.push(nn); }
+  // movement in held bars (motion.js): a figure of the genre where the accompaniment only holds,
+  // on its own track (Movement), its timbre shaped by each place like the added tracks
+  if (ruleOn(P, "motion")) {
+    const mp = motionPreset(P.style, P.samples === true);
+    if (mp && LIBRARY[mp]) {
+      const L = { id: MOTION_ID, role: "ostinato", preset: mp, gain: 0.55, label: "Movement" };
+      setInst(L);
+      const mn = motionNotes(P.style, { notes, slots, points: out, body: plan.body, tim: inst[L.id], arcOn });
+      if (mn.length >= 4) { for (const nn of mn) { const F = out[nn.point]; if (F && F.timX) nn.tim = F.timX[L.id]; notes.push(nn); } extra.push(L); }
+      else { delete inst[L.id]; for (const F of out) if (F.timX) delete F.timX[L.id]; }
+    }
+  }
 
   // cadence: tonic chord on the last bar; every note dies out before T
   const tc = plan.body, cadBeats = plan.total - plan.body;
@@ -566,14 +579,17 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   doubleClimax(score);
   doubleNotes({ notes, points: out, extra, inst, body: plan.body, buildUp: P.buildUp ?? 0.5 });
   // no stray notes on the added layers (a lone note far from the rest of its part)
-  if (extra.length && ruleOn(P, "strays")) tidyStrays(notes, extra, plan.body, slotAt);
+  // the Movement track is written in its place (chord tones under the melody), so the rules that
+  // move or drop the notes of the added tracks leave it alone
+  const moved = extra.filter(L => L.id !== MOTION_ID);
+  if (moved.length && ruleOn(P, "strays")) tidyStrays(notes, moved, plan.body, slotAt);
   // no lone notes: a short note alone on its track becomes a small, fading figure of the chord
   if (ruleOn(P, "lone")) figureLoneNotes(notes, plan.body, slotAt, extra);
   // Expert rules on the notes: silence, octave, dynamics, and the added instruments kept to their places
   if (P.expert && P.expert.length) applyExpertNotes(P.expert, notes, out, spb);
-  if (extra.length && ruleOn(P, "rightOfWay")) melodyRightOfWay(notes, extra, slotAt);
-  if (ruleOn(P, "melodyTop")) keepMelodyOnTop(notes, extra);
-  if (ruleOn(P, "lowClear")) clearLowRegister(notes, extra, slotAt);
+  if (moved.length && ruleOn(P, "rightOfWay")) melodyRightOfWay(notes, moved, slotAt);
+  if (ruleOn(P, "melodyTop")) keepMelodyOnTop(notes, moved);
+  if (ruleOn(P, "lowClear")) clearLowRegister(notes, moved, slotAt);
   if (ruleOn(P, "restrikes")) trimRestrikes(notes, extra);
   if (ruleOn(P, "stale")) clipAtChanges(notes, slots, extra, plan.body);
   // Enriched: articulation, distance, suspensions, a shaker, the stereo (enrich.js), once every
@@ -600,6 +616,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     if (notes.some(nn => nn.intro && nn.layer === "perc" && nn.swell)) for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.layer === "perc" && !nn.intro && (nn.swell || nn.roll) && nn.t < I + 4 - 1e-9) notes.splice(k, 1); }
   }
   const T = plan.total + I;
+  // colour (motion.js): filter sweeps with the tension, echoes at phrase ends, a shimmer above the
+  // pad, the pad spread across the stereo; then the tails are checked against the chords
+  colourPiece(notes, out, slots, P.style, { sweep: ruleOn(P, "sweep"), echoes: ruleOn(P, "echoes"), shimmer: ruleOn(P, "shimmer"), spread: ruleOn(P, "spread"), body: plan.body + I });
   // no ringing into the next chord (rules.js): the chords as they stand now (the intro moved them)
   if (ruleOn(P, "tails")) cutTails(notes, [...slots.map(S => ({ t0: S.t0, pcs: new Set(S.chord.map(pcOf)) })), ...(plan.end > 0 ? [{ t0: tc + I, pcs: new Set(cadChord.map(pcOf)) }] : [])].sort((a, b) => a.t0 - b.t0), spb);
   // every note inside the instruments' range (MIDI 24-96): one above it moves down an octave, one
@@ -613,8 +632,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     pc, pcOff, modeKey, modeIv, melIv, major, val, energy, notes, points: out, stats, keyManual: P.keyMode === "manual", scaleManual: !!scale, pent, smooth,
     cadence: plan.end > 0 ? { t: tc + I, chord: cadChord, lead: cadLead, bass: cadBass } : null,
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
-    extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name, ...(L.only ? { only: true, rule: L.rule } : {}) })), expert: P.expert && P.expert.length ? P.expert : null, orch: P.orch === "custom" ? "custom" : (P.orch || "small"),
+    extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name, ...(L.gain ? { gain: L.gain } : {}), ...(L.label ? { label: L.label } : {}), ...(L.only ? { only: true, rule: L.rule } : {}) })), expert: P.expert && P.expert.length ? P.expert : null, orch: P.orch === "custom" ? "custom" : (P.orch || "small"),
     slots: [...(introSlot ? [introSlot] : []), ...slots.map(S => ({ t0: S.t0, t1: S.t1, point: S.F.idx, root: S.root, chord: S.chord, harmKind: S.harmKind, bassKind: S.bassKind, shift: S.shift || 0, cadence: S.cadence || null, expert: S.expert || null, ...(S.enriched ? { enriched: true } : {}) }))],
+    vinyl: (P.style === "lofi" || P.style === "triphop") && ruleOn(P, "vinyl"),
     modulation: mod ? { t0: mod.t0, t1: mod.t1, shift: mod.shift, dir: mod.dir, keyPc: mod.keyPc } : null, picardy: !!picardyOn, rules: P.rules || null, sidechain: ruleOn(P, "sidechain") ? R.sidechain || 0 : 0, buildUp: P.buildUp ?? 0.5
   };
 }

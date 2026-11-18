@@ -65,7 +65,7 @@ describe("compose", () => {
         for (const nn of sc.notes) {
           expect(nn.t).toBeGreaterThanOrEqual(0);
           expect(nn.t + nn.dur).toBeLessThanOrEqual(sc.total + 1e-9);
-          if (nn.layer !== "perc") expect(nn.tim.type).toBe(STYLES[style].inst[nn.layer].type);
+          if (nn.layer !== "perc" && STYLES[style].inst[nn.layer]) expect(nn.tim.type).toBe(STYLES[style].inst[nn.layer].type);
         }
         // sixteenth-note grid for the melody (without swing)
         if (!STYLES[style].swing && !STYLES[style].swing16) for (const nn of sc.notes) if (nn.layer === "lead") expect(Math.abs(nn.t * 4 - Math.round(nn.t * 4))).toBeLessThan(1e-9);
@@ -115,7 +115,7 @@ describe("MIDI", () => {
       }
       expect(tick).toBe(sc.total * 480); tracks++;
     }
-    expect(tracks).toBe(6);
+    expect(tracks).toBe(6 + sc.extra.length); // the conductor, the five tracks and the added ones (Movement)
   });
 });
 

@@ -53,7 +53,7 @@ export function midiFile(sc, isOn) {
   if (sc.body < sc.total) cond.push({ t: tick(sc.body), o: 1, b: meta(0x06, str("Ending")) });
   const tracks = [ser(cond)];
   const c7 = v => clampInt(Math.round(v * 127), 0, 127);
-  const defs = [...LAYER_DEF, ...(sc.extra || []).slice(0, EXTRA_CH.length).map((X, i) => ({ key: X.id, ch: EXTRA_CH[i], name: X.read ? "Raw: " + X.read : (ROLES[X.role] || {}).name || X.id, gm: (ROLES[X.role] || {}).gm ?? 0 }))];
+  const defs = [...LAYER_DEF, ...(sc.extra || []).slice(0, EXTRA_CH.length).map((X, i) => ({ key: X.id, ch: EXTRA_CH[i], name: X.label || (X.read ? "Raw: " + X.read : (ROLES[X.role] || {}).name || X.id), gm: (ROLES[X.role] || {}).gm ?? 0 }))];
   for (const L of defs) {
     if (!isOn(L.key) || (sc.omit || []).includes(L.key)) continue;
     const ch = L.ch, inst = (sc.inst && sc.inst[L.key]) || null;

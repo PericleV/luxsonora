@@ -47,6 +47,18 @@ export const BOTTOMS = { bars: "Sound bars", spectrum: "Spectrum", wave: "Wavefo
 // the texture of a place, shown when the eye arrives: which view of the analysis, and how it appears
 export const PATCH_MAPS = { auto: "Auto (what shaped its sound)", edges: "Edges", texture: "Texture", attention: "Eye map", regions: "Regions", colour: "Colour areas", lines: "Lines and directions", depth: "Depth (sharp near, soft far)", picture: "The picture" };
 export const PATCH_ANIMS = { rise: "Rises", reveal: "Changes its texture", both: "Rises and changes" };
+// the place's texture can move with the notes of a track: each note gives it a push that dies away
+export const PATCH_MOVES = { jump: "Jumps", grow: "Grows", shake: "Shakes", flash: "Flashes" };
+// how strong the notes of a track are at a moment: each onset jumps to its loudness and dies away
+// over `decay` seconds (list: [[seconds, loudness 0-1, midi]], in time order)
+export function onsetEnvelope(list, sec, decay = 0.15) {
+  if (!list || !list.length) return 0;
+  let lo = 0, hi = list.length - 1, k = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (list[m][0] <= sec) { k = m; lo = m + 1; } else hi = m - 1; }
+  let e = 0;
+  for (let i = k; i >= 0 && sec - list[i][0] < decay * 5; i--) e = Math.max(e, list[i][1] * Math.exp(-(sec - list[i][0]) / decay));
+  return clamp(e);
+}
 // the ripple: which track sets it off
 export const RIPPLE_TRACKS = { off: "Off", perc: "Drums", bass: "Bass", lead: "Melody", harm: "Harmony", pad: "Pad" };
 export const RIPPLE_LOOKS = { lens: "Lens", rings: "Rings", dots: "Dots", squares: "Tiles", grid: "Grid", matrix: "Matrix" };
@@ -84,7 +96,7 @@ export function defaultVideo() {
     placeStyle: "ring", placeSize: 1, numberStyle: "pill", climaxOwn: false, climaxColor: "#FF6B6B",
     spotColor: "#000000", vigColor: "#000000", tintColor: "#2B1B4A", tintAmt: 0,
     titleAlign: "auto", titleXY: null, pointXY: null, pointAlign: "left", textStyle: "shadow", boxColor: "#000000", caps: false, letterSpace: 0, titleAnim: "fade",
-    patch: false, patchMap: "auto", patchAnim: "both", patchKeep: false, patchOpacity: 0.6, patchSoft: 0.4, ripple: "off", rippleAmt: 0.5, rippleLook: "lens", rippleBand: 0.5, rippleSoft: 0.6, rippleColor: "#FFFFFF", pathFrom: 0, pathTo: 0, pathTrail: 0,
+    patch: false, patchMap: "auto", patchAnim: "both", patchKeep: false, patchOpacity: 0.6, patchSoft: 0.4, patchTrack: "off", patchMove: "jump", patchMoveAmt: 0.6, ripple: "off", rippleAmt: 0.5, rippleLook: "lens", rippleBand: 0.5, rippleSoft: 0.6, rippleColor: "#FFFFFF", pathFrom: 0, pathTo: 0, pathTrail: 0,
     logo: false, logoColor: "#FFFFFF", logoSize: 1, logoOpacity: 0.85, logoAnim: true, logoXY: null,
     barOrient: "h", barXY: null, barDir: "up", barSize: 1, barLength: 1, barOpacity: 1, coverClean: false, edit: defaultEdit(),
     bottom: "bars", bottomFill: "solid", bottomColor: VIDEO_THEMES.gold.point, bottomColor2: VIDEO_THEMES.gold.path, fadeIn: 0.6, fadeOut: 1.5, fadeSound: true, endCard: false, credit: "Made with Lux Sonora",
@@ -537,10 +549,13 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       // texture: how strongly the analysis view shows over the picture; soft: how much of the radius
       // fades out towards the edge (0 is a hard disc with a thin ring, 1 fades from the centre)
       const texA = clamp(o.patchOpacity ?? 0.6), soft = clamp(o.patchSoft ?? 0.4);
-      const drawPatch = (j, a, lift) => {
+      // the notes of a chosen track move the current place: it jumps, grows, shakes or flashes
+      const mv = o.patchTrack && o.patchTrack !== "off" && S.onsets ? onsetEnvelope(S.onsets[o.patchTrack], sec) * clamp(o.patchMoveAmt ?? 0.6) * (opt.clean ? 0 : 1) : 0, how = o.patchMove || "jump";
+      const drawPatch = (j, a, lift, push = 0) => {
         const p = tl[j], key = o.patchMap === "auto" || !o.patchMap ? S.mapOf[j] : o.patchMap, map = key === "picture" ? null : S.maps && S.maps[key];
-        const x = X(p.x), y = Y(p.y), r = R(p), anim = o.patchAnim || "both", rises = anim !== "reveal", changes = anim !== "rise";
-        const sc = rises ? 1 + 0.1 * lift : 1, up = rises ? 10 * u * lift : 0, rr = r * sc, cy = y - up;
+        const anim = o.patchAnim || "both", rises = anim !== "reveal", changes = anim !== "rise";
+        const x = X(p.x) + (how === "shake" ? Math.sin(sec * 62) * 7 * u * push : 0), y = Y(p.y), r = R(p);
+        const sc = (rises ? 1 + 0.1 * lift : 1) * (how === "grow" ? 1 + 0.22 * push : 1), up = (rises ? 10 * u * lift : 0) + (how === "jump" ? 18 * u * push : 0), rr = r * sc, cy = y - up;
         if (rr < 1) return;
         // the shadow under a rising place: a hard one under a hard disc, a soft blur under a soft one
         if (rises && lift > 0.01) {
@@ -556,7 +571,9 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
         pg.translate(-ox, -oy); pg.translate(x, cy); pg.scale(sc, sc); pg.translate(-x, -y);
         pg.imageSmoothingEnabled = true; pg.imageSmoothingQuality = "high";
         drawPicture(src, pg);
-        if (changes && map && texA > 0) { pg.globalAlpha = texA * (lift > 0 ? 0.25 + 0.75 * lift : 0.85); drawPicture(map, pg); }
+        if (changes && map && texA > 0) { pg.globalAlpha = clamp(texA * (lift > 0 ? 0.25 + 0.75 * lift : 0.85) + (how === "flash" ? 0.6 * push : 0)); drawPicture(map, pg); }
+        // a flash: the place lights up inside its circle (the clip stays; the fill covers the canvas)
+        if (how === "flash" && push > 0.02) { pg.save(); pg.setTransform(1, 0, 0, 1, 0, 0); pg.globalCompositeOperation = "lighter"; pg.globalAlpha = 0.35 * push; pg.fillStyle = "#ffffff"; pg.fillRect(0, 0, D, D); pg.restore(); }
         pg.restore();
         if (soft > 0.01) {
           const m = pg.createRadialGradient(D / 2, D / 2, rr * (1 - soft), D / 2, D / 2, rr);
@@ -571,7 +588,7 @@ export function drawVideoFrame(g, W, H, sec, S, opt = {}) {
       if (o.patchKeep) for (let j = 0; j < gz.i; j++) if (j !== gz.i) drawPatch(j, 0.55, 0);
       // the current one rises in over 0.45 s and settles back as the eye moves on
       const lift = ease(gz.age / 0.45) * (1 - gz.u);
-      if (lift > 0.005) drawPatch(gz.i, Math.min(1, lift * 1.4), lift);
+      if (lift > 0.005) drawPatch(gz.i, Math.min(1, lift * 1.4), lift, mv);
     }
     // the path: the travelled part at its opacity; with "From the start" the part still ahead too.
     // It can be shown only from one second to another, fading in and out over 0.6 s.

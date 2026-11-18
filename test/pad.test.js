@@ -33,7 +33,8 @@ describe("pad voicing", () => {
 describe("pad", () => {
   for (const style of Object.keys(STYLES)) it(`follows the chords (${style})`, () => {
     for (const seed of [1, 2, 3]) {
-      const { sc } = run(seed, { ...P0, style }), pad = sc.notes.filter(n => n.layer === "pad");
+      // (the shimmer, an airy octave above the pad, is colour and not one of its voices)
+      const { sc } = run(seed, { ...P0, style }), pad = sc.notes.filter(n => n.layer === "pad" && !n.shimmer);
       const T = sc.total * 60 / sc.bpm;
       // the pad moves with the harmonic grid: at every chord slot it sounds that slot's triad
       for (const S of sc.slots) {

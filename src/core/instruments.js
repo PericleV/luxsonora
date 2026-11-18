@@ -102,7 +102,8 @@ export const STYLE_SAMPLED = {
   electronic: {},
   epic: { lead: "s.horn", harm: "s.strings", bass: "s.contrabass", pad: "s.choir" },
   movie: { lead: "s.piano", harm: "s.strings", bass: "s.cello", pad: "s.synthstrings" },
-  lofi: { lead: "s.cp80", harm: "s.wurli", bass: "s.fingerbass" },
+  // (the Yamaha CP80's sample host lacks some of its notes, so no style takes it by itself)
+  lofi: { lead: "s.piano", harm: "s.wurli", bass: "s.fingerbass" },
   bossa: { lead: "s.flute", harm: "s.nylon", bass: "s.acbass", pad: "s.strings" },
   synthwave: {},
   classical: { lead: "s.piano", harm: "s.piano", bass: "s.cello", pad: "s.strings" },

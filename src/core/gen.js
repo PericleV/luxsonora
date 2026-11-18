@@ -52,7 +52,7 @@ const CORE_POOL = {
   jazz: { lead: { "s.tenorsax": 1, "s.trumpet": 0.9, "s.vibes": 0.7, "s.piano": 0.9, "s.jazzgtr": 0.8 }, harm: { "s.piano": 1, "s.wurli": 0.7, "s.jazzgtr": 0.8, "s.organ": 0.6 }, pad: { "s.organ": 0.6, "s.brass": 0.5 } },
   epic: { lead: { "s.horn": 1, "s.trumpet": 0.8, "s.violin": 0.7, "s.choir": 0.7 }, harm: { "s.strings": 1, "s.brass": 0.9, "s.tremolo": 0.7 }, bass: { "s.contrabass": 0.9, "s.cello": 0.7 }, pad: { "s.choir": 1, "s.strings": 0.8 } },
   movie: { lead: { "s.piano": 0.9, "s.flute": 0.7, "s.oboe": 0.6, "s.cello": 0.7, "s.violin": 0.7, "s.horn": 0.7 }, harm: { "s.strings": 1, "s.harp": 0.7, "s.piano": 0.7 }, bass: { "s.cello": 0.9, "s.contrabass": 0.8 }, pad: { "s.synthstrings": 0.7, "s.strings": 0.9, "s.choir": 0.6 } },
-  lofi: { lead: { "s.cp80": 0.9, "s.wurli": 0.9, "s.piano": 0.8, "s.jazzgtr": 0.7, "s.tenorsax": 0.6, "s.flute": 0.5 }, harm: { "s.wurli": 1, "s.piano": 0.8, "s.jazzgtr": 0.8, "s.nylon": 0.6 }, bass: { "s.fingerbass": 0.9, "s.acbass": 0.8 }, pad: { "s.warmpad": 0.7, "s.organ": 0.5 } },
+  lofi: { lead: { "s.wurli": 0.9, "s.piano": 0.8, "s.jazzgtr": 0.7, "s.tenorsax": 0.6, "s.flute": 0.5 }, harm: { "s.wurli": 1, "s.piano": 0.8, "s.jazzgtr": 0.8, "s.nylon": 0.6 }, bass: { "s.fingerbass": 0.9, "s.acbass": 0.8 }, pad: { "s.warmpad": 0.7, "s.organ": 0.5 } },
   bossa: { lead: { "s.flute": 0.9, "s.tenorsax": 0.9, "s.mutedtpt": 0.7, "s.piano": 0.7, "s.nylon": 0.8 }, harm: { "s.nylon": 1, "s.piano": 0.7 }, bass: { "s.acbass": 1, "s.fingerbass": 0.6 }, pad: { "s.strings": 0.6, "s.organ": 0.4 } },
   synthwave: { lead: { "x.synthlead": 0.9, "s.tenorsax": 0.4 }, pad: { "s.synthstrings": 0.7, "x.wavepad": 0.7 } },
   electronic: { lead: { "x.synthlead": 0.8, "x.warmlead": 0.7 }, pad: { "x.wavepad": 0.8, "s.synthstrings": 0.6 } },
@@ -69,7 +69,7 @@ const CORE_POOL = {
   folk: { lead: { "s.fiddle": 1, "s.banjo": 0.8, "s.harmonica": 0.7, "s.recorder": 0.5, "s.flute": 0.5, "s.acgtr": 0.8 }, harm: { "s.acgtr": 1, "s.banjo": 0.8, "s.accordion": 0.6, "s.nylon": 0.6 }, bass: { "s.acbass": 1, "s.contrabass": 0.8 }, pad: { "s.accordion": 0.8, "s.strings": 0.4 } },
   meditation: { lead: { "s.celesta": 0.7, "s.panflute": 0.8, "s.shakuhachi": 0.7, "s.harp": 0.7, "s.kalimba": 0.7 }, harm: { "s.warmpad": 0.8, "s.harp": 0.7 }, pad: { "s.warmpad": 0.9, "s.choir": 0.7 } },
   postrock: { lead: { "s.cleangtr": 1, "s.violin": 0.6, "s.piano": 0.6, "s.glock": 0.5 }, harm: { "s.cleangtr": 0.9, "s.overdrive": 0.8, "s.piano": 0.5 }, bass: { "s.pickbass": 0.9, "s.fingerbass": 0.8 }, pad: { "s.strings": 0.9, "s.organ": 0.5 } },
-  triphop: { lead: { "s.mutedtpt": 0.8, "s.flute": 0.6, "s.tenorsax": 0.6, "s.wurli": 0.8 }, harm: { "s.wurli": 1, "s.cp80": 0.8, "s.piano": 0.6 }, bass: { "s.synthbass": 0.9, "s.acbass": 0.7 }, pad: { "s.strings": 0.9, "s.organ": 0.5 } },
+  triphop: { lead: { "s.mutedtpt": 0.8, "s.flute": 0.6, "s.tenorsax": 0.6, "s.wurli": 0.8 }, harm: { "s.wurli": 1, "s.piano": 0.6 }, bass: { "s.synthbass": 0.9, "s.acbass": 0.7 }, pad: { "s.strings": 0.9, "s.organ": 0.5 } },
   reggae: { lead: { "s.organ": 0.5, "s.trumpet": 0.8, "s.tenorsax": 0.8, "s.trombone": 0.6, "s.piano": 0.5 }, harm: { "s.mutedgtr": 1, "s.organ": 0.9, "s.clav": 0.7, "s.piano": 0.6 }, bass: { "s.fingerbass": 1 }, pad: { "s.organ": 0.8 } },
   baroque: { lead: { "s.violin": 1, "s.recorder": 0.8, "s.oboe": 0.8, "s.flute": 0.8, "s.harpsichord": 0.9, "s.trumpet": 0.6 }, harm: { "s.harpsichord": 1, "s.organ": 0.8, "s.strings": 0.7 }, bass: { "s.cello": 1, "s.contrabass": 0.7 }, pad: { "s.strings": 0.9, "s.organ": 0.7 } },
   eastasian: { lead: { "s.shakuhachi": 1, "s.koto": 0.9, "s.panflute": 0.6, "s.shamisen": 0.8 }, harm: { "s.koto": 1, "s.shamisen": 0.8, "s.harp": 0.4 }, pad: { "s.strings": 0.8 } },
@@ -92,7 +92,7 @@ const BAND_MORE = {
   bossa: [["s.mutedtpt", "counter"], ["s.acbass", "pulse"]],
   reggae: [["s.clav", "ostinato"], ["s.piano", "runs"]],
   triphop: [["s.flute", "counter"], ["s.tenorsax", "counter"], ["s.organ", "drone"]],
-  lofi: [["s.piano", "runs"], ["s.cp80", "runs"]],
+  lofi: [["s.piano", "runs"]],
   synthwave: [["s.tenorsax", "counter"]],
   postrock: [["s.violin", "counter"], ["s.organ", "drone"]],
   baroque: [["s.flute", "ornament"], ["s.trumpet", "double"]],
@@ -100,7 +100,7 @@ const BAND_MORE = {
   dnb: [["s.piano", "runs"], ["s.strings", "sustain"]],
   folk: [["s.contrabass", "pulse"], ["s.nylon", "ostinato"]],
   jazz: [["s.wurli", "runs"]],
-  funk: [["s.cp80", "runs"]]
+  funk: [["s.piano", "runs"]]
 };
 
 // By genre, a track the genre does not usually have is left out: a jazz combo and bossa nova

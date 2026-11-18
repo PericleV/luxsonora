@@ -18,7 +18,7 @@ import { suggestStyles, explainStyles } from "../core/suggest.js";
 import { saveSession, loadSession } from "./session.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
-import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, previewHit, applyDrums, scheduleExpression } from "../audio/engine.js";
+import { buildGraph, updateGraph, playNote, renderOffline, loudnessGain, defaultMix, audible, defaultFx, preview, previewHit, applyDrums, scheduleExpression, scheduleVinyl } from "../audio/engine.js";
 import { perform, PERFORM_DEFAULTS } from "../core/perform.js";
 import { initSound } from "./sound.js";
 import { drawDemo } from "./demo.js";
@@ -333,7 +333,7 @@ function renderStyleSuggest() { const el = $("#styleSuggest"); if (el) el.innerH
 // (add, remove, change an instrument) copies it into a custom list the user owns.
 const laneKeys = () => [...LAYERS.filter(l => !((SCORE && SCORE.omit) || []).includes(l)), ...((SCORE && SCORE.extra) || []).map(L => L.id)];
 const extraOf = id => ((SCORE && SCORE.extra) || []).find(L => L.id === id);
-const layerName = l => LAYER_NAME[l] || (extraOf(l) ? (extraOf(l).read ? RAW_READS[extraOf(l).read] : ROLES[extraOf(l).role].name) : l);
+const layerName = l => LAYER_NAME[l] || (extraOf(l) ? (extraOf(l).label || (extraOf(l).read ? RAW_READS[extraOf(l).read] : ROLES[extraOf(l).role].name)) : l);
 // an added layer takes its role's colour; a second or third layer with the same role gets a lighter
 // or darker shade of it, so the lanes, the notes and the orchestration list can tell them apart
 const shadeHex = (hex, to, a) => { const c = parseInt(hex.slice(1), 16), t = to === "w" ? 255 : 0, m = v => Math.round(v + (t - v) * a); return "#" + ((m(c >> 16) << 16) | (m((c >> 8) & 255) << 8) | m(c & 255)).toString(16).padStart(6, "0"); };
@@ -352,7 +352,8 @@ function ensureLayerState(sc) {
   }
 }
 function customize() {
-  if (P.orch !== "custom") { P.layers = ((SCORE && SCORE.extra) || []).map(L => ({ id: L.id, role: L.role, preset: L.preset })); P.orch = "custom"; }
+  // (the Movement track belongs to its rule, not to the list)
+  if (P.orch !== "custom") { P.layers = ((SCORE && SCORE.extra) || []).filter(L => L.id !== "xm" && !L.only).map(L => ({ id: L.id, role: L.role, preset: L.preset })); P.orch = "custom"; }
 }
 function nextLayerId() { const used = new Set([...(P.layers || []).map(L => L.id)]); let i = 1; while (used.has("x" + i)) i++; return "x" + i; }
 // The orchestration is chosen here; each track's instrument on its lane under the picture (▾).
@@ -1076,7 +1077,7 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   Player.notes = sc.notes
     .filter(n => (n.t >= fromBeat - 1e-6 && n.t < until) || (n.layer === "pad" && n.t < fromBeat && n.t + n.dur > fromBeat))
     .map(n => ({ n, s: Math.max(n.t, fromBeat) })).sort((a, b) => a.s - b.s);
-  scheduleExpression(Player.G, sc, fromBeat, Player.startTime);
+  scheduleExpression(Player.G, sc, fromBeat, Player.startTime); scheduleVinyl(Player.G, sc, fromBeat, Player.startTime);
   Player.idx = 0; schedTick(); Player.timer = setInterval(schedTick, 40);
   updatePlayBtn(); requestAnimationFrame(frame);
 }

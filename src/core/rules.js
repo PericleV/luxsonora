@@ -251,9 +251,13 @@ export function cutTails(notes, chords, spb) {
     if (!C) continue;
     const p = pcOf(n.midi);
     if (C.pcs.has(p) || ![...C.pcs].some(q => pcOf(q - p) === 1 || pcOf(p - q) === 1)) continue;
-    // the release that fades it by the chord change (a fifth of a beat at least, so it does not click)
-    const room = Math.max(0.05, (C.t0 - end) * spb + 0.05), nr = Math.max(0.05, Math.min(r, 1.2 * room));
-    if (nr < r - 1e-6) n.tim = { ...n.tim, r: nr, ...(n.tim.type === "pluck" ? { d: Math.min(n.tim.d || nr, Math.max(nr, (n.dur * spb))) } : {}) };
+    // a release of 0.15 s at least (a faster one clicks on a held sound), which fades it by the
+    // chord change: the note ends a little earlier when it needs the room (never under half of it)
+    const nr = Math.max(0.15, Math.min(r, 1.2 * Math.max(0.05, (C.t0 - end) * spb + 0.05)));
+    // (a note tied into the next one of its track keeps its length: the line stays legato)
+    const need = (0.5 * nr) / spb - (C.t0 - end), tied = need > 0 && notes.some(m => m !== n && m.layer === n.layer && Math.abs(m.t - end) < 1e-6);
+    if (need > 0 && !tied) n.dur = Math.max(n.dur * 0.5, n.dur - need);
+    if (nr < r - 1e-6) n.tim = { ...n.tim, r: nr };
   }
   return notes;
 }

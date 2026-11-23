@@ -388,6 +388,10 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     for (let pass = 0; pass < 5; pass++) {
       const thin = thinLayers(autoL, xs, plan.body); if (!thin.length) break;
       for (const L of thin) {
+        // a track that plays a few notes only (its places stay calm) leaves: another role in its
+        // place would thicken a quiet piece; one that hardly plays at all is replaced
+        const few = L.role !== "sustain" && L.role !== "drone" && new Set(xs.filter(n => n.layer === L.id && n.t < plan.body - 1e-9).map(n => n.t.toFixed(3))).size >= 3;
+        if (few) { autoL = autoL.filter(x => x !== L); delete inst[L.id]; for (const F of out) if (F.timX) delete F.timX[L.id]; continue; }
         const role = gl ? null : pool.shift(), used = new Set(autoL.filter(x => x !== L).map(x => x.preset)), next = gl && gl.rest.shift();
         if (next) { const N = { ...next, id: L.id }; autoL = autoL.map(x => (x === L ? N : x)); setInst(N); }
         else if (role) { const N = layerFor(P.style, role, L.id, P.samples === true, used); autoL = autoL.map(x => (x === L ? N : x)); setInst(N); }
@@ -406,7 +410,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
       const L = { id: MOTION_ID, role: "ostinato", preset: mp, gain: 0.55, label: "Movement" };
       setInst(L);
       const mn = motionNotes(P.style, { notes, slots, points: out, body: plan.body, tim: inst[L.id], arcOn });
-      if (mn.length >= 4) { for (const nn of mn) { const F = out[nn.point]; if (F && F.timX) nn.tim = F.timX[L.id]; notes.push(nn); } extra.push(L); }
+      if (mn.length >= 8) { for (const nn of mn) { const F = out[nn.point]; if (F && F.timX) nn.tim = F.timX[L.id]; notes.push(nn); } extra.push(L); }
       else { delete inst[L.id]; for (const F of out) if (F.timX) delete F.timX[L.id]; }
     }
   }
@@ -625,6 +629,16 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   // below it up (the same note of the scale, so nothing new rubs)
   for (const nn of notes) if (nn.layer !== "perc" && Number.isFinite(nn.midi)) { while (nn.midi > 96) nn.midi -= 12; while (nn.midi < 24) nn.midi += 12; }
   for (let k = notes.length - 1; k >= 0; k--) { const nn = notes[k]; if (nn.t >= T - 1e-9) notes.splice(k, 1); else if (nn.t + nn.dur > T) nn.dur = T - nn.t; }
+  // last of all, an instrument still with a handful of notes (a doubling at the climax only, a few
+  // runs) leaves the piece: a few lone notes of an odd instrument sound out of place. Your own
+  // list (Custom) and the held tracks stay.
+  if (ruleOn(P, "strays") && P.orch !== "custom") for (const L of [...extra]) {
+    if (L.only || L.role === "sustain" || L.role === "drone") continue;
+    const k = new Set(notes.filter(x => x.layer === L.id && x.point !== -2 && x.t < plan.body + I - 1e-9).map(x => x.t.toFixed(3))).size;
+    if (k >= 8) continue;
+    for (let j = notes.length - 1; j >= 0; j--) if (notes[j].layer === L.id) notes.splice(j, 1);
+    extra.splice(extra.indexOf(L), 1); delete inst[L.id]; for (const F of out) if (F.timX) delete F.timX[L.id];
+  }
   notes.sort((a, b) => a.t - b.t || a.midi - b.midi);
   return {
     version: SCORE_VERSION, bpm, bpmStyle, bars: plan.bars, total: T, body: plan.body + I, intro: I, endBeats: plan.end, seconds: P.duration,

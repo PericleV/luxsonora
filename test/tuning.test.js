@@ -24,7 +24,10 @@ describe("no ringing into the next chord", () => {
   const C = [{ t0: 4, pcs: new Set([0, 4, 7]) }];
   it("cuts the release of a note that would rub against the next chord", () => {
     const n = { layer: "harm", t: 0, dur: 4, midi: 59, tim: { r: 1.5 } }; // B against C major
-    cutTails([n], C, 0.5); expect(n.tim.r).toBeLessThan(0.1);
+    cutTails([n], C, 0.5);
+    // a short release, but not so short it clicks; the note ends a little earlier to fade in time
+    expect(n.tim.r).toBeLessThanOrEqual(0.15 + 1e-9); expect(n.tim.r).toBeGreaterThanOrEqual(0.15 - 1e-9);
+    expect(n.t + n.dur + (0.5 * n.tim.r) / 0.5).toBeLessThanOrEqual(4 + 1e-6);
   });
   it("keeps the tail of a note the chords share, and of one that does not rub", () => {
     const a = { layer: "harm", t: 0, dur: 4, midi: 60, tim: { r: 1.5 } }, b = { layer: "harm", t: 0, dur: 4, midi: 62, tim: { r: 1.5 } };

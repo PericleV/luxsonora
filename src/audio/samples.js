@@ -12,6 +12,7 @@
 // a scheduler with a very long look-ahead dispatches every note immediately (our own scheduler
 // already feeds notes ahead of time, and an OfflineAudioContext never advances while we schedule).
 import { tuneFix } from "./tuning.js";
+import { loopPoints } from "./loops.js";
 import { GM } from "../core/gm.js";
 import { Soundfont, SplendidGrandPiano, ElectricPiano, DrumMachine, DrumAbuse, Mellotron, Mallet, SampleLoader, Scheduler, getMellotronNames, getMalletNames, getElectricPianoNames, getDrumAbuseMachineNames } from "smplr";
 
@@ -49,7 +50,8 @@ const DM_GROUPS = {
 };
 // Orchestral kit: kick and toms on taiko (pitched), rolls on timpani tuned to the piece (n.tune);
 // snare, cymbals and the rest stay on the synthesized kit.
-const ORCH = { 36: ["taiko_drum", 36], 45: ["taiko_drum", 41], 48: ["taiko_drum", 45], 50: ["taiko_drum", 48] };
+// the taiko a little nearer its own register (an octave under it, it booms like a gong)
+const ORCH = { 36: ["taiko_drum", 41], 45: ["taiko_drum", 45], 48: ["taiko_drum", 48], 50: ["taiko_drum", 52] };
 const TIMPANI = "timpani";
 
 const loaders = new Map();
@@ -74,7 +76,54 @@ function create(ctx, dest, src) {
   if (src.kind === "abuse") return DrumAbuse(ctx, { ...common, source: { kind: "machine", machine: src.instrument } });
   if (src.kind === "mellotron") return Mellotron(ctx, { ...common, instrument: src.instrument });
   if (src.kind === "mallet") return Mallet(ctx, { ...common, instrument: src.instrument });
+  if (SUSTAINED.has(src.instrument)) return loopedSoundfont(ctx, common, src.instrument);
   return Soundfont(ctx, { ...common, instrument: src.instrument, kit: "MusyngKite" });
+}
+
+// A sustained General MIDI sound (organ, bowed strings, voices, brass, winds, synth leads and pads)
+// is a recording of about three seconds: a chord held longer would stop dead at its end, with a
+// click. Before it loads, each of its notes gets a loop in its steady part (loops.js), found once
+// per instrument and kept for the session; the recordings themselves are fetched once (the loop
+// search reads the same file the instrument then loads).
+const SUSTAINED = new Set(GM.filter((n, i) => (i >= 16 && i < 24) || (i >= 40 && i < 45) || (i >= 48 && i < 55) || (i >= 56 && i < 104)));
+const gleitzUrl = name => {
+  const ogg = typeof Audio !== "undefined" && !!new Audio().canPlayType('audio/ogg; codecs="vorbis"');
+  return `https://gleitz.github.io/midi-js-soundfonts/MusyngKite/${name}-${ogg ? "ogg" : "mp3"}.js`;
+};
+const loopFiles = new Map();
+function midiJs(text) {
+  const h = text.indexOf("MIDI.Soundfont."), s = text.indexOf("=", h) + 2, e = text.lastIndexOf(",");
+  return JSON.parse(text.slice(s, e) + "}");
+}
+const b64 = data => { const d = atob(data.slice(data.indexOf(",") + 1)), u = new Uint8Array(d.length); for (let i = 0; i < d.length; i++) u[i] = d.charCodeAt(i); return u.buffer; };
+async function loopFile(ctx, url) {
+  const text = await (await fetch(url)).text();
+  const json = midiJs(text), out = {};
+  await Promise.all(Object.entries(json).map(async ([name, data]) => {
+    try {
+      const buf = await ctx.decodeAudioData(b64(data));
+      // one note at a time, so the page stays responsive while the loops are found
+      await new Promise(r => setTimeout(r, 0));
+      const lp = loopPoints(Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c)), buf.sampleRate);
+      // smplr reads the loop points as sample offsets at 44.1 kHz
+      if (lp) out[name] = [Math.round(lp[0] * 44100), Math.round(lp[1] * 44100)];
+    } catch { /* a note that does not decode keeps no loop */ }
+  }));
+  return { text, loops: URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" })) };
+}
+function loopedSoundfont(ctx, common, name) {
+  const url = gleitzUrl(name);
+  if (!loopFiles.has(url)) loopFiles.set(url, loopFile(ctx, url).catch(() => ({ text: null, loops: undefined })));
+  const w = {};
+  w.ready = loopFiles.get(url).then(file => {
+    // the text fetched for the loops serves the instrument too, once (then it is let go)
+    const storage = { fetch: u => { if (u !== url || !file.text) return fetch(u); const t = file.text; file.text = null; return Promise.resolve(new Response(t)); } };
+    const inst = Soundfont(ctx, { ...common, instrumentUrl: url, storage, ...(file.loops ? { loopDataUrl: file.loops } : {}) });
+    w.start = o => inst.start(o); w.stop = o => inst.stop(o);
+    return inst.ready;
+  });
+  w.start = () => {}; w.stop = () => {};
+  return w;
 }
 const keyOf = src => `${src.kind}:${src.instrument || ""}`;
 

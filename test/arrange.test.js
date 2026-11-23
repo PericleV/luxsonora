@@ -40,7 +40,8 @@ describe("extra layers", () => {
     for (const seed of [1, 2]) {
       const sc = run({ ...P0, style, orch: "full" }, seed), base = 60 + sc.pcOff, scale = new Set([...sc.modeIv, ...(sc.melIv || [])].map(v => (((v + sc.pc) % 12) + 12) % 12));
       const inChord = n => { const S = sc.slots.find(S => n.t >= S.t0 - 1e-9 && n.t < S.t1 - 1e-9); return !!S && S.chord.some(m => ((m - n.midi) % 12 + 12) % 12 === 0); };
-      expect(sc.extra.length).toBeGreaterThanOrEqual(4);
+      // (a track that would play only a few notes leaves, so a calm piece may keep three)
+      expect(sc.extra.length).toBeGreaterThanOrEqual(3);
       const ids = new Set(sc.extra.map(L => L.id));
       const xs = sc.notes.filter(n => ids.has(n.layer));
       expect(xs.length).toBeGreaterThan(0);

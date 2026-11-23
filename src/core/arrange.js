@@ -16,6 +16,7 @@
 // "Small" orchestration adds nothing: the piece is exactly the five-layer one.
 import { clamp, clampInt, lerp } from "./util.js";
 import { degMidi } from "./theory.js";
+import { dynamics } from "./arc.js";
 import { euclid, areaDrive } from "./rhythm.js";
 import { gazePath } from "./focus.js";
 import { detailsMap } from "./placement.js";
@@ -187,7 +188,9 @@ export function thinLayers(layers, xs, body) {
       for (const [a, b] of spans) { cover += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }
       return cover < Math.min(12, body * 0.25) - 1e-9;
     }
-    return new Set(mine.map(n => n.t.toFixed(3))).size < 3;
+    // an instrument earns its place with eight notes at least (a few plinks of a celesta in a
+    // metal song only sound out of place)
+    return new Set(mine.map(n => n.t.toFixed(3))).size < 8;
   });
 }
 export const richnessOf = (A, places) => clamp(0.4 * A.global.entropy + 0.3 * A.global.edgeN + 0.3 * Math.min(1, places / 10));
@@ -223,8 +226,12 @@ export function extraNotes(ctx) {
     // a second layer with the same role plays it differently: another path, another register, off-beat
     const dup = (seen[L.role] = (seen[L.role] ?? -1) + 1);
     const reg = role => { const [a, b] = REGISTER[role], sh = !dup ? 0 : role === "drone" || role === "pulse" || role === "ornament" ? 12 : -12; return [baseLead + a + sh, baseLead + b + sh]; };
-    const role = L.role, R = ROLES[role], tim = inst[L.id], thr = entryOf(k, n, ctx.buildUp ?? 0.5), add = (t, dur, midi, vel, extra = {}) =>
-      notes.push({ layer: L.id, t, dur: Math.max(0.1, dur), midi, vel: clampInt(Math.round(vel), 1, 127), tim, pan: R.pan, point: pointAt(t).idx, ...extra });
+    // every added track follows the dynamics of the piece, as the melody and the pad do: softer
+    // where the place is calm, stronger towards the climax
+    const role = L.role, R = ROLES[role], tim = inst[L.id], thr = entryOf(k, n, ctx.buildUp ?? 0.5), add = (t, dur, midi, vel, extra = {}) => {
+      const F = pointAt(t);
+      notes.push({ layer: L.id, t, dur: Math.max(0.1, dur), midi, vel: clampInt(Math.round(vel * dynamics(F.tension ?? 0.6)), 1, 127), tim, pan: R.pan, point: F.idx, ...extra });
+    };
     // a layer plays a slot when its point's tension has reached its entry (drone and ornaments also stay in the resolution)
     // an instrument added by an Expert rule plays wherever its rule applies (its notes are cut to those places later)
     const active = S => { if (L.only) return true; const F = S.F; return F.tension >= thr - 1e-9 && !(F.section === "resolution" && role !== "drone" && role !== "ornament" && F.tension < thr + 0.1); };

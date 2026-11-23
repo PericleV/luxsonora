@@ -396,7 +396,8 @@ function swellFx(ctx, out, t, durSec, vel, noise, kind) {
 const DUCKED = ["harm", "bass", "pad"];
 function pump(G, t, amount) {
   const rec = 0.11 * (60 / G.bpm);
-  for (const l of [...DUCKED, ...(G.extraIds || [])]) { const d = G.duck[l]; if (!d) continue; const p = d.gain; p.setValueAtTime(1 - amount, t); p.setTargetAtTime(1, t + 0.012, rec); }
+  // the level glides down in a few milliseconds (a jump to it clicks on a held pad), then recovers
+  for (const l of [...DUCKED, ...(G.extraIds || [])]) { const d = G.duck[l]; if (!d) continue; const p = d.gain; p.setTargetAtTime(1 - amount, Math.max(0, t - 0.004), 0.0015); p.setTargetAtTime(1, t + 0.012, rec); }
 }
 
 // Expression (CC11, perform.js): each layer's level follows its curve, ramping between the places.
@@ -408,7 +409,7 @@ export function ccValueAt(curve, b) {
 }
 // Vinyl and tape (lo-fi, trip-hop; sc.vinyl): a soft hiss and the crackle of a record under the
 // music, into the master bus. The crackle is drawn from a fixed seed, so a render is always the
-// same: about six small clicks a second, each a few milliseconds of high-passed noise.
+// same: about one small, soft crackle a second, each a few milliseconds of high-passed noise.
 export function scheduleVinyl(G, sc, fromBeat = 0, t0 = G.ctx.currentTime) {
   if (!sc.vinyl || !G.mbus) return;
   const ctx = G.ctx, spb = 60 / sc.bpm, end = sc.total * spb, from = fromBeat * spb, left = end - from;
@@ -421,8 +422,9 @@ export function scheduleVinyl(G, sc, fromBeat = 0, t0 = G.ctx.currentTime) {
   // the crackle
   const cf = ctx.createBiquadFilter(), cg = ctx.createGain(); cf.type = "highpass"; cf.frequency.value = 2500; cg.gain.value = 1; cf.connect(cg); cg.connect(G.mbus);
   const rnd = mulberry32(17);
-  for (let t = 0; t < end; t += 0.04 + 0.28 * rnd()) {
-    const v = 0.02 + 0.07 * rnd() ** 2, off = rnd() * 0.9;
+  // (sparse and soft: about one small crackle a second, an audible click only now and then)
+  for (let t = 0; t < end; t += 0.3 + 1.4 * rnd()) {
+    const v = 0.006 + 0.02 * rnd() ** 3, off = rnd() * 0.9;
     if (t < from) continue;
     const at = t0 + (t - from), src = ctx.createBufferSource(), g = ctx.createGain();
     src.buffer = noise; g.gain.setValueAtTime(v, at); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.004 + 0.004 * rnd());

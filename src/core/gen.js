@@ -119,6 +119,17 @@ export const PALETTES = {
       band: [["s.horn", "counter"], ["s.strings", "runs"], ["s.timpani", "pulse"], ["s.choir", "sustain"], ["s.violin", "double"], ["s.celesta", "ornament"], ["s.tremolo", "ostinato"]] },
     { key: "dark", family: "dark", name: "Dark", core: { lead: "s.cello", harm: "s.tremolo", bass: "s.contrabass", pad: "v.male" },
       band: [["s.trombone", "sustain"], ["s.horn", "double"], ["s.timpani", "pulse"], ["s.strings", "runs"], ["s.violin", "counter"], ["s.choir", "sustain"], ["s.pizz", "ostinato"]] }
+  ],
+  // synthesizers: they play with or without sampled instruments (a sampled player of the band
+  // only when they are on)
+  synthwave: [
+    { key: "darksynth", family: "neon", name: "Darksynth", core: { lead: "dnb.lead", harm: "synthwave.harm", bass: "dnb.bass", pad: "triphop.pad" },
+      band: [["synthwave.harm", "ostinato"], ["x.brass", "sustain"], ["s.distortion", "counter"], ["x.glass", "ornament"], ["synthwave.bass", "pulse"]] },
+    { key: "outrun", family: "night", name: "Outrun", core: { lead: "synthwave.lead", harm: "synthwave.harm", bass: "synthwave.bass", pad: "synthwave.pad" },
+      band: [["synthwave.harm", "ostinato"], ["x.synthlead", "counter"], ["x.brass", "sustain"], ["x.glass", "ornament"], ["s.tenorsax", "counter"], ["s.synthstrings", "sustain"]] },
+    { key: "dreamwave", family: "sunset", name: "Dreamwave", core: { lead: "x.softlead", harm: "x.keys", bass: "synthwave.bass", pad: "synthwave.pad" },
+      // (no texture pad: it sits louder than the soft lead, even as an added track)
+      band: [["x.glass", "ostinato"], ["s.synthstrings", "sustain"], ["x.nylon", "runs"], ["x.sine", "ornament"], ["s.tenorsax", "counter"]] }
   ]
 };
 // the mood score of a picture (compose.js reads the same, before a story's semantics)
@@ -126,10 +137,10 @@ const moodScore = A => { const g = (A && A.global) || {}; return 0.5 * (g.bright
 // The palette of a style for a picture (family: the progression family already chosen), or null.
 export function paletteOf(style, A, { samples = true, family = null } = {}) {
   const list = PALETTES[style];
-  if (!list || !samples) return null;
+  if (!list) return null;
   const fam = family || (autoModeOf(style, moodScore(A)).family || {}).key;
   const P = list.find(x => x.family === fam) || list[0];
-  return Object.values(P.core).every(k => LIBRARY[k]) ? P : null;
+  return Object.values(P.core).every(k => usable(k, samples)) ? P : null;
 }
 
 // By genre, a track the genre does not usually have is left out: a jazz combo and bossa nova

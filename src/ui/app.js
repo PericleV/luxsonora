@@ -847,6 +847,9 @@ function howStyles() {
     extra.push(st.ext >= 9 ? "ninths in the chords" : st.ext >= 7 ? "sevenths in the chords" : "plain triads");
     if (R.cadentialV) extra.push("the dominant before the last chord");
     if (R.stopDown) extra.push("a break before the climax");
+    if (R.drumBreak) extra.push("the drums drop out for the bar before the climax");
+    if (R.gatedSnare) extra.push("a gated snare");
+    if (R.families) extra.push(`chord families picked by the mood: ${R.families.map(F => F.name.toLowerCase()).join(", ")}`);
     if (R.sidechain >= 0.3) extra.push("pumping on the kick (sidechain)");
     if (R.drive) extra.push("distorted guitars");
     if (R.swell) extra.push(`a ${R.swell === "riser" ? "riser" : R.swell === "timpani" ? "timpani roll" : "cymbal swell"} into new parts`);
@@ -1068,7 +1071,7 @@ function startPlayback(fromBeat = 0, stopAt = null) {
   const ctx = ensureCtx(), sc = SCORE;
   Player.G = buildGraph(ctx, P.reverb, P.mix, effFx(sc), sc.bpm, sc.extra || []);
   // the logo listens: an analyser on the master moves its sound waves while the song plays
-  Player.an = ctx.createAnalyser(); Player.an.fftSize = 512; Player.an.smoothingTimeConstant = 0.72; Player.G.out.connect(Player.an); Player.G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); Player.score = sc; Player.playing = true;
+  Player.an = ctx.createAnalyser(); Player.an.fftSize = 512; Player.an.smoothingTimeConstant = 0.72; Player.G.out.connect(Player.an); Player.G.sidechain = sc.sidechain ?? ((RULES[sc.style] || {}).sidechain || 0); Player.G.gated = !!sc.gated; Player.score = sc; Player.playing = true;
   // sampled instruments: route the persistent samplers into this graph
   const SG = liveSamples(); Player.G.samplers = SG.samplers; Player.G.kit = kitName(); applyDrums(Player.G, P.drums, true);
   for (const l of Object.keys(SG.bus)) { try { SG.bus[l].disconnect(); } catch (e) { /* not connected */ } if (Player.G.bus[l]) SG.bus[l].connect(Player.G.bus[l]); }

@@ -351,6 +351,16 @@ function snare(ctx, out, t, vel, noise, offset) {
   og.gain.setValueAtTime((vel / 127) * 0.3, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
   o.connect(og); og.connect(out); o.start(t); o.stop(t + 0.1);
 }
+// Gated reverb (synthwave, sc.gated): under the snare, a dense burst of filtered noise that holds
+// for a fifth of a second and is then cut off in 30 ms (fast, but a ramp: a jump would click).
+// It plays on every kit, sampled or synthesized.
+function gatedTail(ctx, out, t, vel, noise, offset) {
+  const src = ctx.createBufferSource(); src.buffer = noise;
+  const bp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), g = ctx.createGain(), pk = (vel / 127) * 0.13;
+  bp.type = "bandpass"; bp.frequency.value = 1500; bp.Q.value = 0.5; lp.type = "lowpass"; lp.frequency.value = 6500;
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(pk, t + 0.012); g.gain.linearRampToValueAtTime(pk * 0.75, t + 0.2); g.gain.linearRampToValueAtTime(0.0001, t + 0.23);
+  src.connect(bp); bp.connect(lp); lp.connect(g); g.connect(out); src.start(t, offset); src.stop(t + 0.25);
+}
 function clap(ctx, out, t, vel, noise, offset) {
   const src = ctx.createBufferSource(); src.buffer = noise;
   const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1200; bp.Q.value = 1.2;
@@ -463,6 +473,7 @@ export function playNote(G, n, t0, durSec, from = n.t) {
     if (n.swell) { swellFx(ctx, bus, t0, durSec, n.vel / (G.percBoost || 1), G.noise, n.swell); return; }
     if (k <= 0.001) return;
     if (m === 36 && G.sidechain > 0) pump(G, t0, G.sidechain);
+    if (m === 38 && G.gated) gatedTail(ctx, bus, t0, vel, G.noise, off);
     const kit = pz && pz.kit ? pz.kit : G.kit;
     if (kit && kit !== "synth" && playDrum(G, kit, n, t0, vel)) return;
     // a borrowed kit without that piece: the track's own kit, then the synthesized one
@@ -508,7 +519,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
   const fadeOut = G => { const g0 = G.out.gain.value; G.out.gain.setValueAtTime(g0, Math.max(0, T - 0.4)); G.out.gain.linearRampToValueAtTime(0, T); };
   if (!parallel || layers.length < 2) {
     const ctx = new OAC(2, len, sr), G = buildGraph(ctx, reverb, mix, fx, sc.bpm, extra);
-    G.sidechain = sidechain; G.kit = opts.kit || null;
+    G.sidechain = sidechain; G.gated = !!sc.gated; G.kit = opts.kit || null;
     if (opts.drums) applyDrums(G, opts.drums, true);
     if (opts.specs && opts.specs.length) await prepareSamples(G, opts.specs, 60000);
     fadeOut(G);
@@ -520,7 +531,7 @@ export async function renderOffline(sc, reverb, mix, fx = defaultFx(), opts = {}
   const kicks = sidechain > 0 && audible(mix, "perc") ? sc.notes.filter(n => n.layer === "perc" && n.midi === 36 && !n.swell) : [];
   const stems = await Promise.all(layers.map(async layer => {
     const ctx = new OAC(2, len, sr), G = buildStem(ctx, layer, mix, fx, sc.bpm, extra);
-    G.sidechain = sidechain; G.kit = opts.kit || null;
+    G.sidechain = sidechain; G.gated = !!sc.gated; G.kit = opts.kit || null;
     if (opts.drums) applyDrums(G, opts.drums, true);
     const specs = (opts.specs || []).filter(x => x.layer === layer);
     if (specs.length) await prepareSamples(G, specs, 60000);

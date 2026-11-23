@@ -120,7 +120,7 @@ export const STYLES = {
     gm: { lead: 24, harm: 24, bass: 32, pad: 49 }
   },
   synthwave: {
-    name: "Synthwave", modes: ["aeolian", "dorian", "phrygian"], tempo: [84, 118], pent: false, ext: 5, swing: 0, perc: "gated", bass: "octave8", reverb: 0.45,
+    name: "Synthwave", modes: ["aeolian", "dorian", "phrygian", "mixolydian", "ionian"], tempo: [84, 118], pent: false, ext: 5, swing: 0, perc: "gated", bass: "octave8", reverb: 0.45,
     inst: {
       lead: I("pad", "Saw lead", { a: 0.02, d: 0.5, s: 0.8, r: 0.4, cut: 3400, q: 1.6, col: 0.85, det: 10, vib: 8, lvl: 0.6 }),
       harm: I("pad", "Poly synth", { a: 0.05, d: 0.6, s: 0.7, r: 0.6, cut: 2400, q: 1.2, col: 0.7, det: 12, lvl: 0.7 }),
@@ -334,6 +334,9 @@ export const STYLES = {
  *   approach: bass approach note on the last beat of a chord
  *   swell:    transition sound before section changes: riser, cymbal or timpani roll
  *   stopDown: the music cuts out for half a beat before the climax (trailer device)
+ *   drumBreak: the drums drop out for the bar before the climax (synthwave)
+ *   gatedSnare: the snare has a big reverb cut short, the 80s gated sound (synthwave)
+ *   families: progression families, darkest first (above)
  *   cadentialV: the chord before the final cadence is the dominant (V-I, classical)
  */
 /*
@@ -349,6 +352,15 @@ const EPIC_FAMILIES = [
   { key: "minor", name: "Minor epic", modes: { aeolian: 3, dorian: 1 }, cands: [[5, 2, 6], [0, 5, 6]], candsBy: { dorian: [[3, 2, 6], [0, 3, 6]] } },
   // Heroic: I, bVII, IV in Mixolydian (the major with a flat seventh); I, II, V in Lydian (wonder)
   { key: "heroic", name: "Heroic", modes: { mixolydian: 2, lydian: 1 }, cands: [[0, 6, 3], [3, 0, 6]], candsBy: { lydian: [[1, 0, 4], [0, 4, 1]] } }
+];
+// Synthwave: four-chord loops, one chord a bar (loop; loopBy: the loop in another of its modes)
+const SYNTHWAVE_FAMILIES = [
+  // Neon (dark): i, bVII, bVI, bVII; in Phrygian i, bII, bvii, i
+  { key: "neon", name: "Neon", modes: { aeolian: 2, phrygian: 1 }, loop: [0, 6, 5, 6], loopBy: { phrygian: [0, 1, 6, 0] }, cands: [[6, 5, 0], [0, 6, 5]], candsBy: { phrygian: [[1, 6, 0], [0, 1, 6]] } },
+  // Night drive: i, bVI, bIII, bVII; in Dorian i, bVII, IV, i
+  { key: "night", name: "Night drive", modes: { aeolian: 3, dorian: 2 }, loop: [0, 5, 2, 6], loopBy: { dorian: [0, 6, 3, 0] }, cands: [[5, 2, 6], [0, 5, 6]], candsBy: { dorian: [[3, 6, 0], [0, 3, 6]] } },
+  // Sunset (bright): vi, IV, I, V; in Mixolydian I, bVII, IV, I
+  { key: "sunset", name: "Sunset", modes: { ionian: 2, mixolydian: 1 }, loop: [5, 3, 0, 4], loopBy: { mixolydian: [0, 6, 3, 0] }, cands: [[0, 3, 4], [5, 3, 0]], candsBy: { mixolydian: [[0, 6, 3], [3, 0, 6]] } }
 ];
 /*
  * The mood of a picture (0 dark and cold, 1 bright and warm), stretched: real pictures rarely
@@ -390,7 +402,7 @@ export const RULES = {
   epic: { grid: 2, unit: 4, phrase: 2, harm: ["block", "ostinato"], bass: ["hold", "ostinato"], cands: [[5, 2, 6], [0, 3, 5]], families: EPIC_FAMILIES, sidechain: 0, pickups: false, approach: false, swell: "timpani", stopDown: true },
   lofi: { grid: 1, unit: 4, phrase: 4, harm: ["block", "comp"], bass: ["hold", "rootfifth"], cands: [[1, 4, 0], [5, 3, 1]], sidechain: 0.25, pickups: true, approach: false, swell: null, stopDown: false },
   bossa: { grid: 1, unit: 4, phrase: 2, harm: ["block", "bossa"], bass: ["bossa", "bossa"], cands: [[0, 1, 4], [1, 4, 5]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
-  synthwave: { grid: 2, unit: 4, phrase: 4, harm: ["block", "arp"], bass: ["hold", "octave8"], cands: [[5, 2, 6], [0, 5, 3]], sidechain: 0.3, pickups: false, approach: false, swell: "riser", stopDown: false },
+  synthwave: { grid: 2, unit: 4, phrase: 4, harm: ["block", "arp"], bass: ["hold", "octave8", "octave16"], cands: [[5, 2, 6], [0, 5, 3]], families: SYNTHWAVE_FAMILIES, gatedSnare: true, drumBreak: true, sidechain: 0.3, pickups: false, approach: false, swell: "riser", stopDown: false },
   classical: { grid: 1, unit: 4, phrase: 4, harm: ["block", "broken"], bass: ["hold", "rootfifth"], cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
   // pop: one chord per bar on the four-chord loop (I-V-vi-IV in major, i-VI-III-VII in minor)
   pop: { grid: 1, unit: 4, phrase: 4, harm: ["block", "pulse", "arp"], bass: ["hold", "pick8"], cands: [[0, 4, 5], [5, 3, 0]], loop: { major: [0, 4, 5, 3], minor: [0, 5, 2, 6] }, sidechain: 0.12, pickups: true, approach: false, swell: "riser", stopDown: false },

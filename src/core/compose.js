@@ -78,7 +78,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   const scale = P.scale && P.scale !== "auto" ? P.scale : null;
   const auto = autoModeOf(P.style, val, scale && MODES[scale] ? scale : null), family = auto.family;
   const modeKey = scale ? (MODES[scale] ? scale : scale === "majpent" ? "ionian" : "aeolian") : auto.modeKey, modeIv = MODES[modeKey].iv;
-  const R = family ? { ...R0, cands: (family.candsBy && family.candsBy[modeKey]) || family.cands } : R0;
+  const famLoop = family && ((family.loopBy && family.loopBy[modeKey]) || family.loop);
+  const R = family ? { ...R0, cands: (family.candsBy && family.candsBy[modeKey]) || family.cands, ...(famLoop ? { loop: { major: famLoop, minor: famLoop } } : {}) } : R0;
   const autoPc = g.hueStr > 0.06 ? ((Math.round(g.hue / 30) % 12) * 7) % 12 : (Math.round(g.brightness * 11) * 7) % 12;
   const pc = P.keyMode === "manual" ? ((P.keyPc % 12) + 12) % 12 : autoPc;
   const pcOff = pc > 5 ? pc - 12 : pc;
@@ -564,6 +565,11 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
       break;
     }
   }
+  // drum break (synthwave): the drums drop out for the bar before the climax (a swell into it stays)
+  if (R.drumBreak && ruleOn(P, "drumBreak") && arcOn && arc.climax > 0) {
+    const tc0 = out[arc.climax].t0, w0 = Math.max(0, tc0 - 4);
+    for (let j = notes.length - 1; j >= 0; j--) { const nn = notes[j]; if (nn.layer === "perc" && !nn.swell && nn.t >= w0 - 1e-9 && nn.t < tc0 - 1e-9) notes.splice(j, 1); }
+  }
   // stop-down (trailer device): everything stops for the half beat before the climax; notes
   // held across that gap are cut and the held ones come back on the climax
   if (R.stopDown && ruleOn(P, "stopDown") && arcOn && arc.climax > 0) {
@@ -633,6 +639,31 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   // last of all, an instrument still with a handful of notes (a doubling at the climax only, a few
   // runs) leaves the piece: a few lone notes of an odd instrument sound out of place. Your own
   // list (Custom) and the held tracks stay.
+  // last guard on the melody: an exposed note (on a beat for a quarter beat or more, or sounding
+  // half a beat) a semitone or a minor ninth from a held note of the accompaniment, outside the
+  // chord and not resolving by step, moves to the nearest tone of the chord in the scale (a loop
+  // of fixed chords, or a pass after the snapping, can leave one)
+  if (ruleOn(P, "chordTones") && slots.length) {
+    // (in the introduction, before the chord grid, the chord is what the harmony and the pad hold)
+    const chordAt = tt => slots.find(S => tt >= S.t0 - 1e-9 && tt < S.t1 - 1e-9) || { pcs: new Set(notes.filter(m => (m.layer === "harm" || m.layer === "pad") && m.t <= tt + 1e-6 && m.t + m.dur > tt + 1e-6).map(m => pcOf(m.midi))) };
+    const onB = tt => Math.abs(tt - Math.round(tt)) < 1e-6;
+    const acc = notes.filter(m => m.layer !== "lead" && m.layer !== "perc" && Number.isFinite(m.midi) && !m.chromatic);
+    const leadNs = notes.filter(m => m.layer === "lead" && !m.dbl && !m.echo && !m.chromatic).sort((a, b) => a.t - b.t);
+    leadNs.forEach((nn, k) => {
+      const S = chordAt(nn.t); if (!S.pcs.size || S.pcs.has(pcOf(nn.midi))) return;
+      const nx = leadNs[k + 1], nS = nx && chordAt(nx.t);
+      if (nx && nS.pcs.size && nx.t <= nn.t + nn.dur + 0.25 && Math.abs(nx.midi - nn.midi) <= 2 && nS.pcs.has(pcOf(nx.midi)) && nn.dur <= 1 + 1e-9) return;
+      const hit = acc.some(m => { const ov = Math.min(m.t + m.dur, nn.t + nn.dur) - Math.max(m.t, nn.t), iv = Math.abs(m.midi - nn.midi) % 12; return ov >= 0.125 && (iv === 1 || iv === 11) && ((onB(Math.max(m.t, nn.t)) && ov >= 0.25) || ov >= 0.5 || (onB(nn.t) && nn.dur >= 0.5)); });
+      if (!hit) return;
+      for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (inScale(m, nn.t) && S.pcs.has(pcOf(m))) { nn.midi = m; nn.snapped = true; break; } }
+    });
+  }
+  // the Movement figure stays under the melody: a later pass that moved a melody note onto or
+  // below a figure note sounding with it takes that figure note out
+  for (let j = notes.length - 1; j >= 0; j--) {
+    const nn = notes[j]; if (nn.layer !== MOTION_ID) continue;
+    if (notes.some(m => m.layer === "lead" && !m.dbl && !m.echo && m.t <= nn.t + 1e-6 && m.t + m.dur > nn.t + 1e-6 && m.midi <= nn.midi)) notes.splice(j, 1);
+  }
   if (ruleOn(P, "strays") && P.orch !== "custom") for (const L of [...extra]) {
     if (L.only || L.role === "sustain" || L.role === "drone") continue;
     const k = new Set(notes.filter(x => x.layer === L.id && x.point !== -2 && x.t < plan.body + I - 1e-9).map(x => x.t.toFixed(3))).size;
@@ -644,7 +675,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   return {
     version: SCORE_VERSION, bpm, bpmStyle, bars: plan.bars, total: T, body: plan.body + I, intro: I, endBeats: plan.end, seconds: P.duration,
     requested: points.length, truncated: points.length - plan.count,
-    pc, pcOff, modeKey, modeIv, melIv, major, val, energy, family: family ? family.key : null, palette: palette ? palette.key : null, notes, points: out, stats, keyManual: P.keyMode === "manual", scaleManual: !!scale, pent, smooth,
+    pc, pcOff, modeKey, modeIv, melIv, major, val, energy, family: family ? family.key : null, gated: !!R.gatedSnare && ruleOn(P, "gated"), palette: palette ? palette.key : null, notes, points: out, stats, keyManual: P.keyMode === "manual", scaleManual: !!scale, pent, smooth,
     cadence: plan.end > 0 ? { t: tc + I, chord: cadChord, lead: cadLead, bass: cadBass } : null,
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
     extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name, ...(L.gain ? { gain: L.gain } : {}), ...(L.label ? { label: L.label } : {}), ...(L.only ? { only: true, rule: L.rule } : {}) })), expert: P.expert && P.expert.length ? P.expert : null, orch: P.orch === "custom" ? "custom" : (P.orch || "small"),

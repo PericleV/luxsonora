@@ -1,6 +1,6 @@
 // Composition: melody, harmony, bass, rhythm and pad over a fixed duration with a final cadence.
 import { clamp, clampInt, lerp } from "./util.js";
-import { MODES, STYLES, RULES, degMidi, objectAt } from "./theory.js";
+import { MODES, STYLES, RULES, degMidi, objectAt, autoModeOf } from "./theory.js";
 import { imageStats, pointTimbre, modulation, zoneFeatures, modulate, LAYER_DEPTH, ZERO_M, avgRegion } from "./timbre.js";
 import { planTime } from "./duration.js";
 import { surroundZone } from "./focus.js";
@@ -15,7 +15,7 @@ import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
 import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, figureLoneNotes, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
-import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf } from "./gen.js";
+import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf, paletteOf } from "./gen.js";
 import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY, applyRawEdits } from "./raw.js";
 import { enrichAt, enrichOn, enrichHarmKind, applyEnrich, GENERIC_HARM } from "./enrich.js";
 import { motionNotes, motionPreset, MOTION_ID, colourPiece } from "./motion.js";
@@ -68,16 +68,17 @@ export function compose(args) {
 function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = null }) {
   const st = STYLES[P.style], g = A.global, ws = sem ? P.wSem : 0;
   // Advanced: composition can make the chords change faster or slower than the style's grid
-  const R0 = RULES[P.style] || RULES.ambient, cr = P.chordRate ?? 1;
-  const R = cr === 1 || !R0.unit ? R0 : { ...R0, unit: Math.max(1, Math.min(16, Math.round(R0.unit * cr))) };
+  const R00 = RULES[P.style] || RULES.ambient, cr = P.chordRate ?? 1;
+  const R0 = cr === 1 || !R00.unit ? R00 : { ...R00, unit: Math.max(1, Math.min(16, Math.round(R00.unit * cr))) };
   let val = 0.5 * g.brightness + 0.3 * g.warmth01 + 0.2 * g.sat;
   let energy = 0.6 * g.edgeN + 0.4 * g.entropy;
   if (sem && sem.valence != null) { val = lerp(val, clamp(sem.valence), 0.6 * ws); energy = lerp(energy, clamp(sem.energy), 0.6 * ws); }
-  const allowed = [...st.modes].sort((a, b) => MODES[a].b - MODES[b].b);
-  // key and scale: automatic from the image, or chosen by hand
+  // key and scale: automatic from the image (its mood, stretched, picks the progression family
+  // and the mode inside it), or chosen by hand
   const scale = P.scale && P.scale !== "auto" ? P.scale : null;
-  const autoMode = allowed[Math.round(clamp(val) * (allowed.length - 1))];
-  const modeKey = scale ? (MODES[scale] ? scale : scale === "majpent" ? "ionian" : "aeolian") : autoMode, modeIv = MODES[modeKey].iv;
+  const auto = autoModeOf(P.style, val, scale && MODES[scale] ? scale : null), family = auto.family;
+  const modeKey = scale ? (MODES[scale] ? scale : scale === "majpent" ? "ionian" : "aeolian") : auto.modeKey, modeIv = MODES[modeKey].iv;
+  const R = family ? { ...R0, cands: (family.candsBy && family.candsBy[modeKey]) || family.cands } : R0;
   const autoPc = g.hueStr > 0.06 ? ((Math.round(g.hue / 30) % 12) * 7) % 12 : (Math.round(g.brightness * 11) * 7) % 12;
   const pc = P.keyMode === "manual" ? ((P.keyPc % 12) + 12) % 12 : autoPc;
   const pcOff = pc > 5 ? pc - 12 : pc;
@@ -94,7 +95,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   const melIv = pent ? (major ? [0, 2, 4, 7, 9] : [0, 3, 5, 7, 10]) : !scale && st.melScale ? st.melScale : modeIv, n = melIv.length;
   const baseLead = 60 + pcOff + 12 * octave, stats = imageStats(A), maxE = stats.maxE;
   // By genre: the picture chooses the five tracks' instruments from the genre's pool
-  const genre = pictureBandOf(P), core = genre ? genreCore(P.style, A, { samples: P.samples === true, melody: P.melody }) : null;
+  const genre = pictureBandOf(P), palette = genre ? paletteOf(P.style, A, { samples: P.samples === true, family: family && family.key }) : null, core = genre ? genreCore(P.style, A, { samples: P.samples === true, melody: P.melody, family: family && family.key }) : null;
   const inst = resolveInstruments(P.style, P.instruments, P.melody, P.samples === true, core);
   const texImg = lum || { w: A.W, h: A.H, data: A.L };
   const usesWave = ["lead", "harm", "bass", "pad"].some(l => inst[l].type === "wave");
@@ -370,7 +371,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   // the orchestration's layers, and the instruments the Expert rules add (they play only at their places)
   const expertL = expertLayers(P.expert).filter(L => ROLES[L.role]);
   // By genre: the added tracks are the band's players that fit the picture best
-  const gl = genre && P.orch !== "custom" ? genreLayers(P.style, P.orch || "small", A, { samples: P.samples === true, avoid: ["lead", "harm", "bass", "pad"].map(l => inst[l].name), richness: richnessOf(A, places) }) : null;
+  const gl = genre && P.orch !== "custom" ? genreLayers(P.style, P.orch || "small", A, { samples: P.samples === true, family: family && family.key, avoid: ["lead", "harm", "bass", "pad"].map(l => inst[l].name), richness: richnessOf(A, places) }) : null;
   let autoL = P.orch === "custom" ? (P.layers || []).filter(L => ROLES[L.role]) : gl ? gl.pick : autoLayers(P.style, P.orch || "small", richnessOf(A, places), P.samples === true);
   const setInst = L => {
     const base = (L.preset && LIBRARY[L.preset]) || LIBRARY[roleInstrument(P.style, L.role, P.samples === true)] || LIBRARY["x.softlead"];
@@ -643,7 +644,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   return {
     version: SCORE_VERSION, bpm, bpmStyle, bars: plan.bars, total: T, body: plan.body + I, intro: I, endBeats: plan.end, seconds: P.duration,
     requested: points.length, truncated: points.length - plan.count,
-    pc, pcOff, modeKey, modeIv, melIv, major, val, energy, notes, points: out, stats, keyManual: P.keyMode === "manual", scaleManual: !!scale, pent, smooth,
+    pc, pcOff, modeKey, modeIv, melIv, major, val, energy, family: family ? family.key : null, palette: palette ? palette.key : null, notes, points: out, stats, keyManual: P.keyMode === "manual", scaleManual: !!scale, pent, smooth,
     cadence: plan.end > 0 ? { t: tc + I, chord: cadChord, lead: cadLead, bass: cadBass } : null,
     bgArea, ptim, padM, inst, style: P.style, motifCount: motifs.length, arc: { ...arc, amount: arcAmount },
     extra: extra.map(L => ({ id: L.id, role: L.role, preset: L.preset || null, name: inst[L.id].name, ...(L.gain ? { gain: L.gain } : {}), ...(L.label ? { label: L.label } : {}), ...(L.only ? { only: true, rule: L.rule } : {}) })), expert: P.expert && P.expert.length ? P.expert : null, orch: P.orch === "custom" ? "custom" : (P.orch || "small"),

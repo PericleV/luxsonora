@@ -26,6 +26,7 @@
 import { clamp } from "./util.js";
 import { LIBRARY, styleDefault } from "./instruments.js";
 import { STYLE_BAND, STYLE_ROLES, ROLES, roleInstrument } from "./arrange.js";
+import { autoModeOf } from "./theory.js";
 
 export const GEN_MODES = { composed: "Composed", raw: "Raw" };
 export const GEN_DESC = {
@@ -103,6 +104,34 @@ const BAND_MORE = {
   funk: [["s.piano", "runs"]]
 };
 
+// Palettes (docs/GENRES.md): with "The picture chooses the band", a genre that has them plays one
+// whole ensemble chosen for the picture, instead of instruments picked one by one. Each palette
+// belongs to a progression family (theory.js), so the band matches the harmony the mood of the
+// picture chose: dark chords on cellos, low brass and male voices, heroic ones on a trumpet and
+// the brass section. Its five tracks and its band of added tracks are fixed; the picture still
+// decides which of the band come in (genreLayers). Without sampled instruments the usual choice
+// applies.
+export const PALETTES = {
+  epic: [
+    { key: "trailer", family: "minor", name: "Trailer", core: { lead: "s.horn", harm: "s.strings", bass: "s.contrabass", pad: "s.choir" },
+      band: [["s.brass", "sustain"], ["s.cello", "counter"], ["s.strings", "runs"], ["s.timpani", "pulse"], ["s.trombone", "double"], ["v.mixed", "sustain"], ["s.tremolo", "ostinato"]] },
+    { key: "heroic", family: "heroic", name: "Heroic", core: { lead: "s.trumpet", harm: "s.brass", bass: "s.contrabass", pad: "s.strings" },
+      band: [["s.horn", "counter"], ["s.strings", "runs"], ["s.timpani", "pulse"], ["s.choir", "sustain"], ["s.violin", "double"], ["s.celesta", "ornament"], ["s.tremolo", "ostinato"]] },
+    { key: "dark", family: "dark", name: "Dark", core: { lead: "s.cello", harm: "s.tremolo", bass: "s.contrabass", pad: "v.male" },
+      band: [["s.trombone", "sustain"], ["s.horn", "double"], ["s.timpani", "pulse"], ["s.strings", "runs"], ["s.violin", "counter"], ["s.choir", "sustain"], ["s.pizz", "ostinato"]] }
+  ]
+};
+// the mood score of a picture (compose.js reads the same, before a story's semantics)
+const moodScore = A => { const g = (A && A.global) || {}; return 0.5 * (g.brightness ?? 0.5) + 0.3 * (g.warmth01 ?? 0.5) + 0.2 * (g.sat ?? 0.5); };
+// The palette of a style for a picture (family: the progression family already chosen), or null.
+export function paletteOf(style, A, { samples = true, family = null } = {}) {
+  const list = PALETTES[style];
+  if (!list || !samples) return null;
+  const fam = family || (autoModeOf(style, moodScore(A)).family || {}).key;
+  const P = list.find(x => x.family === fam) || list[0];
+  return Object.values(P.core).every(k => LIBRARY[k]) ? P : null;
+}
+
 // By genre, a track the genre does not usually have is left out: a jazz combo and bossa nova
 // without a pad under them, baroque and neoclassical pieces without a drum kit.
 export const GENRE_OMIT = { jazz: ["pad"], bossa: ["pad"], baroque: ["perc"], neoclassical: ["perc"] };
@@ -146,7 +175,13 @@ const keyOf = (style, layer, melody, samples) => { const d = styleDefault(style,
  * track the pool has nothing more for keeps the style's own, null). With a story or improvised
  * melody the melody keeps its own instrument.
  */
-export function genreCore(style, A, { samples = true, melody = "classic" } = {}) {
+export function genreCore(style, A, { samples = true, melody = "classic", family = null } = {}) {
+  const pal = paletteOf(style, A, { samples, family });
+  if (pal) {
+    const out = {};
+    for (const layer of ["lead", "harm", "bass", "pad"]) { const own = keyOf(style, layer, melody, samples); out[layer] = (layer === "lead" && melody !== "classic") || pal.core[layer] === own ? null : pal.core[layer]; }
+    return out;
+  }
   const pic = pictureOf(A), pool = CORE_POOL[style] || {}, out = {}, taken = new Set();
   // one instrument per track: a track does not take the one an earlier track has, unless the style
   // itself plays it there (a classical piano plays both the melody and the accompaniment)
@@ -169,11 +204,12 @@ export function genreCore(style, A, { samples = true, melody = "classic" } = {})
  * an instrument already on a main track, the same instrument twice, or a third of one role is
  * passed over. Returns { pick: the first n as layers, rest: the others in order }.
  */
-export function genreLayers(style, level, A, { samples = true, avoid = [], richness = 0.5 } = {}) {
+export function genreLayers(style, level, A, { samples = true, avoid = [], richness = 0.5, family = null } = {}) {
   if (level !== "medium" && level !== "full") return { pick: [], rest: [] };
   const n = level === "medium" ? 2 + Math.round(clamp(richness)) : 4 + Math.round(2 * clamp(richness));
-  const pic = pictureOf(A), order = STYLE_ROLES[style] || STYLE_ROLES.ambient;
-  const own = STYLE_BAND[style] || [], more = BAND_MORE[style] || [], over = BAND_TYP[style] || {};
+  const pic = pictureOf(A), order = STYLE_ROLES[style] || STYLE_ROLES.ambient, pal = paletteOf(style, A, { samples, family });
+  // a palette's band is the whole band (in its own order)
+  const own = pal ? pal.band : STYLE_BAND[style] || [], more = pal ? [] : BAND_MORE[style] || [], over = pal ? {} : BAND_TYP[style] || {};
   const band = [...own.map(([k, r], i) => [k, r, over[k] ?? 1 - 0.05 * i]), ...more.map(([k, r]) => [k, r, over[k] ?? 0.55])].filter(([k, r]) => ROLES[r] && usable(k, samples));
   // without sampled instruments, the style's synthesizer for each role
   // only roles the genre plays; a drone (a low note held for bars, which rubs against a harmony

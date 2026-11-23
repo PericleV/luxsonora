@@ -24,7 +24,8 @@
 //   thin       a track (not the drums) with fewer than six notes that sound for less than a
 //              quarter of the piece
 //   loud       a lone note at least 1.3 times as loud as its track's median
-// Options: --band (the picture chooses the band), --enrich (Enriched), --style=<key>, --examples.
+// Options: --band (the picture chooses the band), --enrich (Enriched), --style=<key>, --scale=<mode>
+// (the mode forced, and with it its progression family), --examples.
 // Counts are per minute of music, so styles with different lengths compare.
 import { synthImage } from "../test/helpers.js";
 import { analyze } from "../src/core/analyze.js";
@@ -38,6 +39,7 @@ import { STYLES } from "../src/core/theory.js";
 const RULES_OFF = process.argv.includes("--rules-off") ? { modulate: false, contrast: false, cadences: false, picardy: false, leap: false, parallels: false, peak: false } : null;
 const EXAMPLES = process.argv.includes("--examples") || !!(typeof process !== "undefined" && process.env.AUDIT_EXAMPLES);
 const ONLY = (process.argv.find(a => a.startsWith("--style=")) || "").slice(8);
+const SCALE = (process.argv.find(a => a.startsWith("--scale=")) || "").slice(8);
 const MODE = { ...(process.argv.includes("--band") ? { pictureBand: true } : {}), ...(process.argv.includes("--enrich") ? { enrich: true } : {}) };
 const IMAGES = [[200, 133, 1], [133, 200, 7], [200, 133, 3], [180, 180, 11], [240, 120, 5]].map(([w, h, s]) => ({ name: `img${s}`, img: synthImage(w, h, s) }));
 const BASE = { count: 8, returns: 3, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS, wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, smooth: 0.6, arc: 0.7 };
@@ -209,7 +211,7 @@ if (isMain) {
     if (ONLY && style !== ONLY) continue;
     const tot = Object.fromEntries(KEYS.map(k => [k, 0])); let mins = 0;
     for (const I of IMAGES) for (const C of CONFIGS) {
-      const P = { ...BASE, ...C, style, ...MODE, ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
+      const P = { ...BASE, ...C, style, ...MODE, ...(SCALE ? { scale: SCALE } : {}), ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
       mins += r.minutes; for (const k of KEYS) tot[k] += r.cnt[k] || 0;
       worst.push({ label: `${style} ${I.name} ${C.duration}s ${C.orch} ${C.connect}`, r });
     }

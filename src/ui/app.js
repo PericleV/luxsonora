@@ -6,10 +6,10 @@ import { gazePath, readPoints, coverage, backgroundZone, saliencyAt, newId, DEFA
 import { hashBytes, boxBlur } from "../core/util.js";
 import { ENRICH, ENRICH_KEYS, enrichBase, enrichOn, linesWord } from "../core/enrich.js";
 import { clusterRegions, buildMotifs } from "../core/motifs.js";
-import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
+import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, moodOf, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
-import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT } from "../core/gen.js";
+import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT, paletteOf } from "../core/gen.js";
 import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable, RAW_CC, RAW_CC_DESC, ENRICH_READS } from "../core/raw.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
@@ -659,8 +659,8 @@ function openNewSong(fresh = false) {
   const orchNote = () => {
     const st = $b("#nsStyle").value, n = Number($b("#nsCount").value);
     if (orch === "custom") return "Your own list of instruments stays as it is.";
-    const samples = P.samples !== false, core = band && gen !== "raw" && A ? genreCore(st, A, { samples, melody: mel }) : null;
-    const coreTxt = core && Object.values(core).some(Boolean) ? ` For this picture: ${["lead", "harm", "bass", "pad"].filter(l => core[l]).map(l => `${LAYER_NAME[l].toLowerCase()} on ${LIBRARY[core[l]].name}`).join(", ")}.` : "";
+    const samples = P.samples !== false, core = band && gen !== "raw" && A ? genreCore(st, A, { samples, melody: mel }) : null, pal = band && gen !== "raw" && A ? paletteOf(st, A, { samples }) : null;
+    const coreTxt = core && Object.values(core).some(Boolean) ? ` For this picture${pal ? `, the ${pal.name.toLowerCase()} ensemble` : ""}: ${["lead", "harm", "bass", "pad"].filter(l => core[l]).map(l => `${LAYER_NAME[l].toLowerCase()} on ${LIBRARY[core[l]].name}`).join(", ")}.` : "";
     if (orch === "small") return "Five tracks: melody, harmony, bass, a pad underneath and the drums (or the style's percussion)." + coreTxt;
     const xs = !A ? [] : band ? genreLayers(st, orch, A, { samples, richness: richnessOf(A, n) }).pick : autoLayers(st, orch, richnessOf(A, n), samples);
     return `The five tracks, plus ${xs.length} more ${band ? "chosen for this picture from" : "from"} the ${STYLES[st].name} band: ${xs.map(L => `${(LIBRARY[L.preset] || {}).name || L.preset} (${ROLES[L.role].name.toLowerCase()})`).join(", ")}. They come in one by one as the music builds; one with almost nothing to play in this picture is swapped for the next in the band.${coreTxt}`;
@@ -830,7 +830,8 @@ function howThisPicture() {
   if (!SCORE || !A) return "";
   const g = A.global, sc = SCORE, st = STYLES[sc.style], val = 0.5 * g.brightness + 0.3 * g.warmth01 + 0.2 * g.sat, energy = 0.6 * g.edgeN + 0.4 * g.entropy;
   const modes = [...st.modes].sort((a, b) => MODES[a].b - MODES[b].b), keyFrom = g.hueStr > 0.06 ? `its colour, at ${Math.round(g.hue)}° on the wheel` : `its lightness (${nf(g.brightness)}), as it has no clear colour`;
-  const mode = sc.scaleManual ? "chosen by hand" : `brightness score ${nf(val)} picks ${MODES[sc.modeKey].name.split(" ")[0]} among ${modes.map(m => MODES[m].name.split(" ")[0]).join(", ")}`;
+  const fam = sc.family && RULES[sc.style] && RULES[sc.style].families ? RULES[sc.style].families.find(F => F.key === sc.family) : null;
+  const mode = sc.scaleManual ? "chosen by hand" : fam ? `mood score ${nf(val)} (stretched to ${nf(moodOf(val))}) picks the ${fam.name.toLowerCase()} chords and ${MODES[sc.modeKey].name.split(" ")[0]}` : `mood score ${nf(val)} (stretched to ${nf(moodOf(val))}) picks ${MODES[sc.modeKey].name.split(" ")[0]} among ${modes.map(m => MODES[m].name.split(" ")[0]).join(", ")}`;
   return `<div class="howto-now"><b>For this picture</b> (${esc(st.name)}): the key is ${esc(pcName(sc.pc))}${sc.keyManual ? " (chosen by hand)" : `, from ${esc(keyFrom)}`}; the mood is ${esc(mode)}; the energy score ${nf(energy)} sets ${nf1(sc.bpmStyle)} BPM in the style's ${st.tempo[0]}-${st.tempo[1]}, rounded to ${nf1(sc.bpm)} BPM so ${sc.bars} bars last exactly ${sc.seconds} s; ${sc.points.length} places share ${sc.body - (sc.intro || 0)} beats.${sc.modulation ? ` The climax moves to ${esc(pcName(sc.modulation.keyPc))}.` : ""}</div>`;
 }
 // Every style's particulars, read from its settings (theory.js STYLES and RULES, patterns.js).

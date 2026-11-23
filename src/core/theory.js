@@ -80,7 +80,7 @@ export const STYLES = {
     gm: { lead: 84, harm: 90, bass: 38, pad: 88 }
   },
   epic: {
-    name: "Orchestral epic", modes: ["phrygian", "aeolian", "dorian"], tempo: [88, 128], pent: false, ext: 5, swing: 0, perc: "taiko", bass: "ostinato", reverb: 0.55,
+    name: "Orchestral epic", modes: ["phrygian", "aeolian", "dorian", "mixolydian", "lydian"], tempo: [88, 128], pent: false, ext: 5, swing: 0, perc: "taiko", bass: "ostinato", reverb: 0.55,
     inst: {
       lead: I("pad", "Horn section", { a: 0.09, d: 0.8, s: 0.85, r: 0.5, cut: 1900, q: 0.9, col: 0.62, det: 6, lvl: 0.6, vib: 5 }),
       harm: I("pad", "String ostinato", { a: 0.01, d: 0.25, s: 0.55, r: 0.12, cut: 3200, q: 0.8, col: 0.7, det: 8, lvl: 0.8 }),
@@ -336,13 +336,58 @@ export const STYLES = {
  *   stopDown: the music cuts out for half a beat before the climax (trailer device)
  *   cadentialV: the chord before the final cadence is the dominant (V-I, classical)
  */
+/*
+ * Progression families (docs/GENRES.md): a genre may hold several, from the darkest to the
+ * brightest; the mood of the picture picks one, then the mode inside it by weight. Each family
+ * has its own chord candidates (scale degrees of its mode, for bright and dark areas; candsBy: other
+ * candidates for one of its modes, so no candidate is a diminished chord of that mode).
+ */
+const EPIC_FAMILIES = [
+  // Dark: i, bII, bVII, iv in Phrygian (its flat second); in natural minor i, bVI, bVII, iv
+  { key: "dark", name: "Dark", modes: { phrygian: 2, aeolian: 1 }, cands: [[1, 0, 6], [0, 3, 1]], candsBy: { aeolian: [[5, 0, 6], [0, 3, 5]] } },
+  // Minor epic: i, bVI, bIII, bVII; in Dorian i, IV, bIII, bVII (its sixth degree is diminished)
+  { key: "minor", name: "Minor epic", modes: { aeolian: 3, dorian: 1 }, cands: [[5, 2, 6], [0, 5, 6]], candsBy: { dorian: [[3, 2, 6], [0, 3, 6]] } },
+  // Heroic: I, bVII, IV in Mixolydian (the major with a flat seventh); I, II, V in Lydian (wonder)
+  { key: "heroic", name: "Heroic", modes: { mixolydian: 2, lydian: 1 }, cands: [[0, 6, 3], [3, 0, 6]], candsBy: { lydian: [[1, 0, 4], [0, 4, 1]] } }
+];
+/*
+ * The mood of a picture (0 dark and cold, 1 bright and warm), stretched: real pictures rarely
+ * reach the ends of the raw score (0.5 brightness + 0.3 warmth + 0.2 saturation), so the middle
+ * mode always won before. The same fixed curve on every device.
+ */
+export const moodOf = val => Math.max(0, Math.min(1, (val - 0.22) / 0.56));
+const pickWeighted = (list, w, x) => {
+  const tot = list.reduce((a, m) => a + (w[m] ?? 1), 0);
+  let acc = 0;
+  for (const m of list) { acc += (w[m] ?? 1) / tot; if (x < acc - 1e-12) return m; }
+  return list[list.length - 1];
+};
+/*
+ * The mode and the progression family of a style for a picture of mood score val. scale: a mode
+ * chosen by hand (its family is the one where it weighs most). Returns { modeKey, family } (family null
+ * for a style without families; the mode then comes from the style's list, darkest to brightest).
+ */
+export function autoModeOf(style, val, scale = null) {
+  const st = STYLES[style] || STYLES.ambient, R = RULES[style] || {}, x = moodOf(val);
+  const byB = list => [...list].sort((a, b) => MODES[a].b - MODES[b].b);
+  if (R.families && R.families.length) {
+    const fams = R.families, i = Math.min(fams.length - 1, Math.floor(x * fams.length));
+    // a mode set by hand: the family where it weighs most
+    if (scale && MODES[scale]) { const holds = fams.filter(F => F.modes[scale]).sort((a, b) => b.modes[scale] - a.modes[scale]); return { modeKey: scale, family: holds[0] || fams[i] }; }
+    const F = fams[i];
+    return { modeKey: pickWeighted(byB(Object.keys(F.modes)), F.modes, x * fams.length - i), family: F };
+  }
+  if (scale && MODES[scale]) return { modeKey: scale, family: null };
+  return { modeKey: pickWeighted(byB(st.modes), st.modeW || {}, x), family: null };
+}
+
 export const RULES = {
   ambient: { grid: 1, unit: 8, phrase: 2, harm: ["block", "arp"], bass: ["pedal", "hold"], cands: [[0, 3, 4], [5, 1, 2]], sidechain: 0, pickups: true, approach: false, swell: "cymbal", stopDown: false },
   cinematic: { grid: 1, unit: 4, phrase: 2, harm: ["block", "broken", "arp"], bass: ["hold", "rootfifth"], cands: [[0, 3, 4], [5, 1, 2]], sidechain: 0, pickups: true, approach: true, swell: "cymbal", stopDown: false },
   minimal: { grid: 1, unit: 8, phrase: 4, harm: ["broken", "arp"], bass: ["pulse", "pulse"], cands: [[0, 3, 4], [5, 3, 1]], sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
   jazz: { grid: 1, unit: 4, phrase: 2, harm: ["block", "comp"], bass: ["twofeel", "walk"], cands: [[0, 3, 4], [1, 5, 2]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false },
   electronic: { grid: 2, unit: 4, phrase: 4, harm: ["block", "stab"], bass: ["hold", "offbeat"], cands: [[0, 5, 3], [5, 3, 6]], sidechain: 0.65, pickups: false, approach: false, swell: "riser", stopDown: false },
-  epic: { grid: 2, unit: 4, phrase: 2, harm: ["block", "ostinato"], bass: ["hold", "ostinato"], cands: [[5, 2, 6], [0, 3, 5]], sidechain: 0, pickups: false, approach: false, swell: "timpani", stopDown: true },
+  epic: { grid: 2, unit: 4, phrase: 2, harm: ["block", "ostinato"], bass: ["hold", "ostinato"], cands: [[5, 2, 6], [0, 3, 5]], families: EPIC_FAMILIES, sidechain: 0, pickups: false, approach: false, swell: "timpani", stopDown: true },
   lofi: { grid: 1, unit: 4, phrase: 4, harm: ["block", "comp"], bass: ["hold", "rootfifth"], cands: [[1, 4, 0], [5, 3, 1]], sidechain: 0.25, pickups: true, approach: false, swell: null, stopDown: false },
   bossa: { grid: 1, unit: 4, phrase: 2, harm: ["block", "bossa"], bass: ["bossa", "bossa"], cands: [[0, 1, 4], [1, 4, 5]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
   synthwave: { grid: 2, unit: 4, phrase: 4, harm: ["block", "arp"], bass: ["hold", "octave8"], cands: [[5, 2, 6], [0, 5, 3]], sidechain: 0.3, pickups: false, approach: false, swell: "riser", stopDown: false },

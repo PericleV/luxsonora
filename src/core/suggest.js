@@ -5,9 +5,10 @@
 // style by how close it is to the profile, and gets a short reason in words.
 import { clamp, mulberry32 } from "./util.js";
 import { colourOf } from "./expert.js";
-import { HIDDEN_STYLES, STYLE_GROUPS } from "./theory.js";
+import { HIDDEN_STYLES, GENRES } from "./theory.js";
 
 // [lightness, warmth, saturation, detail, contrast, colour families]
+// (the five genres share the whole range of pictures between them; the hidden styles keep theirs)
 const PROFILE = {
   ambient: [0.55, 0.5, 0.3, 0.3, 0.35, ["blue", "cyan", "purple"]],
   lofinature: [0.55, 0.55, 0.35, 0.4, 0.35, ["green", "yellow", "orange"]],
@@ -15,20 +16,20 @@ const PROFILE = {
   neoclassical: [0.4, 0.5, 0.2, 0.3, 0.45, ["grey", "blue"]],
   minimal: [0.6, 0.45, 0.3, 0.55, 0.5, ["grey"]],
   eastasian: [0.55, 0.55, 0.45, 0.35, 0.4, ["red", "magenta", "green"]],
-  classical: [0.5, 0.6, 0.35, 0.5, 0.5, ["yellow", "orange"]],
+  classical: [0.62, 0.5, 0.25, 0.55, 0.5, ["yellow", "grey", "blue"]],
   baroque: [0.45, 0.7, 0.45, 0.7, 0.55, ["orange", "yellow", "red"]],
   movie: [0.45, 0.5, 0.4, 0.45, 0.55, ["orange", "blue"]],
   cinematic: [0.3, 0.4, 0.4, 0.5, 0.7, ["blue", "cyan"]],
-  epic: [0.3, 0.45, 0.45, 0.7, 0.75, ["red", "orange", "grey"]],
+  epic: [0.3, 0.45, 0.4, 0.75, 0.8, ["red", "grey", "orange"]],
   jazz: [0.35, 0.65, 0.45, 0.5, 0.5, ["orange", "red", "yellow"]],
   bossa: [0.65, 0.7, 0.5, 0.4, 0.45, ["yellow", "orange", "cyan"]],
   blues: [0.35, 0.55, 0.4, 0.45, 0.55, ["blue", "purple"]],
   funk: [0.55, 0.65, 0.75, 0.7, 0.6, ["orange", "magenta", "yellow"]],
   reggae: [0.65, 0.65, 0.7, 0.5, 0.5, ["green", "yellow", "red"]],
-  lofi: [0.4, 0.6, 0.35, 0.45, 0.4, ["orange", "purple", "magenta"]],
+  lofi: [0.48, 0.58, 0.28, 0.3, 0.35, ["green", "orange", "purple"]],
   triphop: [0.25, 0.45, 0.3, 0.45, 0.55, ["blue", "purple", "grey"]],
   pop: [0.7, 0.55, 0.75, 0.5, 0.5, ["magenta", "cyan", "yellow", "red"]],
-  cinepop: [0.6, 0.55, 0.55, 0.45, 0.6, ["orange", "yellow", "blue"]],
+  cinepop: [0.7, 0.62, 0.65, 0.5, 0.55, ["orange", "yellow", "red"]],
   rock: [0.4, 0.5, 0.5, 0.7, 0.7, ["red", "grey"]],
   postrock: [0.5, 0.4, 0.4, 0.35, 0.55, ["blue", "cyan", "grey"]],
   folk: [0.6, 0.6, 0.45, 0.55, 0.45, ["green", "yellow", "orange"]],
@@ -36,7 +37,7 @@ const PROFILE = {
   electronic: [0.4, 0.4, 0.7, 0.6, 0.6, ["cyan", "magenta", "blue"]],
   techno: [0.25, 0.35, 0.4, 0.65, 0.7, ["grey", "blue"]],
   dnb: [0.3, 0.4, 0.55, 0.8, 0.7, ["cyan", "green", "blue"]],
-  synthwave: [0.3, 0.5, 0.75, 0.5, 0.65, ["magenta", "purple", "cyan"]],
+  synthwave: [0.32, 0.5, 0.8, 0.5, 0.65, ["magenta", "purple", "cyan", "blue"]],
   acappella: [0.55, 0.5, 0.2, 0.25, 0.4, ["blue", "grey", "purple"]],
   chiptune: [0.6, 0.5, 0.8, 0.65, 0.7, ["red", "green", "blue", "yellow", "magenta", "cyan"]]
 };
@@ -84,7 +85,8 @@ const USUAL = (() => {
   for (const st of Object.keys(PROFILE)) { const m = sum[st] / N; out[st] = { mean: m, sd: Math.max(0.03, Math.sqrt(Math.max(0, sq[st] / N - m * m))) }; }
   return out;
 })();
-const GROUP_OF = Object.fromEntries(STYLE_GROUPS.flatMap(([g, keys]) => keys.map(k => [k, g])));
+// each of the five genres is its own family (the hidden styles have none)
+const GROUP_OF = Object.fromEntries(GENRES.map(k => [k, k]));
 
 /*
  * The styles that suit a picture: [{ style, score (0-1, the fit), reason, group }], best first.

@@ -100,7 +100,7 @@ export const STYLES = {
     gm: { lead: 0, harm: 48, bass: 42, pad: 49 }
   },
   lofi: {
-    name: "Lo-fi hip hop", modes: ["dorian", "aeolian", "mixolydian", "ionian", "lydian"], tempo: [70, 90], pent: false, ext: 9, swing: 0.35, swing16: 0.55, perc: "boombap", bass: "hold", reverb: 0.35,
+    name: "Lo-fi", modes: ["dorian", "aeolian", "mixolydian", "ionian", "lydian"], tempo: [70, 90], pent: false, ext: 9, swing: 0.35, swing16: 0.55, perc: "boombap", bass: "hold", reverb: 0.35,
     inst: {
       lead: I("fm", "Mellow keys", { a: 0.006, d: 1.4, s: 0.25, r: 0.6, cut: 2200, q: 0.7, col: 0.18, ratio: 1 }),
       harm: I("fm", "Dusty electric piano", { a: 0.008, d: 1.6, s: 0.35, r: 0.8, cut: 1800, q: 0.7, col: 0.3, ratio: 1 }),
@@ -519,13 +519,20 @@ export const LAYERS = ["lead", "harm", "bass", "pad", "perc"];
 export const LAYER_NAME = { lead: "Melody", harm: "Harmony", bass: "Bass", pad: "Pad", perc: "Rhythm" };
 // Drum kit of each style (see rhythm.js)
 // The styles in five families, as the menus list them (and the suggestions take one from each).
-export const STYLE_GROUPS = [
+// The five genres offered (docs/GENRES.md), in this order. Every other style stays in the code:
+// a saved project with one still opens and plays, and lo-fi and classical play some of them for
+// their ambient side and their baroque idiom; they are hidden from the lists and the suggestions.
+export const GENRES = ["epic", "synthwave", "lofi", "cinepop", "classical"];
+// the families of all the styles, the hidden ones included (the suggestions' spread reads them)
+export const ALL_STYLE_GROUPS = [
   ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
   ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
   ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
   ["Band", ["cinepop", "pop", "rock", "postrock", "folk", "metal"]],
   ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
 ];
-// styles kept in the code but not offered yet (not in the menus, not suggested)
-export const HIDDEN_STYLES = new Set(["acappella"]);
+// the lists show the five genres
+export const STYLE_GROUPS = [["Genres", GENRES]];
+// styles kept in the code but not offered (not in the menus, not suggested)
+export const HIDDEN_STYLES = new Set(Object.keys(STYLES).filter(k => !GENRES.includes(k)));
 export const PERC_NAME = { cinepop: "No beat in the intro, then a soft kick and claps, the full kit at the chorus", acappella: "No drums", lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };

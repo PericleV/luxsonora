@@ -6,7 +6,7 @@ import { gazePath, readPoints, coverage, backgroundZone, saliencyAt, newId, DEFA
 import { hashBytes, boxBlur } from "../core/util.js";
 import { ENRICH, ENRICH_KEYS, enrichBase, enrichOn, linesWord } from "../core/enrich.js";
 import { clusterRegions, buildMotifs } from "../core/motifs.js";
-import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, moodOf, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
+import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, GENRES, RULES, moodOf, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
 import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT, paletteOf, LOFI_SIDES, LOFI_SIDE_DESC, CLASSICAL_IDIOMS, CLASSICAL_IDIOM_DESC } from "../core/gen.js";
@@ -55,7 +55,7 @@ import { initExport } from "./exportTab.js";
 const $ = s => document.querySelector(s);
 const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
-  style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
+  style: "cinepop", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
   smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, lofiSide: "auto", classicIdiom: "auto", enrich: false, enrichUse: {}, rawBpm: 0, rawScale: true, rawTracks: [], rawCut: [], rawCC: {}, layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
@@ -284,8 +284,8 @@ function renderWhy() {
 const STYLE_DESC = {
   ambient: "Slow chords over a held bass note. No real drums, just soft shakers, bells and pads.",
   minimal: "A steady pulse and patterns that repeat and slowly shift, on marimba and vibraphone. Think Steve Reich.",
-  lofi: "A lazy, swung beat with dusty drums and jazzy electric piano chords. Slow and relaxed.",
-  classical: "Piano and cello with classical harmony, a flowing left hand and a proper ending. No drums.",
+  lofi: "Warm and dusty: seventh chords on keys over a lazy, swung beat with vinyl under it. A calm picture plays its ambient side: no beat, long tones and a drone.",
+  classical: "Tonal harmony in periods that ask and answer, with a proper ending. A detailed picture plays it baroque: sequences on the circle of fifths over a walking continuo. No drums.",
   cinematic: "Harp and strings over rolling toms, with cymbal swells leading into each new part.",
   movie: "Like a film score. Swelling strings, a piano theme and timpani when it peaks.",
   epic: "Trailer music. Driving strings, horns, choir and big drums, with a sudden pause right before the climax.",
@@ -316,6 +316,12 @@ const STYLE_DESC = {
 
 // The five styles that suit the picture, one from each family (core/suggest.js), as buttons: the name and why.
 let WHY_OPEN = false;
+// The style list: the five genres, and a style no longer offered when this project uses it (an
+// older project keeps its style, and can move to a genre)
+function styleOptions(cur, mark) {
+  const opt = k => `<option value="${k}"${mark && k === cur ? " selected" : ""}>${esc(STYLES[k].name)}</option>`;
+  return GENRES.filter(k => STYLES[k]).map(opt).join("") + (cur && STYLES[cur] && !GENRES.includes(cur) ? `<optgroup label="No longer offered">${opt(cur)}</optgroup>` : "");
+}
 function styleSuggestHtml(cur) {
   if (!A) return "";
   const list = suggestStyles(A), ex = explainStyles(A, list);
@@ -604,7 +610,7 @@ function fillRange(r) { const lo = Number(r.min) || 0, hi = Number(r.max) || 100
 function openNewSong(fresh = false) {
   const name = INFO ? INFO.name : "this image", data = BASE && BASE.kind === "data";
   let sug = suggestedCount();
-  const groups = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}"${k === P.style ? " selected" : ""}>${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
+  const groups = styleOptions(P.style, true);
   const places = Object.entries(PLACEMENTS).map(([k, v]) => `<option value="${k}"${k === (data ? "details" : P.placement) ? " selected" : ""}>${esc(v.name)}${v.group === "Neural" ? " (neural)" : ""}</option>`).join("");
   const { body, close } = openInfo(`New song from “${name}”`, `<div class="dlg-info newsong">
     <details class="field nsframe" id="nsFrameBox" open><summary class="flabel">The picture: <span id="nsFrameSum"></span></summary>
@@ -2863,11 +2869,12 @@ export function init() {
   initSeek();
   initLayout();
   initExpert();
-  // style: a grouped dropdown with what each style is, in a line
+  // style: the five genres, with what each is, in a line
   const styleSel = $("#styleSel");
-  styleSel.innerHTML = STYLE_GROUPS.map(([g, keys]) => `<optgroup label="${g}">${keys.filter(k => STYLES[k]).map(k => `<option value="${k}">${esc(STYLES[k].name)}</option>`).join("")}</optgroup>`).join("");
+  styleSel.innerHTML = styleOptions(P.style, false);
   const styleNote = () => { $("#styleNote").textContent = STYLE_DESC[P.style] || ""; renderStyleSuggest(); };
-  STYLE_SEG = { set(v) { if (STYLES[v] && !styleSel.querySelector(`option[value="${v}"]`)) styleSel.insertAdjacentHTML("beforeend", `<option value="${v}">${esc(STYLES[v].name)}</option>`); styleSel.value = v; styleNote(); } };
+  // (the list is drawn again for the style set: an older project's style shows, apart, while it is used)
+  STYLE_SEG = { set(v) { if (STYLES[v]) { styleSel.innerHTML = styleOptions(v, false); styleSel.value = v; } styleNote(); } };
   STYLE_SEG.set(P.style);
   styleSel.addEventListener("change", () => {
     const v = styleSel.value; if (v !== P.style) resetInstrumentChoice(); P.style = v; styleNote(); SL.reverb.set(STYLES[v].reverb, false); applyMixLive();

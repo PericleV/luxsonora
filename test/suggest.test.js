@@ -1,5 +1,5 @@
-// Style suggestion (src/core/suggest.js): every style has a profile, the three best are distinct,
-// and clear pictures get the styles one would expect.
+// Style suggestion (src/core/suggest.js): every style has a profile, the five genres are offered
+// (each its own family), and clear pictures get the genre one would expect.
 import { describe, it, expect } from "vitest";
 import { STYLES } from "../src/core/theory.js";
 import { suggestStyles, SUGGEST_PROFILES } from "../src/core/suggest.js";
@@ -39,26 +39,29 @@ describe("style suggestion", () => {
     for (let L = 0.15; L <= 0.86; L += 0.14) for (let sat = 0.05; sat <= 0.56; sat += 0.1) for (let hue = 0; hue < 360; hue += 45) for (const detail of [0.2, 0.5, 0.8]) {
       const t = suggestStyles(pic({ L, warm: 0.3 + 0.4 * ((hue / 45) % 2), sat, hue, detail, contrast: 0.2 + 0.6 * detail }))[0].style; first[t] = (first[t] || 0) + 1; n++;
     }
-    expect(Math.max(...Object.values(first)) / n).toBeLessThan(0.2);
-    expect(Object.keys(first).length).toBeGreaterThanOrEqual(18);
+    // (five genres share the pictures: none first in more than about a third, every one somewhere)
+    expect(Math.max(...Object.values(first)) / n).toBeLessThan(0.36);
+    expect(Object.keys(first).length).toBe(5);
   });
-  it("a calm green landscape suggests the calm styles", () => {
+  it("a calm green landscape suggests lo-fi first, not the epic", () => {
     const t = top(pic({ L: 0.58, warm: 0.55, sat: 0.35, hue: 110, detail: 0.35, contrast: 0.35 }));
-    expect(t.some(s => ["lofinature", "folk", "ambient", "meditation", "eastasian"].includes(s))).toBe(true);
-    expect(t).not.toContain("metal");
+    expect(t[0]).toBe("lofi");
+    expect(t.slice(0, 2)).not.toContain("epic");
+  });
+  it("a pale, quiet picture suggests classical", () => {
+    expect(top(pic({ L: 0.7, warm: 0.5, sat: 0.1, hue: 60, detail: 0.5, contrast: 0.45 })).slice(0, 2)).toContain("classical");
   });
   it("a dark, grey, high-contrast, detailed picture suggests the heavy ones", () => {
     const t = top(pic({ L: 0.2, warm: 0.4, sat: 0.05, hueStr: 0.02, detail: 0.85, contrast: 0.85 }));
-    expect(t.some(s => ["metal", "techno", "epic", "rock", "dnb"].includes(s))).toBe(true);
-    expect(t).not.toContain("meditation");
+    expect(t[0]).toBe("epic");
   });
-  it("a bright, vivid, warm picture suggests the lively ones", () => {
+  it("a bright, vivid, warm picture suggests cinematic pop", () => {
     const t = top(pic({ L: 0.7, warm: 0.65, sat: 0.8, hue: 40, detail: 0.6, contrast: 0.55 }));
-    expect(t.some(s => ["pop", "funk", "reggae", "bossa", "chiptune"].includes(s))).toBe(true);
+    expect(t[0]).toBe("cinepop");
   });
-  it("neon magenta at night suggests synthwave or electronic", () => {
+  it("neon magenta at night suggests synthwave", () => {
     const t = top(pic({ L: 0.3, warm: 0.5, sat: 0.8, hue: 310, detail: 0.5, contrast: 0.65 }));
-    expect(t.some(s => ["synthwave", "electronic"].includes(s))).toBe(true);
+    expect(t[0]).toBe("synthwave");
   });
 });
 
@@ -68,5 +71,15 @@ describe("hidden styles", () => {
   it("are real styles, kept out of the suggestions", () => {
     for (const s of HIDDEN_STYLES) expect(STYLES[s], s).toBeTruthy();
     for (const seed of [1, 2, 3, 5, 7, 11, 13]) for (const x of suggestStyles(analyze(synthImage(160, 120, seed)), 28)) expect(HIDDEN_STYLES.has(x.style)).toBe(false);
+  });
+});
+
+// The five genres are offered; every other style is hidden but still plays (a saved project).
+import { GENRES, STYLE_GROUPS } from "../src/core/theory.js";
+describe("the genres offered", () => {
+  it("are the five of docs/GENRES.md, and the lists show only them", () => {
+    expect(GENRES).toEqual(["epic", "synthwave", "lofi", "cinepop", "classical"]);
+    expect(STYLE_GROUPS.flatMap(([, keys]) => keys)).toEqual(GENRES);
+    for (const k of Object.keys(STYLES)) expect(HIDDEN_STYLES.has(k)).toBe(!GENRES.includes(k));
   });
 });

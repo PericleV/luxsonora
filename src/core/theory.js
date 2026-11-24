@@ -393,6 +393,27 @@ const CINEPOP_FAMILIES = [
   // Lift: IV, I, V, vi; in Lydian I, II, vi, II (wonder)
   { key: "lift", name: "Lift", modes: { ionian: 2, lydian: 1 }, loop: [3, 0, 4, 5], loopBy: { lydian: [0, 1, 5, 1] }, cands: [[3, 0, 4], [4, 5, 3]], candsBy: { lydian: [[0, 1, 5], [5, 0, 1]] } }
 ];
+// Classical and Baroque: phrases of eight chords, one a bar (docs/GENRES.md). period: the phrase
+// ends on the tonic and the next one starts on it (the tonic held across, as a period does);
+// leadingTone: in minor the dominant is major (harmonic minor), its third the raised seventh.
+const CLASSICAL_FAMILIES = [
+  // every one a period of eight bars: a phrase that asks (a half cadence on V at bar four) and one
+  // that answers (a full cadence on I at bar eight); cadences: the bars that close a phrase
+  // Minor period: i iv VI V | i iv V i
+  { key: "lament", name: "Minor period", modes: { aeolian: 1 }, leadingTone: true, period: true, loop: [0, 3, 5, 4, 0, 3, 4, 0], cadences: { 3: "half", 7: "full" }, cands: [[0, 3, 4], [5, 3, 4]] },
+  // Rising period: I iii IV V | vi IV V I (the answer opens on the deceptive vi)
+  { key: "galant", name: "Rising period", modes: { ionian: 1 }, period: true, loop: [0, 2, 3, 4, 5, 3, 4, 0], cadences: { 3: "half", 7: "full" }, cands: [[0, 3, 4], [2, 5, 3]] },
+  // Period: I vi ii V | I IV V I
+  { key: "period", name: "Period", modes: { ionian: 1 }, period: true, loop: [0, 5, 1, 4, 0, 3, 4, 0], cadences: { 3: "half", 7: "full" }, cands: [[0, 3, 4], [5, 1, 4]] }
+];
+const BAROQUE_FAMILIES = [
+  // Lament: the circle of fifths in minor, i iv VII III VI, then iv V i
+  { key: "lament", name: "Minor circle", modes: { aeolian: 1 }, leadingTone: true, period: true, loop: [0, 3, 6, 2, 5, 3, 4, 0], cands: [[0, 3, 4], [6, 2, 5]] },
+  // Circle: descending fifths in major, I IV ii V iii vi ii V
+  { key: "circle", name: "Circle of fifths", modes: { ionian: 1 }, loop: [0, 3, 1, 4, 2, 5, 1, 4], cands: [[0, 3, 4], [1, 5, 2]] },
+  // Romanesca with a ii V close: I V vi iii IV I ii V
+  { key: "romanesca", name: "Romanesca", modes: { ionian: 1 }, loop: [0, 4, 5, 2, 3, 0, 1, 4], cands: [[0, 4, 5], [3, 1, 4]] }
+];
 /*
  * The mood of a picture (0 dark and cold, 1 bright and warm), stretched: real pictures rarely
  * reach the ends of the raw score (0.5 brightness + 0.3 warmth + 0.2 saturation), so the middle
@@ -434,7 +455,7 @@ export const RULES = {
   lofi: { grid: 1, unit: 4, phrase: 4, harm: ["block", "comp"], bass: ["hold", "rootfifth"], families: LOFI_FAMILIES, drumBreak: true, cands: [[1, 4, 0], [5, 3, 1]], sidechain: 0.25, pickups: true, approach: false, swell: null, stopDown: false },
   bossa: { grid: 1, unit: 4, phrase: 2, harm: ["block", "bossa"], bass: ["bossa", "bossa"], cands: [[0, 1, 4], [1, 4, 5]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
   synthwave: { grid: 2, unit: 4, phrase: 4, harm: ["block", "arp"], bass: ["hold", "octave8", "octave16"], cands: [[5, 2, 6], [0, 5, 3]], families: SYNTHWAVE_FAMILIES, gatedSnare: true, drumBreak: true, sidechain: 0.3, pickups: false, approach: false, swell: "riser", stopDown: false },
-  classical: { grid: 1, unit: 4, phrase: 4, harm: ["block", "broken"], bass: ["hold", "rootfifth"], cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
+  classical: { grid: 1, unit: 4, phrase: 4, harm: ["block", "broken"], bass: ["hold", "rootfifth"], families: CLASSICAL_FAMILIES, cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
   // cinematic pop: the loop of its family, a piano arpeggio when calm, held chords, driving piano
   // eighths when busy; the bass held, then picked eighths; a cymbal swell into each part
   cinepop: { grid: 1, unit: 4, phrase: 4, harm: ["arp", "block", "pulse"], bass: ["hold", "pick8"], cands: [[0, 4, 5], [5, 3, 0]], families: CINEPOP_FAMILIES, sidechain: 0.1, pickups: true, approach: false, swell: "cymbal", stopDown: false },
@@ -465,7 +486,7 @@ export const RULES = {
   // reggae: the skank on the off-beats, a dub bass, the one-drop
   reggae: { grid: 1, unit: 4, phrase: 4, harm: ["skank", "skank"], padLevel: 0.6, bass: ["dub", "dub"], cands: [[0, 3, 4], [0, 3, 5]], loop: { major: [0, 3, 0, 4], minor: [0, 3, 0, 6] }, sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
   // baroque: harpsichord broken chords over a walking continuo, the dominant before the end
-  baroque: { grid: 1, unit: 4, phrase: 4, harm: ["broken", "arp"], padLevel: 0.6, bass: ["pulse", "pulse"], cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
+  baroque: { grid: 1, unit: 4, phrase: 4, harm: ["broken", "arp"], padLevel: 0.6, bass: ["pulse", "continuo"], families: BAROQUE_FAMILIES, cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
   // east asian: a pentatonic flute, koto arpeggios over a drone, sparse woodblock and taiko
   eastasian: { grid: 1, unit: 8, phrase: 4, harm: ["arp", "broken"], padLevel: 0.7, bass: ["pedal", "hold"], cands: [[0, 3, 5], [5, 3, 0]], sidechain: 0, pickups: false, approach: false, swell: null, stopDown: false },
   // drum and bass: a fast two-step break, a long reese bass, liquid pads

@@ -16,7 +16,7 @@ import { degMidi } from "./theory.js";
 import { euclid } from "./rhythm.js";
 
 export const HARM_NAME = { skank: "the skank: short chords on the off-beats", powerhit: "syncopated power-chord hits", funk16: "funk scratch guitar in sixteenths", power: "power chords, let ring", power8: "power chords in eighths", chug16: "palm-muted riff in sixteenths", bossa: "bossa nova comping (clave)", block: "held chord", swell: "swelling held chord", pulse: "pulsing chord", arp: "arpeggio", broken: "broken chord", comp: "comping (Charleston)", stab: "off-beat stabs", ostinato: "string ostinato" };
-export const BASS_NAME = { dub: "dub bass: root on 1, the one-drop on 3", boogie: "boogie line in swung eighths", funk16: "syncopated sixteenths with octave pops", pick8: "picked eighths on the root", chug16: "palm-muted sixteenths, locked with the guitar", bossa: "bossa bass: root, then the fifth", octave8: "octave eighths (80s)", octave16: "driving sixteenths, the octave on each beat's last (80s)", hold: "held root", pedal: "pedal on the tonic", pulse: "repeated root", walk: "walking line", twofeel: "two-feel, root and fifth", rootfifth: "root and fifth", offbeat: "off-beat eighths", ostinato: "eighth-note ostinato", rest: "silent (enters after the introduction)" };
+export const BASS_NAME = { dub: "dub bass: root on 1, the one-drop on 3", boogie: "boogie line in swung eighths", funk16: "syncopated sixteenths with octave pops", pick8: "picked eighths on the root", chug16: "palm-muted sixteenths, locked with the guitar", bossa: "bossa bass: root, then the fifth", octave8: "octave eighths (80s)", continuo: "walking continuo in eighths, up the scale to the fifth and back", octave16: "driving sixteenths, the octave on each beat's last (80s)", hold: "held root", pedal: "pedal on the tonic", pulse: "repeated root", walk: "walking line", twofeel: "two-feel, root and fifth", rootfifth: "root and fifth", offbeat: "off-beat eighths", ostinato: "eighth-note ostinato", rest: "silent (enters after the introduction)" };
 
 // Articulation from the style's list: calm in the introduction and resolution, busiest at the
 // climax, otherwise by 0.6·tension + 0.4·texture (< 0.5 calm, < 0.68 middle, else busy).
@@ -199,6 +199,14 @@ export function bassNotes(kind, root, modeIv, pcOff, bm, t0, dur, a, base, opts 
     // metal bass: the guitar's riff, sixteenths on the root on the same euclidean figure
     const acc = euclid(Math.round(lerp(5, 9, a.tex)), 16, a.rot);
     for (let b = 0, q = 0; b < dur - 1e-6; b += 0.25, q++) { const s = ((Math.round((t0 + b) * 4) % 16) + 16) % 16; if (!acc[s] && s % 4 !== 0) continue; mk(t0 + b, 0.22, bm, acc[s] ? 94 : 74, q === 0); }
+    return out;
+  }
+  if (kind === "continuo") {
+    // baroque walking continuo: eighths up the scale from the root to the fifth and back down
+    // (root, second, third, fourth, fifth, fourth, third, second), the chord tones on the beats and
+    // passing notes between them; the first beat accented
+    const walk = [0, 1, 2, 3, 4, 3, 2, 1];
+    for (let b = 0, k = 0; b < dur - 1e-6; b += 0.5, k++) mk(t0 + b, 0.45, near(root + walk[k % 8], bm - 2, bm + 9), k % 8 === 0 ? 86 : k % 2 ? 64 : 76, k === 0);
     return out;
   }
   if (kind === "octave16") {

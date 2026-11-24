@@ -200,7 +200,7 @@ export function leapRecovery(notes, ctx) {
 // No parallel fifths or octaves between the melody and the bass: when both move the same way into
 // the same perfect interval, the melody takes another chord tone nearby (contrary motion first).
 export function noParallels(notes, ctx) {
-  const bass = notes.filter(n => n.layer === "bass").sort((a, b) => a.t - b.t), L = notes.filter(n => n.layer === "lead" && !n.dbl).sort((a, b) => a.t - b.t);
+  const bass = notes.filter(n => n.layer === "bass").sort((a, b) => a.t - b.t), L = notes.filter(n => n.layer === "lead" && !n.dbl && !n.echo).sort((a, b) => a.t - b.t);
   const leadAt = t => L.find(n => n.t <= t + 1e-6 && n.t + n.dur > t + 1e-6);
   let fixed = 0;
   for (let i = 0; i + 1 < bass.length; i++) {
@@ -215,7 +215,10 @@ export function noParallels(notes, ctx) {
     const S = ctx.slotAt(l2.t), contrary = -Math.sign(b2.midi - b1.midi);
     for (const d of [contrary, -contrary, 2 * contrary, -2 * contrary, 3 * contrary, -3 * contrary, 4 * contrary, -4 * contrary]) {
       const m = l2.midi + d, iv = pc(m - b2.midi);
-      if (iv !== 7 && iv !== 0 && S.pcs.has(pc(m)) && ctx.inScale(m, l2.t)) { l2.midi = m; l2.unparallel = true; fixed++; break; }
+      // (on a dominant made major the leading tone is a chord tone too, outside the mode)
+      const inMode = ctx.inScale(m, l2.t);
+      if (notes.some(x => x !== l2 && x.layer === l2.layer && Math.abs(x.t - l2.t) < 1e-6 && x.midi === m)) continue;
+      if (iv !== 7 && iv !== 0 && S.pcs.has(pc(m)) && (inMode || S.lt)) { l2.midi = m; l2.unparallel = true; if (!inMode) l2.chromatic = true; fixed++; break; }
     }
   }
   return fixed;

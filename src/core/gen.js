@@ -144,6 +144,25 @@ export const PALETTES = {
       level: { harm: 1.35 },
       band: [["s.violin", "counter"], ["s.timpani", "pulse"], ["s.harp", "runs"], ["s.cello", "counter"], ["s.choir", "sustain"], ["s.celesta", "ornament"]] }
   ],
+  // classical: a string quartet for the minor periods, piano and strings for the major ones (the
+  // levels of these four ensembles measured: the harmony about 6 dB under the melody, the pad 5)
+  classical: [
+    { key: "quartet", families: ["lament"], name: "String quartet", core: { lead: "s.violin", harm: "s.strings", bass: "s.cello", pad: "s.strings" },
+      level: { lead: 1.26, harm: 1.17, pad: 0.71 },
+      band: [["s.cello", "counter"], ["s.flute", "ornament"], ["s.oboe", "double"], ["s.harp", "runs"]] },
+    { key: "piano", families: ["galant", "period"], name: "Piano and strings", core: { lead: "s.piano", harm: "s.piano", bass: "s.cello", pad: "s.strings" },
+      level: { harm: 1.5, pad: 0.8 },
+      band: [["s.violin", "counter"], ["s.flute", "ornament"], ["s.harp", "runs"], ["s.clarinet", "double"], ["s.horn", "sustain"]] }
+  ],
+  // baroque: the organ for the minor circle, a concerto (violin, harpsichord, strings) for the major
+  baroque: [
+    { key: "organ", families: ["lament"], name: "Organ", core: { lead: "s.oboe", harm: "s.organ", bass: "s.cello", pad: "s.organ" },
+      level: { harm: 1.71, pad: 1.65 },
+      band: [["s.violin", "counter"], ["s.recorder", "ornament"], ["s.harpsichord", "runs"]] },
+    { key: "concerto", families: ["circle", "romanesca"], name: "Concerto", core: { lead: "s.violin", harm: "s.harpsichord", bass: "s.cello", pad: "s.strings" },
+      level: { lead: 1.22, harm: 2.1, pad: 1.14 },
+      band: [["s.oboe", "counter"], ["s.recorder", "ornament"], ["s.trumpet", "double"], ["s.flute", "runs"], ["s.organ", "sustain"]] }
+  ],
   // synthesizers: they play with or without sampled instruments (a sampled player of the band
   // only when they are on)
   synthwave: [
@@ -175,6 +194,21 @@ export function lofiSideOf(P, A) {
   const side = P.lofiSide === "beat" || P.lofiSide === "ambient" ? P.lofiSide : energyScore(A) < LOFI_CALM ? "ambient" : "beat";
   if (side === "beat") return null;
   return { side, inner: moodScore(A) >= 0.5 ? "lofinature" : "meditation" };
+}
+// Classical has two idioms (docs/GENRES.md): the classical one (periods, a light accompaniment)
+// and the baroque one (sequences on the circle of fifths, a walking continuo, motor rhythm). A
+// detailed picture with many edges plays baroque, a calm one classical; or chosen by hand.
+export const CLASSICAL_IDIOMS = { auto: "From the picture", classical: "Classical", baroque: "Baroque" };
+export const CLASSICAL_IDIOM_DESC = {
+  auto: "A picture with much detail and many edges plays the baroque idiom, a calmer one the classical.",
+  classical: "Clear periods: a phrase that asks on a half cadence and one that answers on a full one, a light broken-chord accompaniment.",
+  baroque: "Sequences on the circle of fifths, a walking continuo in eighths and a motor rhythm that never stops."
+};
+export const BAROQUE_BUSY = 0.45;
+export function classicalIdiomOf(P, A) {
+  if (!P || P.style !== "classical") return null;
+  const idiom = P.classicIdiom === "classical" || P.classicIdiom === "baroque" ? P.classicIdiom : energyScore(A) >= BAROQUE_BUSY ? "baroque" : "classical";
+  return idiom === "baroque" ? { side: "baroque", inner: "baroque" } : null;
 }
 // the mood score of a picture (compose.js reads the same, before a story's semantics)
 const moodScore = A => { const g = (A && A.global) || {}; return 0.5 * (g.brightness ?? 0.5) + 0.3 * (g.warmth01 ?? 0.5) + 0.2 * (g.sat ?? 0.5); };

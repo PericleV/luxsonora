@@ -9,7 +9,8 @@ describe("progression families and the mood of the picture", () => {
       const c = (F.candsBy && F.candsBy[m]) || F.cands, loop = (F.loopBy && F.loopBy[m]) || F.loop || [];
       for (const d of [...c.flat(), ...loop]) expect(["4,7", "3,7"], `${F.key} ${m} ${d}`).toContain(triad(MODES[m].iv, d));
       // a loop never plays the same chord twice in a row, the turn back to its start included
-      loop.forEach((d, i) => expect(d, `${F.key} ${m}`).not.toBe(loop[(i + 1) % loop.length]));
+      // (a period ends on the tonic and the next starts on it: that turn is allowed)
+      loop.forEach((d, i) => { if (!(F.period && i === loop.length - 1)) expect(d, `${F.key} ${m}`).not.toBe(loop[(i + 1) % loop.length]); });
     }
   });
   it("the mood is stretched: an ordinary range of pictures reaches the dark and the bright families", () => {

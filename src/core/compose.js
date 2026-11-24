@@ -15,7 +15,7 @@ import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
 import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, figureLoneNotes, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
-import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf, paletteOf, lofiSideOf } from "./gen.js";
+import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf, paletteOf, lofiSideOf, classicalIdiomOf } from "./gen.js";
 import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY, applyRawEdits } from "./raw.js";
 import { enrichAt, enrichOn, enrichHarmKind, applyEnrich, GENERIC_HARM } from "./enrich.js";
 import { motionNotes, motionPreset, MOTION_ID, colourPiece } from "./motion.js";
@@ -40,9 +40,10 @@ export function compose(args) {
   const P = args.P;
   if (P.gen !== "raw") {
     // lo-fi, the ambient side: played by the calm style that suits the picture, the vinyl kept
-    const side = lofiSideOf(P, args.A);
+    // classical, the baroque idiom: played by the baroque style
+    const side = lofiSideOf(P, args.A) || classicalIdiomOf(P, args.A);
     const sc = composeMusic(side ? { ...args, P: { ...P, style: side.inner } } : args);
-    if (side) { sc.genre = P.style; sc.side = side.side; sc.vinyl = ruleOn(P, "vinyl"); }
+    if (side) { sc.genre = P.style; sc.side = side.side; if (side.side === "ambient") sc.vinyl = ruleOn(P, "vinyl"); }
     // By genre: a track the genre does not usually have is left out
     const omit = pictureBandOf(P) ? GENRE_OMIT[P.style] || [] : [];
     if (omit.length) { sc.notes = sc.notes.filter(n => !omit.includes(n.layer)); sc.omit = omit; }
@@ -83,6 +84,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   const modeKey = scale ? (MODES[scale] ? scale : scale === "majpent" ? "ionian" : "aeolian") : auto.modeKey, modeIv = MODES[modeKey].iv;
   const famLoop = family && ((family.loopBy && family.loopBy[modeKey]) || family.loop);
   const R = family ? { ...R0, cands: (family.candsBy && family.candsBy[modeKey]) || family.cands, ...(famLoop ? { loop: { major: famLoop, minor: famLoop } } : {}) } : R0;
+  const leadingTone = !!(family && family.leadingTone && MODES[modeKey].iv[2] === 3);
   const autoPc = g.hueStr > 0.06 ? ((Math.round(g.hue / 30) % 12) * 7) % 12 : (Math.round(g.brightness * 11) * 7) % 12;
   const pc = P.keyMode === "manual" ? ((P.keyPc % 12) + 12) % 12 : autoPc;
   const pcOff = pc > 5 ? pc - 12 : pc;
@@ -240,9 +242,14 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   const mod = ruleOn(P, "modulate") && arcOn && !R.quality ? planModulation(out, arc, g, slots, R) : null;
   if (mod) applyPivots(slots, mod, modeIv, melIv);
   // classical: the chord before the final cadence is the dominant, so the piece ends V-I
+  if (R.loop) {
+    const seq = modeIv[2] === 3 ? R.loop.minor : R.loop.major;
+    // (a family written as periods marks the bars that close its phrases: half and full cadences)
+    slots.forEach((S, k) => { S.F = { ...S.F, root: seq[k % seq.length] }; const c = family && family.cadences && ruleOn(P, "cadences") && family.cadences[k % seq.length]; if (c) S.cadence = c; });
+  }
   if (R.cadentialV && ruleOn(P, "cadentialV") && slots.length > 1) { const S = slots[slots.length - 1]; S.F = { ...S.F, root: 4, tones: S.F.tones }; }
-  // pop: the four-chord loop, one chord per bar, whatever the points (they still shape everything else)
-  if (R.loop) { const seq = modeIv[2] === 3 ? R.loop.minor : R.loop.major; slots.forEach((S, k) => { S.F = { ...S.F, root: seq[k % seq.length] }; }); }
+  // (above: pop and the families with a loop take its chords, one a bar, whatever the points (they
+  // still shape everything else); the classical dominant before the last chord comes after it)
   // Expert rules: a chord asked for at some places wins over the style's choice (it is a degree of the key)
   if (P.expert && P.expert.length) applyExpertChords(P.expert, slots, out, spb);
   // voicing: each slot's chord moves to the octave closest to the previous chord's centre
@@ -253,6 +260,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     // blues: every chord is a dominant seventh on its root (I7, IV7, V7), outside the mode on purpose
     const pitches = R.quality === "dom7" ? [0, 4, 7, 10].map(sm => degMidi(S.root, modeIv, 48 + pcOff) + sm) : S.tones.map(o => degMidi(S.root + o, modeIv, 48 + pcOff));
     S.chord = [...new Set(pitches.map(m0 => { let m = m0; while (m < centre - 7) m += 12; while (m > centre + 7) m -= 12; return m; }))].sort((a, b) => a - b);
+    // the leading tone (harmonic minor): in a minor piece whose family asks for it, the dominant
+    // is major, its third the raised seventh (outside the mode on purpose; not in a modulation)
+    if (leadingTone && S.root === 4 && !S.shift) { const b7 = (((pc + 10) % 12) + 12) % 12; S.chord = S.chord.map(m => ((((m % 12) + 12) % 12) === b7 ? m + 1 : m)); S.lt = true; }
     S.pcs = new Set(S.chord.map(m => ((m % 12) + 12) % 12));
     vPrev = S.chord;
   }
@@ -494,7 +504,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
       // the pad moves with the harmonic grid; tension opens its filter (up to +0.32 octave at
       // the climax) and sets its dynamics
       const F = S.F, lp0 = localPad(F), lp = { ...lp0, tim: { ...lp0.tim, cut: Math.min(16000, lp0.tim.cut * 2 ** (0.8 * (F.tension - 0.6))) }, vel: clampInt(Math.round(lp0.vel * dynamics(F.tension)), 1, 127) };
-      moveTo(triad(S.root), S.t0, lp, F.idx);
+      // (a dominant made major takes its own tones: the leading tone, not the mode's seventh)
+      moveTo(S.lt ? [...S.pcs] : triad(S.root), S.t0, lp, F.idx);
     }
     for (const F of out) { const lp0 = localPad(F); F.padTim = { ...lp0.tim, cut: Math.min(16000, lp0.tim.cut * 2 ** (0.8 * (F.tension - 0.6))) }; F.padM = lp0.m; }
     moveTo(triad(0), tc, { tim: ptim, vel: padVel }, -2);
@@ -650,6 +661,19 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   // last of all, an instrument still with a handful of notes (a doubling at the climax only, a few
   // runs) leaves the piece: a few lone notes of an odd instrument sound out of place. Your own
   // list (Custom) and the held tracks stay.
+  // the leading tone on every track: a note starting under a dominant made major (above) on the
+  // lowered seventh moves up to the raised one
+  // (a note held past the dominant is split there: only its part under the dominant is raised)
+  if (leadingTone) for (const S of slots) if (S.lt) {
+    const rest = [];
+    for (const nn of notes) {
+      if (nn.layer === "perc" || !Number.isFinite(nn.midi) || nn.t < S.t0 - 1e-9 || nn.t >= S.t1 - 1e-9 || pcOf(nn.midi) !== pcOf(pc + 10)) continue;
+      const end = nn.t + nn.dur;
+      if (end > S.t1 + 0.25) { rest.push({ ...nn, t: S.t1, dur: end - S.t1, glide: null }); nn.dur = S.t1 - nn.t; }
+      nn.midi += 1; nn.chromatic = true; nn.leadingTone = true;
+    }
+    notes.push(...rest);
+  }
   // last guard on the melody: an exposed note (on a beat for a quarter beat or more, or sounding
   // half a beat) a semitone or a minor ninth from a held note of the accompaniment, outside the
   // chord and not resolving by step, moves to the nearest tone of the chord in the scale (a loop
@@ -666,9 +690,11 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
       if (nx && nS.pcs.size && nx.t <= nn.t + nn.dur + 0.25 && Math.abs(nx.midi - nn.midi) <= 2 && nS.pcs.has(pcOf(nx.midi)) && nn.dur <= 1 + 1e-9) return;
       const hit = acc.some(m => { const ov = Math.min(m.t + m.dur, nn.t + nn.dur) - Math.max(m.t, nn.t), iv = Math.abs(m.midi - nn.midi) % 12; return ov >= 0.125 && (iv === 1 || iv === 11) && ((onB(Math.max(m.t, nn.t)) && ov >= 0.25) || ov >= 0.5 || (onB(nn.t) && nn.dur >= 0.5)); });
       if (!hit) return;
-      for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (inScale(m, nn.t) && S.pcs.has(pcOf(m))) { nn.midi = m; nn.snapped = true; break; } }
+      for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (inScale(m, nn.t) && S.pcs.has(pcOf(m)) && !notes.some(x => x !== nn && x.layer === "lead" && Math.abs(x.t - nn.t) < 1e-6 && x.midi === m)) { nn.midi = m; nn.snapped = true; break; } }
     });
   }
+  // (the passes above may move a melody note into parallel fifths or octaves with the bass: once more)
+  if (ruleOn(P, "parallels")) noParallels(notes, ruleCtx);
   // the Movement figure stays under the melody: a later pass that moved a melody note onto or
   // below a figure note sounding with it takes that figure note out
   for (let j = notes.length - 1; j >= 0; j--) {

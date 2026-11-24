@@ -25,7 +25,7 @@
 //              quarter of the piece
 //   loud       a lone note at least 1.3 times as loud as its track's median
 // Options: --band (the picture chooses the band), --enrich (Enriched), --style=<key>, --scale=<mode>,
-// --side=beat|ambient (lo-fi)
+// --side=beat|ambient (lo-fi) or classical|baroque (classical)
 // (the mode forced, and with it its progression family), --examples.
 // Counts are per minute of music, so styles with different lengths compare.
 import { synthImage } from "../test/helpers.js";
@@ -103,9 +103,10 @@ export function auditScore(sc) {
       if (!((onBeat(t0) && ov >= 0.25) || ov >= 0.5 || (onBeat(nct.t) && nct.dur >= 0.5))) continue;
       // it resolves: the same layer moves by step into a chord tone right after (appoggiatura,
       // passing or approach note)
-      // (an octave double resolves with its own line: the doubles)
-      const nx = pitched.filter(m => m.layer === nct.layer && !!m.dbl === !!nct.dbl && m.t > nct.t + 1e-6).sort((p, q) => p.t - q.t)[0];
-      if (nx && nx.t <= nct.t + nct.dur + 0.25 && Math.abs(nx.midi - nct.midi) <= 2 && chordAt(nx.t).pcs.has(pc(nx.midi)) && nct.dur <= 1 + 1e-9) continue;
+      // (an octave double resolves with the note it doubles: the main line's next note, an octave off)
+      const main = nct.dbl ? pitched.find(m => m.layer === nct.layer && !m.dbl && Math.abs(m.t - nct.t) < 1e-6 && pc(m.midi) === pc(nct.midi)) : null, ref = main || nct;
+      const nx = pitched.filter(m => m.layer === ref.layer && !!m.dbl === !!ref.dbl && m.t > ref.t + 1e-6).sort((p, q) => p.t - q.t)[0];
+      if (nx && nx.t <= ref.t + ref.dur + 0.25 && Math.abs(nx.midi - ref.midi) <= 2 && chordAt(nx.t).pcs.has(pc(nx.midi)) && nct.dur <= 1 + 1e-9) continue;
       hit("clash", `NCT ${where(nct)} dur=${nct.dur.toFixed(2)} vs ${where(nct === a ? b : a)} dur=${(nct === a ? b : a).dur.toFixed(2)} (${iv} st, ov ${ov.toFixed(2)}) chord ${[...ch]}`); cnt["clash_" + nct.layer.replace(/\d+$/, "")] = (cnt["clash_" + nct.layer.replace(/\d+$/, "")] || 0) + 1;
     }
   }
@@ -214,7 +215,7 @@ if (isMain) {
     if (ONLY && style !== ONLY) continue;
     const tot = Object.fromEntries(KEYS.map(k => [k, 0])); let mins = 0;
     for (const I of IMAGES) for (const C of CONFIGS) {
-      const P = { ...BASE, ...C, style, ...MODE, ...(SCALE ? { scale: SCALE } : {}), ...(SIDE ? { lofiSide: SIDE } : {}), ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
+      const P = { ...BASE, ...C, style, ...MODE, ...(SCALE ? { scale: SCALE } : {}), ...(SIDE ? { lofiSide: SIDE, classicIdiom: SIDE } : {}), ...(RULES_OFF ? { rules: RULES_OFF } : {}) }, sc = run(I, P), r = auditScore(sc);
       mins += r.minutes; for (const k of KEYS) tot[k] += r.cnt[k] || 0;
       worst.push({ label: `${style} ${I.name} ${C.duration}s ${C.orch} ${C.connect}`, r });
     }

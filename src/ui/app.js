@@ -325,14 +325,19 @@ function styleOptions(cur, mark) {
   const opt = k => `<option value="${k}"${mark && k === cur ? " selected" : ""}>${esc(STYLES[k].name)}</option>`;
   return GENRES.filter(k => STYLES[k]).map(opt).join("") + (cur && STYLES[cur] && !GENRES.includes(cur) ? `<optgroup label="No longer offered">${opt(cur)}</optgroup>` : "");
 }
+// The style picker: the five genres as cards, the best for this picture first, each with why in a
+// few words (the list under them, a select kept hidden, holds the choice for the code). Before a
+// picture is analysed the five come in their own order. A style no longer offered that this
+// project uses has its own card, marked, until another is chosen.
 function styleSuggestHtml(cur) {
-  if (!A) return "";
-  const list = suggestStyles(A), ex = explainStyles(A, list);
+  const list = A ? suggestStyles(A) : GENRES.map(style => ({ style, reason: "", group: "" }));
+  if (cur && STYLES[cur] && !list.some(x => x.style === cur)) list.push({ style: cur, reason: "no longer offered", group: "" });
+  const ex = A ? explainStyles(A, list.filter(x => GENRES.includes(x.style))) : null;
   // why: the picture's five measures in words, then each style's fit, in plain sentences
-  const why = `<details class="sugg-why"${WHY_OPEN ? " open" : ""}><summary>Why these styles?</summary>
-    <p>This picture: ${ex.measures.map(m => `${m.name.toLowerCase()} ${nf(m.value)} (${m.level})`).join(", ")}; its main colour is ${esc(ex.family)}. Each style has a profile on the same measures. One style is suggested from each of the five families, the one that fits this picture better than it fits pictures in general, the closest first.</p>
+  const why = !ex ? "" : `<details class="sugg-why"${WHY_OPEN ? " open" : ""}><summary>Why in this order?</summary>
+    <p>This picture: ${ex.measures.map(m => `${m.name.toLowerCase()} ${nf(m.value)} (${m.level})`).join(", ")}; its main colour is ${esc(ex.family)}. Each style has a profile on the same measures. The five are ranked by how much better than usual each fits this picture, the closest first.</p>
     ${ex.styles.map(x => `<p><b>${esc(STYLES[x.style].name)}</b> (${Math.round(x.score * 100)}% match). ${esc(STYLE_DESC[x.style] || "")} ${esc(x.lines.join(" "))}</p>`).join("")}</details>`;
-  return `<span class="sugg-k">Suits this picture:</span>${list.map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" data-style="${x.style}" title="${esc(x.group ? x.group + ": " + x.reason : x.reason)}"><b>${esc(STYLES[x.style].name)}</b><small>${esc(x.reason)}</small></button>`).join("")}${why}`;
+  return `${A ? '<span class="sugg-k">Best for this picture first:</span>' : ""}${list.map(x => `<button type="button" class="chip-btn${x.style === cur ? " on" : ""}" role="radio" aria-checked="${x.style === cur}" data-style="${x.style}"${x.reason ? ` title="${esc(x.reason)}"` : ""}><b>${esc(STYLES[x.style].name)}</b>${x.reason ? `<small>${esc(x.reason)}</small>` : ""}</button>`).join("")}${why}`;
 }
 // the explanation stays open or closed as you left it
 document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("sugg-why")) WHY_OPEN = e.target.open; }, true);
@@ -619,7 +624,7 @@ function openNewSong(fresh = false) {
     <details class="field nsframe" id="nsFrameBox" open><summary class="flabel">The picture: <span id="nsFrameSum"></span></summary>
       <p class="snote">Use the whole picture, or drag a frame over the part you want to hear. Everything below reads only what is inside.</p>
       <div class="frame" id="nsFrame"></div></details>
-    <div class="field"><label class="flabel" for="nsStyle">Genre</label><span class="select"><select id="nsStyle">${groups}</select></span><div class="sugg" id="nsSuggest"></div><p class="snote" id="nsStyleNote"></p></div>
+    <div class="field"><div class="flabel" id="lblNsStyle">Style</div><span class="select" hidden><select id="nsStyle" tabindex="-1" aria-hidden="true">${groups}</select></span><div class="sugg" id="nsSuggest" role="radiogroup" aria-labelledby="lblNsStyle"></div><p class="snote" id="nsStyleNote"></p></div>
     <div class="field"><div class="flabel" id="nsLblGen">How the song is made</div><div class="seg" id="nsGen" role="radiogroup" aria-labelledby="nsLblGen"></div><p class="snote" id="nsGenNote"></p>
       <div class="no-raw"><label class="toggle"><input type="checkbox" id="nsBand"${pictureBandOf(P) ? " checked" : ""}><span>The picture chooses the band</span></label><p class="snote" id="nsBandNote"></p></div>
       <label class="toggle"><input type="checkbox" id="nsEnrich"${P.enrich ? " checked" : ""}><span>Enriched</span></label><p class="snote">More readings of the picture for a fuller piece: the direction of the lines, repetition, depth, colour contrast, grain and light. The Piece tab lists them, to turn any off.</p></div>

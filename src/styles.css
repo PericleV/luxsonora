@@ -437,6 +437,14 @@ details.adv > :not(summary) + :not(summary){margin-top:14px}
 .card .imginfo{margin:0}
 .adv-group{display:grid;gap:16px}
 .linkbtn{font:inherit;border:0;background:none;color:var(--accent);padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+/* the Measures view: a legend at the bottom of the picture and the values under the pointer */
+.measlegend{position:absolute;left:12px;bottom:12px;max-width:min(560px,calc(100% - 24px));margin:0;z-index:4;font-size:12px;line-height:1.4;color:#EEF1F6;background:rgba(10,12,16,.76);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:7px 10px;pointer-events:none}
+.measlegend .ml-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.measlegend .ml-bar{display:inline-block;width:120px;height:9px;border-radius:5px;border:1px solid rgba(255,255,255,.25)}
+.measlegend p{margin:4px 0 0;color:#C9D1DE}
+.meastip{position:absolute;z-index:5;min-width:190px;font-size:11.5px;line-height:1.45;color:#EEF1F6;background:rgba(10,12,16,.86);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 9px;pointer-events:none;font-variant-numeric:tabular-nums}
+.meastip table{border-collapse:collapse}.meastip td{padding:0 6px 0 0}.meastip td.v{text-align:right;color:#fff}.meastip tr.on td{color:var(--accent,#9b8cff);font-weight:600}
+.select-sm select{font-size:12.5px;padding:3px 26px 3px 8px}
 .why{position:absolute;left:12px;top:12px;right:12px;max-width:560px;margin:0;z-index:4;font-size:12.5px;line-height:1.45;color:#EEF1F6;background:rgba(10,12,16,.72);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 11px;pointer-events:none}
 .why b{color:#fff;font-weight:600}
 .status-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;max-width:42vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

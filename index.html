@@ -77,6 +77,7 @@
     <section class="stage" aria-label="Image and gaze path">
       <div class="stagebar">
         <div class="seg seg-sm" id="viewSeg" role="radiogroup" aria-label="View"></div>
+        <span class="select select-sm" id="measPick" hidden><select id="measSel" aria-label="Measure shown"></select></span>
         <label class="toggle"><input type="checkbox" id="showPath" checked><span>Gaze path</span></label>
         <span class="tb-sep adv-only" aria-hidden="true"></span>
         <div class="seg seg-sm adv-only" id="modeSeg" role="radiogroup" aria-label="Gaze path mode"></div>
@@ -88,6 +89,8 @@
       </div>
       <div class="lightbox" id="lightbox"><canvas id="stage" aria-label="The analysed image with its gaze path"></canvas>
         <p class="why" id="pointWhy" role="status" hidden></p>
+        <div class="measlegend" id="measLegend" hidden><div class="ml-row"><b id="mlName"></b><span id="mlLow"></span><span class="ml-bar" id="mlBar"></span><span id="mlHigh"></span></div><p id="mlDoes"></p></div>
+        <div class="meastip" id="measTip" hidden></div>
         <div class="loading" id="loading" hidden role="status"><div class="loadcard"><p id="loadingText"></p><div class="loadbar"><span id="loadingBar"></span></div><button type="button" class="btn" id="loadingCancel">Cancel</button></div></div>
       </div>
     </section>

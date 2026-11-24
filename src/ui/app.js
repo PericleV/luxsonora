@@ -15,6 +15,7 @@ import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
 import { CONDITIONS, ACTIONS, SECTIONS, COLOURS, newRule, pointMatches, describeRule } from "../core/expert.js";
 import { suggestStyles, explainStyles } from "../core/suggest.js";
+import { MEASURES, MEASURE_KEYS, measureMap, measureAngles, measuresAt } from "../core/measures.js";
 import { saveSession, loadSession } from "./session.js";
 import { midiFile } from "../export/midi.js";
 import { zipStore } from "../export/wavzip.js";
@@ -174,14 +175,16 @@ async function loadFile(file) {
 function flash(msg) { const el = $("#flash"); el.textContent = msg; el.hidden = false; clearTimeout(flash.t); flash.t = setTimeout(() => (el.hidden = true), 6000); }
 
 /* ============ recomputation ============ */
-const OV = { edge: null, reg: null, sal: null, cov: null };
+const OV = { edge: null, reg: null, sal: null, cov: null, meas: {} };
+// the Measures view: which measure the stage shows (remembered in the browser)
+let MEAS = "texture";
 function invalidate(l) { dirty = Math.max(dirty, l); if (!raf) raf = requestAnimationFrame(recompute); }
 function recompute() {
   raf = 0; const lvl = dirty; dirty = 0;
   if (!IMG) return;
   if (lvl >= LV.IMAGE) {
     A = analyze(IMG); CL = clusterRegions(A, 6); MOT = buildMotifs(CL, A.regions);
-    SEM = null; buildStaticOverlays();
+    SEM = null; OV.meas = {}; buildStaticOverlays(); syncMeasView();
   }
   if (lvl >= LV.SAL) { SAL = attention(computeSaliency(A, { color: P.wColor, texture: P.wTex, semantic: SEM ? P.wSem : 0 }, SEM)); buildSalOverlay(); }
   if (lvl >= LV.PATH) {
@@ -1047,6 +1050,56 @@ function videoMaps() {
   VMAPS = { A, SAL, maps };
   return maps;
 }
+// ---- the Measures view: what the analysis sees, measure by measure (core/measures.js) ----
+// Each measure as heat over the picture (lines: a colour per direction, bright where strong), a
+// legend with the words of its two ends and what the music does with it, and under the pointer
+// every measure's value there.
+function measOverlay(key) {
+  if (!A) return null;
+  if (OV.meas[key]) return OV.meas[key];
+  const { W, H, N } = A, c = makeCanvas(W, H), im = c.getContext("2d").createImageData(W, H), m = measureMap(A, key);
+  if (key === "lines") { const ang = measureAngles(A); for (let p = 0; p < N; p++) { const col = hueRgb(ang[p] * 360), v = m[p]; im.data.set([col[0], col[1], col[2], Math.round(255 * Math.min(1, v * 1.3))], p * 4); } }
+  else for (let p = 0; p < N; p++) im.data.set(heat(m[p]), p * 4);
+  c.getContext("2d").putImageData(im, 0, 0);
+  return (OV.meas[key] = c);
+}
+const HEAT_CSS = `linear-gradient(90deg, ${HEAT.map(([a, c]) => `rgba(${c[0]},${c[1]},${c[2]},${Math.max(0.25, c[3] / 255).toFixed(2)}) ${Math.round(a * 100)}%`).join(", ")})`;
+function syncMeasView() {
+  const on = view === "meas" && !!A;
+  $("#measPick").hidden = view !== "meas"; $("#measLegend").hidden = !on; if (!on) $("#measTip").hidden = true;
+  if (!on) return;
+  const M = MEASURES[MEAS];
+  const lines = MEAS === "lines";
+  // (lines: a colour per direction, so the legend names the colours instead of two ends)
+  $("#mlName").textContent = M.name; $("#mlLow").textContent = lines ? "red horizontal, cyan vertical, green and violet diagonal; brighter where stronger" : M.low; $("#mlHigh").textContent = lines ? "" : M.high;
+  $("#mlBar").hidden = lines; $("#mlHigh").hidden = lines; $("#mlBar").style.background = HEAT_CSS;
+  $("#mlDoes").textContent = M.does.replace(/ Colour: .*$/, "");
+}
+function initMeasView() {
+  try { const k = localStorage.getItem("lux.measure"); if (k && MEASURES[k]) MEAS = k; } catch (err) { /* storage blocked */ }
+  const sel = $("#measSel");
+  sel.innerHTML = MEASURE_KEYS.map(k => `<option value="${k}">${esc(MEASURES[k].name)}</option>`).join(""); sel.value = MEAS;
+  sel.addEventListener("change", () => { MEAS = sel.value; try { localStorage.setItem("lux.measure", MEAS); } catch (err) { /* storage blocked */ } syncMeasView(); drawStage(); });
+  // the values under the pointer (once a frame)
+  const cv = $("#stage"), tip = $("#measTip"); let pend = null;
+  const ROWS = [["texture", "Texture"], ["lines", "Lines"], ["depth", "Depth"], ["pattern", "Repetition"], ["sat", "Saturation"], ["warmth", "Warmth"], ["contrast", "Colour contrast"], ["grain", "Grain"], ["light", "Brightness"]];
+  const show = () => {
+    const e = pend; pend = null; if (!e || view !== "meas" || !A || !stageGeom.w) return;
+    const rc = cv.getBoundingClientRect(), x = (e.clientX - rc.left) / stageGeom.w, y = (e.clientY - rc.top) / stageGeom.h;
+    if (x < 0 || y < 0 || x > 1 || y > 1) { tip.hidden = true; return; }
+    const v = measuresAt(A, x, y), word = k => (k === "lines" ? `${v.linesWord}, ${v.angle}°` : k === "light" ? "" : v[k] < 0.33 ? MEASURES[k].low : v[k] > 0.66 ? MEASURES[k].high : "");
+    tip.innerHTML = `<table>${ROWS.map(([k, n]) => `<tr${k === MEAS ? ' class="on"' : ""}><td>${n}</td><td class="v">${v[k].toFixed(2)}</td><td>${esc(word(k))}</td></tr>`).join("")}</table>`;
+    tip.hidden = false;
+    const box = $("#lightbox").getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+    let lx = e.clientX - box.left + 14, ly = e.clientY - box.top + 14;
+    if (lx + tw > box.width - 6) lx = e.clientX - box.left - tw - 14;
+    if (ly + th > box.height - 6) ly = e.clientY - box.top - th - 14;
+    tip.style.left = Math.max(6, lx) + "px"; tip.style.top = Math.max(6, ly) + "px";
+  };
+  cv.addEventListener("pointermove", e => { if (view !== "meas") return; const first = !pend; pend = e; if (first) requestAnimationFrame(show); });
+  cv.addEventListener("pointerleave", () => { tip.hidden = true; });
+  syncMeasView();
+}
 function buildCovOverlay() {
   const { W, H, N } = A, c = makeCanvas(W, H), im = c.getContext("2d").createImageData(W, H);
   for (let p = 0; p < N; p++) im.data.set(heat(COV.map[p]), p * 4);
@@ -1227,6 +1280,7 @@ function drawStage() {
     g.restore();
   }
   if (view === "cov" && OV.cov) { g.fillStyle = "rgba(6,10,18,0.6)"; g.fillRect(0, 0, w, h); g.drawImage(OV.cov, 0, 0, w, h); }
+  if (view === "meas" && A) { const m = measOverlay(MEAS); if (m) { g.fillStyle = "rgba(6,10,18,0.55)"; g.fillRect(0, 0, w, h); g.drawImage(m, 0, 0, w, h); } }
   if (!showPath || !SCORE) return;
   drawZones(g, w, h);
   const fx = SCORE.points, acc = css("--accent") || "#6D5DF0", diag = Math.hypot(w, h);
@@ -2899,7 +2953,8 @@ export function init() {
   CIRCLE_SEG = makeSeg($("#circleSeg"), [["area", "From the area"], ["same", "Same for all"]], P.circleSize || "area", v => { P.circleSize = v; invalidate(LV.PATH); });
   CHORD_SEG = makeSeg($("#chordRateSeg"), [["2", "Slower"], ["1", "Style"], ["0.5", "Faster"]], String(P.chordRate ?? 1), v => { P.chordRate = Number(v); invalidate(LV.MUSIC); });
   GROOVE_SEG = makeSeg($("#grooveSeg"), [["straight", "Straight"], ["neural", "Human (GrooVAE)"]], P.groove, v => { P.groove = v; GROOVE.failed = false; invalidate(LV.MUSIC); });
-  makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; drawStage(); });
+  makeSeg($("#viewSeg"), [["img", "Image"], ["sal", "Eye map"], ["meas", "Measures"], ["edge", "Edges"], ["reg", "Regions"], ["cov", "Coverage"]], view, v => { view = v; syncMeasView(); drawStage(); });
+  initMeasView();
   // Simple keeps the image and the eye map; the analysis views are in Advanced
   for (const k of ["edge", "reg", "cov"]) { const b = $(`#viewSeg [data-v="${k}"]`); if (b) b.classList.add("adv-only"); }
   UI_SEG = makeSeg($("#uiModeSeg"), [["simple", "Simple"], ["advanced", "Advanced"]], UI.mode, applyUiMode);

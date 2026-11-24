@@ -45,7 +45,8 @@ export const STYLE_ROLES = {
   electronic: ["ostinato", "sustain", "runs", "ornament", "counter", "pulse", "double"],
   epic: ["sustain", "double", "runs", "pulse", "counter", "ornament", "ostinato"],
   movie: ["ornament", "counter", "runs", "sustain", "ostinato", "double", "drone"],
-  lofi: ["counter", "ornament", "runs", "drone", "ostinato", "sustain", "double"],
+  // (no drone: under seventh-chord loops a held low note rubs; the ambient side has its own)
+  lofi: ["counter", "ornament", "runs", "ostinato", "sustain", "double"],
   bossa: ["counter", "ornament", "runs", "sustain", "double", "ostinato", "pulse"],
   synthwave: ["ostinato", "sustain", "runs", "counter", "ornament", "double", "pulse"],
   classical: ["counter", "sustain", "runs", "ornament", "double", "drone", "pulse"],
@@ -122,7 +123,7 @@ export const STYLE_BAND = {
   electronic: [["electronic.lead", "ostinato"], ["electronic.harm", "ostinato"], ["x.synthlead", "counter"], ["electronic.pad", "sustain"], ["x.wavepad", "sustain"], ["x.glass", "ornament"], ["electronic.bass", "pulse"], ["x.sine", "drone"]],
   epic: [["s.brass", "sustain"], ["s.strings", "runs"], ["s.horn", "double"], ["s.trumpet", "double"], ["s.violin", "counter"], ["s.cello", "counter"], ["s.trombone", "counter"], ["s.tremolo", "ostinato"], ["s.choir", "sustain"], ["s.celesta", "ornament"], ["s.timpani", "pulse"], ["s.contrabass", "drone"], ["v.mixed", "sustain"], ["v.female", "double"], ["v.male", "drone"]],
   movie: [["s.strings", "sustain"], ["s.cello", "counter"], ["s.violin", "double"], ["s.flute", "counter"], ["s.oboe", "counter"], ["s.horn", "double"], ["s.harp", "runs"], ["s.piano", "runs"], ["s.celesta", "ornament"], ["s.timpani", "pulse"], ["s.contrabass", "drone"], ["v.mixed", "sustain"], ["v.female", "double"], ["v.male", "drone"]],
-  lofi: [["s.tenorsax", "counter"], ["s.flute", "double"], ["s.vibes", "ornament"], ["s.wurli", "runs"], ["s.nylon", "ostinato"], ["s.jazzgtr", "ostinato"], ["s.organ", "sustain"], ["s.warmpad", "drone"]],
+  lofi: [["s.tenorsax", "counter"], ["s.flute", "double"], ["s.vibes", "ornament"], ["s.wurli", "runs"], ["s.nylon", "ostinato"], ["s.jazzgtr", "ostinato"], ["s.organ", "sustain"], ["s.warmpad", "sustain"]],
   bossa: [["s.flute", "counter"], ["s.tenorsax", "counter"], ["s.trombone", "counter"], ["s.clarinet", "double"], ["s.nylon", "ostinato"], ["s.piano", "runs"], ["s.vibes", "ornament"], ["s.strings", "sustain"], ["s.marimba", "pulse"]],
   synthwave: [["synthwave.harm", "ostinato"], ["x.synthlead", "counter"], ["synthwave.lead", "double"], ["synthwave.pad", "sustain"], ["s.synthstrings", "sustain"], ["x.brass", "sustain"], ["x.glass", "ornament"], ["synthwave.bass", "pulse"]],
   classical: [["s.violin", "counter"], ["s.cello", "counter"], ["s.clarinet", "counter"], ["s.flute", "ornament"], ["s.oboe", "double"], ["s.horn", "double"], ["s.harp", "runs"], ["s.pizz", "ostinato"], ["s.strings", "sustain"], ["s.contrabass", "drone"], ["s.timpani", "pulse"], ["v.mixed", "sustain"], ["v.female", "double"], ["v.male", "drone"]],

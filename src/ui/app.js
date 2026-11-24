@@ -9,7 +9,7 @@ import { clusterRegions, buildMotifs } from "../core/motifs.js";
 import { setSpelling, pcName, midiName, MODES, STYLES, STYLE_GROUPS, RULES, moodOf, CAT, LAYERS, LAYER_NAME, PERC_NAME, NOTE_SH, NOTE_FL } from "../core/theory.js";
 import { DIMS, DIM_NAME, DIM_SOURCE, DIM_KEY, MOD_WORDS, LAYER_DEPTH } from "../core/timbre.js";
 import { noteTracks } from "../export/labels.js";
-import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT, paletteOf } from "../core/gen.js";
+import { GEN_MODES, GEN_DESC, BAND_DESC, genOf, pictureBandOf, genreCore, genreLayers, styleKey, GENRE_OMIT, paletteOf, LOFI_SIDES, LOFI_SIDE_DESC } from "../core/gen.js";
 import { RAW_READS, RAW_READ_DESC, READ_ORDER, DRUMS_KEY, rawTrackList, nextTrackId, rawPlayable, RAW_CC, RAW_CC_DESC, ENRICH_READS } from "../core/raw.js";
 import { compose, romanOf, SCORE_VERSION } from "../core/compose.js";
 import { RULES_INFO, RULE_GROUPS, defaultRules } from "../core/rules.js";
@@ -57,7 +57,7 @@ const LV = { AUDIO: 0, MUSIC: 1, PATH: 2, SAL: 3, IMAGE: 4 };
 const P = {
   style: "ambient", duration: 30, count: 8, returns: 0, returnsExact: true, inhibition: 0.18, memory: 0.05, seed: 0, radius: DEFAULT_RADIUS,
   wColor: 0.7, wTex: 0.5, wSem: 0.6, fidelity: 0.6, tempoAdj: 0, timbre: 1, reverb: 0.6,
-  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, enrich: false, enrichUse: {}, rawBpm: 0, rawScale: true, rawTracks: [], rawCut: [], rawCC: {}, layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
+  smooth: 0.6, arc: 0.7, melody: "classic", connect: "light", groove: "straight", placement: "contrast", orch: "small", gen: "composed", pictureBand: false, lofiSide: "auto", enrich: false, enrichUse: {}, rawBpm: 0, rawScale: true, rawTracks: [], rawCut: [], rawCC: {}, layers: [], samples: true, kit: "style", drums: {}, keyMode: "auto", keyPc: 0, scale: "auto", octave: 0, range: 2,
   rules: defaultRules(),
   expert: [],
   // the circles: each one sized from the spot it reads ("area"), or all the same ("same")
@@ -407,7 +407,8 @@ function pickLayerInstrument(id) {
 // A persistent sampler graph on the live context keeps the instruments loaded across playbacks;
 // its per-layer outputs are routed into each new playback graph.
 const SAMP = { G: null };
-const kitName = () => (P.kit === "style" ? STYLE_KIT[P.style] : P.kit) || "synth";
+// (the style's kit: the score's own style, so the ambient side of lo-fi plays its calm kit)
+const kitName = () => (P.kit === "style" ? STYLE_KIT[(SCORE && !SCORE.raw && SCORE.style) || P.style] : P.kit) || "synth";
 function sampleSpecs(sc) {
   const specs = [];
   for (const l of ["lead", "harm", "bass", "pad", ...(sc.extra || []).map(L => L.id)]) if (sc.inst[l] && sc.inst[l].type === "sample") specs.push({ layer: l, src: sc.inst[l].src });
@@ -832,7 +833,7 @@ function howThisPicture() {
   const modes = [...st.modes].sort((a, b) => MODES[a].b - MODES[b].b), keyFrom = g.hueStr > 0.06 ? `its colour, at ${Math.round(g.hue)}° on the wheel` : `its lightness (${nf(g.brightness)}), as it has no clear colour`;
   const fam = sc.family && RULES[sc.style] && RULES[sc.style].families ? RULES[sc.style].families.find(F => F.key === sc.family) : null;
   const mode = sc.scaleManual ? "chosen by hand" : fam ? `mood score ${nf(val)} (stretched to ${nf(moodOf(val))}) picks the ${fam.name.toLowerCase()} chords and ${MODES[sc.modeKey].name.split(" ")[0]}` : `mood score ${nf(val)} (stretched to ${nf(moodOf(val))}) picks ${MODES[sc.modeKey].name.split(" ")[0]} among ${modes.map(m => MODES[m].name.split(" ")[0]).join(", ")}`;
-  return `<div class="howto-now"><b>For this picture</b> (${esc(st.name)}): the key is ${esc(pcName(sc.pc))}${sc.keyManual ? " (chosen by hand)" : `, from ${esc(keyFrom)}`}; the mood is ${esc(mode)}; the energy score ${nf(energy)} sets ${nf1(sc.bpmStyle)} BPM in the style's ${st.tempo[0]}-${st.tempo[1]}, rounded to ${nf1(sc.bpm)} BPM so ${sc.bars} bars last exactly ${sc.seconds} s; ${sc.points.length} places share ${sc.body - (sc.intro || 0)} beats.${sc.modulation ? ` The climax moves to ${esc(pcName(sc.modulation.keyPc))}.` : ""}</div>`;
+  return `<div class="howto-now"><b>For this picture</b> (${esc(sc.side === "ambient" ? `Lo-fi, the ambient side, played as ${st.name}` : st.name)}): the key is ${esc(pcName(sc.pc))}${sc.keyManual ? " (chosen by hand)" : `, from ${esc(keyFrom)}`}; the mood is ${esc(mode)}; the energy score ${nf(energy)} sets ${nf1(sc.bpmStyle)} BPM in the style's ${st.tempo[0]}-${st.tempo[1]}, rounded to ${nf1(sc.bpm)} BPM so ${sc.bars} bars last exactly ${sc.seconds} s; ${sc.points.length} places share ${sc.body - (sc.intro || 0)} beats.${sc.modulation ? ` The climax moves to ${esc(pcName(sc.modulation.keyPc))}.` : ""}</div>`;
 }
 // Every style's particulars, read from its settings (theory.js STYLES and RULES, patterns.js).
 function howStyles() {
@@ -2226,7 +2227,7 @@ function initKeyControls() {
 // were for the old genre, so they are let go (your own list of added layers and the raw tracks stay).
 function resetInstrumentChoice() { P.instruments = {}; P.kit = "style"; }
 /* ============ how the song is made: Classic, By genre, Raw (core/gen.js, core/raw.js) ============ */
-let GEN_SEG = null, RAW_TEMPO = null;
+let GEN_SEG = null, RAW_TEMPO = null, SIDE_SEG = null;
 function setGen(v) { P.gen = v; document.body.classList.toggle("gen-raw", v === "raw"); invalidate(LV.MUSIC); }
 // What the picture chose, against the genre's usual band (your own instruments aside)
 function bandSummary(sc) {
@@ -2245,6 +2246,7 @@ function bandSummary(sc) {
 function initGen() {
   GEN_SEG = makeSeg($("#genSeg"), Object.entries(GEN_MODES), genOf(P), setGen);
   $("#bandPick").addEventListener("change", e => { P.pictureBand = e.target.checked; if (P.gen !== "raw") P.gen = "composed"; invalidate(LV.MUSIC); });
+  SIDE_SEG = makeSeg($("#sideSeg"), Object.entries(LOFI_SIDES), P.lofiSide || "auto", v => { P.lofiSide = v; invalidate(LV.MUSIC); });
   $("#enrichList").innerHTML = ENRICH_KEYS.map(k => `<label class="toggle"><input type="checkbox" data-en="${k}"><span>${esc(ENRICH[k].name)}<small>${esc(ENRICH[k].does)}</small></span></label>`).join("");
   $("#enrichOn").addEventListener("change", e => { P.enrich = e.target.checked; invalidate(LV.MUSIC); });
   $("#enrichList").addEventListener("change", e => { const k = e.target.dataset.en; if (!k) return; P.enrichUse = { ...(P.enrichUse || {}), [k]: e.target.checked }; invalidate(LV.MUSIC); });
@@ -2291,6 +2293,13 @@ function renderRaw() {
   $("#enrichList").querySelectorAll("[data-en]").forEach(c => { c.checked = !P.enrichUse || P.enrichUse[c.dataset.en] !== false; });
   $("#enrichNote").textContent = P.enrich ? (raw ? "Five more readings of the picture: tracks can read the direction of the lines, repetition, depth, colour contrast and grain, and the light leans the sound toward it." : "Six more readings of the picture shape the piece, always under the genre's rules: the articulation, the accompaniment, the distance, suspensions, a shaker, the stereo.") : "Off: the piece as it is. On: more readings of the picture for a fuller piece.";
   $("#bandNote").textContent = [BAND_DESC[pictureBandOf(P) ? "on" : "off"], bandSummary(SCORE)].filter(Boolean).join(" ");
+  // lo-fi: the beat or the ambient side
+  $("#sideBox").hidden = P.style !== "lofi";
+  if (P.style === "lofi") {
+    SIDE_SEG.set(P.lofiSide || "auto");
+    const now = SCORE && !SCORE.raw ? (SCORE.side === "ambient" ? `This picture plays the ambient side (${STYLES[SCORE.style].name.toLowerCase()}).` : "This picture plays the beat.") : "";
+    $("#sideNote").textContent = [LOFI_SIDE_DESC[P.lofiSide || "auto"], (P.lofiSide || "auto") === "auto" ? now : ""].filter(Boolean).join(" ");
+  }
   document.body.classList.toggle("gen-raw", raw);
   // the controls a raw piece does not use (its tempo and key are in the Raw panel)
   for (const k of ["tempoAdj", "arc", "smooth", "timbre"]) if (SL[k]) SL[k].el.classList.add("no-raw");

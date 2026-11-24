@@ -39,7 +39,7 @@ export const RULES_INFO = {
   motion: { group: "voices", name: "Movement in held bars", desc: "Where the accompaniment only holds a chord for a whole bar, a figure of the genre moves under the melody on its own track: a string ostinato or a violin arpeggio (film and classical styles), an arpeggiator (electronic styles), a slow harp, celesta or piano arpeggio (calm styles). Tones of the chord only, between the harmony and the melody, softly." },
   lone: { group: "voices", name: "No lone notes", desc: "A short note alone on its track, with nothing else on it for four beats either side, becomes a small figure: two or three tones of the chord, an eighth apart, each softer than the one before, instead of one hit that falls out of place." },
   approach: { group: "voices", name: "Bass approach notes", desc: "In the styles that use them, the bass walks into the next chord by a step." },
-  drumBreak: { group: "genre", name: "Drum break before the climax", desc: "In synthwave the drums drop out for the bar before the climax and come back with it." },
+  drumBreak: { group: "genre", name: "Drum break before the climax", desc: "In synthwave and lo-fi the drums drop out for the bar before the climax and come back with it." },
   gated: { group: "colour", name: "Gated snare", desc: "In synthwave the snare has a big reverb cut short, the gated sound of the 80s." },
   stopDown: { group: "genre", name: "Break before the climax", desc: "In trailer styles (epic, metal) everything stops for half a beat right before the climax." },
   sidechain: { group: "genre", name: "Pumping (sidechain)", desc: "In electronic styles the other parts duck on every kick." },

@@ -15,7 +15,7 @@ import { pickKind, harmonyNotes, bassNotes } from "./patterns.js";
 import { resolveInstruments, textureWave, LIBRARY } from "./instruments.js";
 import { autoLayers, richnessOf, extraNotes, doubleNotes, cadenceExtra, tidyStrays, figureLoneNotes, roleInstrument, layerFor, thinLayers, STYLE_ROLES, ROLES } from "./arrange.js";
 import { hashBytes } from "./util.js";
-import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf, paletteOf } from "./gen.js";
+import { genreCore, genreLayers, styleKey, GENRE_OMIT, pictureBandOf, paletteOf, lofiSideOf } from "./gen.js";
 import { rawNotes, rawTrackList, READ_ROLE, DRUMS_KEY, applyRawEdits } from "./raw.js";
 import { enrichAt, enrichOn, enrichHarmKind, applyEnrich, GENERIC_HARM } from "./enrich.js";
 import { motionNotes, motionPreset, MOTION_ID, colourPiece } from "./motion.js";
@@ -39,7 +39,10 @@ function gridSplit(dur, w) {
 export function compose(args) {
   const P = args.P;
   if (P.gen !== "raw") {
-    const sc = composeMusic(args);
+    // lo-fi, the ambient side: played by the calm style that suits the picture, the vinyl kept
+    const side = lofiSideOf(P, args.A);
+    const sc = composeMusic(side ? { ...args, P: { ...P, style: side.inner } } : args);
+    if (side) { sc.genre = P.style; sc.side = side.side; sc.vinyl = ruleOn(P, "vinyl"); }
     // By genre: a track the genre does not usually have is left out
     const omit = pictureBandOf(P) ? GENRE_OMIT[P.style] || [] : [];
     if (omit.length) { sc.notes = sc.notes.filter(n => !omit.includes(n.layer)); sc.omit = omit; }
@@ -98,6 +101,8 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   // By genre: the picture chooses the five tracks' instruments from the genre's pool
   const genre = pictureBandOf(P), palette = genre ? paletteOf(P.style, A, { samples: P.samples === true, family: family && family.key }) : null, core = genre ? genreCore(P.style, A, { samples: P.samples === true, melody: P.melody, family: family && family.key }) : null;
   const inst = resolveInstruments(P.style, P.instruments, P.melody, P.samples === true, core);
+  // a palette may set the level of its own tracks (an instrument chosen by hand keeps its own)
+  if (palette && palette.level) for (const [l, k] of Object.entries(palette.level)) if (inst[l] && !(P.instruments && P.instruments[l] && P.instruments[l].preset)) inst[l] = { ...inst[l], lvl: (inst[l].lvl ?? 1) * k };
   const texImg = lum || { w: A.W, h: A.H, data: A.L };
   const usesWave = ["lead", "harm", "bass", "pad"].some(l => inst[l].type === "wave");
   const makeWave = (x, y, r, ori) => { const wv = textureWave(texImg, x, y, r, ori); wv.key = hashBytes(new Uint8Array(wv.imag.buffer)) + hashBytes(new Uint8Array(wv.real.buffer)); return wv; };
@@ -472,7 +477,13 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     };
     const close = (v, end) => notes.push({ layer: "pad", t: v.t, dur: end - v.t, midi: v.midi, vel: v.vel, tim: v.tim, pan: 0, point: -1, seg: v.seg, sweep: v.sweep.length ? v.sweep : null });
     const moveTo = (pcs, t, lp, seg) => {
-      const target = padVoicing(pcs, voices.every(Boolean) ? voices.map(v => v.midi) : null);
+      let target = padVoicing(pcs, voices.every(Boolean) ? voices.map(v => v.midi) : null);
+      // a note the next chord keeps stays on the voice that holds it (on another voice it would
+      // be restruck, as two chords of a loop sharing a tone showed)
+      if (voices.every(Boolean)) {
+        const left = [...target], kept = voices.map(v => { const j = left.indexOf(v.midi); if (j < 0) return null; left.splice(j, 1); return v.midi; });
+        target = kept.map(m => (m !== null ? m : left.shift())).filter(m => m !== undefined);
+      }
       target.forEach((m, k) => {
         const v = voices[k];
         if (v && v.midi === m) v.sweep.push({ at: t - v.t, cut: lp.tim.cut, q: lp.tim.q });

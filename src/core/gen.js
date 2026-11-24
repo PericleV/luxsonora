@@ -120,6 +120,16 @@ export const PALETTES = {
     { key: "dark", family: "dark", name: "Dark", core: { lead: "s.cello", harm: "s.tremolo", bass: "s.contrabass", pad: "v.male" },
       band: [["s.trombone", "sustain"], ["s.horn", "double"], ["s.timpani", "pulse"], ["s.strings", "runs"], ["s.violin", "counter"], ["s.choir", "sustain"], ["s.pizz", "ostinato"]] }
   ],
+  // lo-fi, the beat side: Study beats for the rainy and study chords, Jazz cafe for the cafe ones
+  lofi: [
+    { key: "study", families: ["rainy", "study"], name: "Study beats", core: { lead: "s.piano", harm: "s.wurli", bass: "s.fingerbass", pad: "lofi.pad" },
+      level: { harm: 1.25 },
+      band: [["s.vibes", "ornament"], ["s.nylon", "ostinato"], ["s.flute", "counter"], ["s.warmpad", "sustain"], ["s.jazzgtr", "runs"]] },
+    { key: "cafe", family: "cafe", name: "Jazz cafe", core: { lead: "s.tenorsax", harm: "s.jazzgtr", bass: "s.acbass", pad: "lofi.pad" },
+      // (the held sax stood 19 dB over the short guitar comping: measured, then evened out)
+      level: { lead: 0.82, harm: 1.55 },
+      band: [["s.piano", "runs"], ["s.vibes", "ornament"], ["s.flute", "double"], ["s.organ", "sustain"], ["s.nylon", "ostinato"]] }
+  ],
   // synthesizers: they play with or without sampled instruments (a sampled player of the band
   // only when they are on)
   synthwave: [
@@ -132,6 +142,26 @@ export const PALETTES = {
       band: [["x.glass", "ostinato"], ["s.synthstrings", "sustain"], ["x.nylon", "runs"], ["x.sine", "ornament"], ["s.tenorsax", "counter"]] }
   ]
 };
+// Lo-fi has two sides (docs/GENRES.md): the beat (swung boom-bap drums, seventh chords on keys)
+// and, for a calm picture or by choice, the ambient side: no beat, long tones, a drone, a
+// pentatonic melody that breathes, with the vinyl still under it. The ambient side is played by
+// the meditation style (a cool or dark picture: bells, pads and a drone) or the nature style (a
+// light, warm one: felt piano, soft guitar, flute).
+export const LOFI_SIDES = { auto: "From the picture", beat: "Beat", ambient: "Ambient" };
+export const LOFI_SIDE_DESC = {
+  auto: "A calm picture (few edges, little detail) plays the ambient side, a busier one the beat.",
+  beat: "Swung boom-bap drums, seventh and ninth chords on keys, a soft bass, vinyl.",
+  ambient: "No beat: long tones, a drone and a pentatonic melody that breathes, with the vinyl still under it."
+};
+export const LOFI_CALM = 0.3;
+const energyScore = A => { const g = (A && A.global) || {}; return 0.6 * (g.edgeN ?? 0.5) + 0.4 * (g.entropy ?? 0.5); };
+// The side of a lo-fi piece: null for another style or the beat, else { side, inner: the style that plays it }.
+export function lofiSideOf(P, A) {
+  if (!P || P.style !== "lofi") return null;
+  const side = P.lofiSide === "beat" || P.lofiSide === "ambient" ? P.lofiSide : energyScore(A) < LOFI_CALM ? "ambient" : "beat";
+  if (side === "beat") return null;
+  return { side, inner: moodScore(A) >= 0.5 ? "lofinature" : "meditation" };
+}
 // the mood score of a picture (compose.js reads the same, before a story's semantics)
 const moodScore = A => { const g = (A && A.global) || {}; return 0.5 * (g.brightness ?? 0.5) + 0.3 * (g.warmth01 ?? 0.5) + 0.2 * (g.sat ?? 0.5); };
 // The palette of a style for a picture (family: the progression family already chosen), or null.
@@ -139,7 +169,7 @@ export function paletteOf(style, A, { samples = true, family = null } = {}) {
   const list = PALETTES[style];
   if (!list) return null;
   const fam = family || (autoModeOf(style, moodScore(A)).family || {}).key;
-  const P = list.find(x => x.family === fam) || list[0];
+  const P = list.find(x => x.family === fam || (x.families && x.families.includes(fam))) || list[0];
   return Object.values(P.core).every(k => usable(k, samples)) ? P : null;
 }
 

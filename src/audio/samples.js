@@ -64,9 +64,19 @@ const status = { loading: 0, failed: new Set(), listeners: new Set() };
 export function onSampleStatus(fn) { status.listeners.add(fn); return () => status.listeners.delete(fn); }
 const emit = () => status.listeners.forEach(fn => fn({ loading: status.loading, failed: [...status.failed] }));
 
+// Level trims of the sampled instruments that stand far from the others. Every sampled instrument
+// was rendered playing the same phrase (an arpeggio over two octaves in its register, velocity 80,
+// notes of 0.9 s); their levels have a median of -28.2 dB RMS, and only those more than 6 dB from
+// it are brought to the edge of that band (the rest keep the balance they had): a pizzicato, a
+// slapped bass or a shamisen were lost under the others, a finger bass stood over them.
+export const LEVEL_TRIM = {
+  "sf:pizzicato_strings": 1.54, "sf:slap_bass_1": 1.89, "sf:electric_guitar_muted": 1.37, "sf:banjo": 1.13, "sf:shamisen": 1.89,
+  "sf:kalimba": 1.14, "sf:electric_bass_finger": 0.73, "sf:pad_2_warm": 0.88
+};
 function create(ctx, dest, src) {
-  // level trim per source (measured RMS against the synthesized versions)
-  if (src.gain && src.gain !== 1) { const g = ctx.createGain(); g.gain.value = src.gain; g.connect(dest); dest = g; }
+  // level trim per source (kits: measured against the synthesized kit; instruments: LEVEL_TRIM)
+  const gain = (src.gain ?? 1) * (LEVEL_TRIM[keyOf(src)] ?? 1);
+  if (gain !== 1) { const g = ctx.createGain(); g.gain.value = gain; g.connect(dest); dest = g; }
   const common = { destination: dest, loader: loaderFor(ctx), scheduler: Scheduler(ctx, { lookaheadMs: 1e9, intervalMs: 1000 }) };
   // the Steinway set is large once decoded: phones and low-memory devices play the General MIDI
   // grand instead, so the browser does not close the page to free memory

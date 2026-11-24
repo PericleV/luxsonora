@@ -293,6 +293,7 @@ const STYLE_DESC = {
   bossa: "Nylon guitar on the bossa nova rhythm, a soft bass and gentle percussion.",
   electronic: "House music. A kick on every beat, a clap on 2 and 4, and that pumping feel.",
   synthwave: "Straight out of the 80s. A pulsing bass, a bright synth lead and a big snare.",
+  cinepop: "Between film and pop: piano chords that drive, a beat that grows from nothing, strings that open up at the chorus, a hopeful melody.",
   pop: "Catchy and bright. Four chords that keep coming back, piano and guitar, and a beat with claps.",
   rock: "Guitars and drums. Power chords, a driving bass, a big snare on 2 and 4 and a crash at every new part.",
   metal: "Heavy and fast. Palm-muted guitar riffs, double bass drum at the climax and a sudden break before it.",

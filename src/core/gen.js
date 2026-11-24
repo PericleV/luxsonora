@@ -60,6 +60,7 @@ const CORE_POOL = {
   techno: { lead: { "x.synthlead": 0.7 }, pad: { "x.wavepad": 0.7 } },
   dnb: { lead: { "x.synthlead": 0.8 }, harm: { "s.piano": 0.6, "s.wurli": 0.5 }, pad: { "s.strings": 0.6, "s.synthstrings": 0.7, "x.wavepad": 0.7 } },
   classical: { lead: { "s.piano": 1, "s.violin": 0.9, "s.flute": 0.7, "s.clarinet": 0.7, "s.oboe": 0.7, "s.cello": 0.8 }, harm: { "s.piano": 1, "s.strings": 0.9, "s.harp": 0.6 }, bass: { "s.cello": 1, "s.contrabass": 0.8 }, pad: { "s.strings": 1, "s.horn": 0.6 } },
+  cinepop: { lead: { "s.piano": 1, "s.violin": 0.6, "s.cleangtr": 0.6 }, harm: { "s.piano": 1, "s.strings": 0.8, "s.cleangtr": 0.7 }, bass: { "s.fingerbass": 1, "s.cello": 0.6 }, pad: { "s.strings": 1, "s.synthstrings": 0.8 } },
   pop: { lead: { "s.piano": 0.8, "x.synthlead": 0.7, "s.cleangtr": 0.7, "s.flute": 0.4 }, harm: { "s.cleangtr": 0.9, "s.piano": 0.9, "s.acgtr": 0.8, "s.mutedgtr": 0.6 }, bass: { "s.fingerbass": 1, "s.synthbass": 0.7 }, pad: { "s.synthstrings": 0.8, "s.strings": 0.7, "s.warmpad": 0.6 } },
   rock: { lead: { "s.overdrive": 1, "s.distortion": 0.9, "s.cleangtr": 0.6, "s.rockorgan": 0.4, "s.piano": 0.3 }, harm: { "s.distortion": 1, "s.overdrive": 0.9, "s.cleangtr": 0.7, "s.rockorgan": 0.45 }, bass: { "s.pickbass": 1, "s.fingerbass": 0.8 }, pad: { "s.organ": 0.7, "s.rockorgan": 0.7, "s.strings": 0.35 } },
   metal: { lead: { "s.overdrive": 1, "s.distortion": 1 }, harm: { "s.distortion": 1, "s.overdrive": 0.9 }, bass: { "s.pickbass": 1, "s.fingerbass": 0.6 }, pad: { "s.choir": 0.8, "s.strings": 0.6, "s.organ": 0.5 } },
@@ -129,6 +130,19 @@ export const PALETTES = {
       // (the held sax stood 19 dB over the short guitar comping: measured, then evened out)
       level: { lead: 0.82, harm: 1.55 },
       band: [["s.piano", "runs"], ["s.vibes", "ornament"], ["s.flute", "double"], ["s.organ", "sustain"], ["s.nylon", "ostinato"]] }
+  ],
+  // cinematic pop, after the family: Indie (bittersweet), Piano anthem (hopeful), Orchestral pop (lift);
+  // levels measured so the harmony sits about 7 dB under the melody
+  cinepop: [
+    { key: "indie", family: "bittersweet", name: "Indie", core: { lead: "s.cleangtr", harm: "s.piano", bass: "s.fingerbass", pad: "s.synthstrings" },
+      level: { lead: 1.4 },
+      band: [["s.acgtr", "ostinato"], ["s.glock", "ornament"], ["s.strings", "sustain"], ["s.cello", "counter"], ["x.synthlead", "counter"]] },
+    { key: "anthem", family: "hopeful", name: "Piano anthem", core: { lead: "s.piano", harm: "s.piano", bass: "s.fingerbass", pad: "s.strings" },
+      level: { harm: 1.2 },
+      band: [["s.cello", "counter"], ["s.harp", "runs"], ["s.celesta", "ornament"], ["s.violin", "double"], ["s.synthstrings", "sustain"]] },
+    { key: "orchestral", family: "lift", name: "Orchestral pop", core: { lead: "s.piano", harm: "s.strings", bass: "s.contrabass", pad: "s.horn" },
+      level: { harm: 1.35 },
+      band: [["s.violin", "counter"], ["s.timpani", "pulse"], ["s.harp", "runs"], ["s.cello", "counter"], ["s.choir", "sustain"], ["s.celesta", "ornament"]] }
   ],
   // synthesizers: they play with or without sampled instruments (a sampled player of the band
   // only when they are on)

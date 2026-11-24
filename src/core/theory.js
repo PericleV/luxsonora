@@ -139,6 +139,18 @@ export const STYLES = {
     },
     gm: { lead: 0, harm: 0, bass: 42, pad: 48 }
   },
+  // Cinematic pop (docs/GENRES.md): between film and pop, piano chords that drive, a beat that
+  // grows from nothing, strings that open up at the chorus, a hopeful melody
+  cinepop: {
+    name: "Cinematic pop", modes: ["ionian", "aeolian", "mixolydian", "lydian"], tempo: [80, 112], pent: false, ext: 5, swing: 0, perc: "cinepop", bass: "pick8", reverb: 0.45,
+    inst: {
+      lead: I("fm", "Bright piano", { a: 0.004, d: 1.8, s: 0.2, r: 0.7, cut: 4600, q: 0.6, col: 0.2, ratio: 1 }),
+      harm: I("fm", "Driving piano", { a: 0.004, d: 1.2, s: 0.25, r: 0.4, cut: 3600, q: 0.6, col: 0.18, ratio: 1 }),
+      bass: I("bass", "Round bass", { a: 0.006, d: 0.4, s: 0.7, r: 0.15, cut: 900, q: 1, col: 0.35 }),
+      pad: I("pad", "Lush strings", { a: 0.7, d: 1.0, s: 0.9, r: 1.6, cut: 2400, q: 0.8, col: 0.65, det: 10 })
+    },
+    gm: { lead: 0, harm: 0, bass: 33, pad: 48 }
+  },
   pop: {
     name: "Pop", modes: ["ionian", "mixolydian", "aeolian", "dorian"], tempo: [96, 124], pent: false, ext: 5, swing: 0, perc: "pop", bass: "pick8", reverb: 0.35,
     inst: {
@@ -372,6 +384,15 @@ const LOFI_FAMILIES = [
   // Cafe: IVmaj7, iii7, ii7, Imaj7 (walking down); in Lydian Imaj7, II7, Imaj7, V7
   { key: "cafe", name: "Cafe", modes: { ionian: 2, lydian: 1 }, loop: [3, 2, 1, 0], loopBy: { lydian: [0, 1, 0, 4] }, cands: [[3, 1, 0], [0, 2, 3]], candsBy: { lydian: [[0, 1, 4], [4, 0, 1]] } }
 ];
+// Cinematic pop: four-chord loops, one chord a bar
+const CINEPOP_FAMILIES = [
+  // Bittersweet: vi, IV, I, V; in natural minor i, bVI, bIII, bVII
+  { key: "bittersweet", name: "Bittersweet", modes: { aeolian: 2, ionian: 2 }, loop: [5, 3, 0, 4], loopBy: { aeolian: [0, 5, 2, 6] }, cands: [[5, 3, 0], [0, 4, 5]], candsBy: { aeolian: [[5, 2, 6], [0, 5, 6]] } },
+  // Hopeful: I, V, vi, IV; in Mixolydian I, bVII, IV, bVII
+  { key: "hopeful", name: "Hopeful", modes: { ionian: 3, mixolydian: 1 }, loop: [0, 4, 5, 3], loopBy: { mixolydian: [0, 6, 3, 6] }, cands: [[0, 4, 5], [5, 3, 0]], candsBy: { mixolydian: [[0, 6, 3], [3, 0, 6]] } },
+  // Lift: IV, I, V, vi; in Lydian I, II, vi, II (wonder)
+  { key: "lift", name: "Lift", modes: { ionian: 2, lydian: 1 }, loop: [3, 0, 4, 5], loopBy: { lydian: [0, 1, 5, 1] }, cands: [[3, 0, 4], [4, 5, 3]], candsBy: { lydian: [[0, 1, 5], [5, 0, 1]] } }
+];
 /*
  * The mood of a picture (0 dark and cold, 1 bright and warm), stretched: real pictures rarely
  * reach the ends of the raw score (0.5 brightness + 0.3 warmth + 0.2 saturation), so the middle
@@ -414,6 +435,9 @@ export const RULES = {
   bossa: { grid: 1, unit: 4, phrase: 2, harm: ["block", "bossa"], bass: ["bossa", "bossa"], cands: [[0, 1, 4], [1, 4, 5]], sidechain: 0, pickups: true, approach: false, swell: null, stopDown: false },
   synthwave: { grid: 2, unit: 4, phrase: 4, harm: ["block", "arp"], bass: ["hold", "octave8", "octave16"], cands: [[5, 2, 6], [0, 5, 3]], families: SYNTHWAVE_FAMILIES, gatedSnare: true, drumBreak: true, sidechain: 0.3, pickups: false, approach: false, swell: "riser", stopDown: false },
   classical: { grid: 1, unit: 4, phrase: 4, harm: ["block", "broken"], bass: ["hold", "rootfifth"], cands: [[0, 3, 4], [5, 1, 4]], sidechain: 0, pickups: true, approach: true, swell: null, stopDown: false, cadentialV: true },
+  // cinematic pop: the loop of its family, a piano arpeggio when calm, held chords, driving piano
+  // eighths when busy; the bass held, then picked eighths; a cymbal swell into each part
+  cinepop: { grid: 1, unit: 4, phrase: 4, harm: ["arp", "block", "pulse"], bass: ["hold", "pick8"], cands: [[0, 4, 5], [5, 3, 0]], families: CINEPOP_FAMILIES, sidechain: 0.1, pickups: true, approach: false, swell: "cymbal", stopDown: false },
   // pop: one chord per bar on the four-chord loop (I-V-vi-IV in major, i-VI-III-VII in minor)
   pop: { grid: 1, unit: 4, phrase: 4, harm: ["block", "pulse", "arp"], bass: ["hold", "pick8"], cands: [[0, 4, 5], [5, 3, 0]], loop: { major: [0, 4, 5, 3], minor: [0, 5, 2, 6] }, sidechain: 0.12, pickups: true, approach: false, swell: "riser", stopDown: false },
   // rock: power chords, held when calm and in eighths when driving; the bass in eighths
@@ -478,9 +502,9 @@ export const STYLE_GROUPS = [
   ["Calm and nature", ["ambient", "lofinature", "meditation", "neoclassical", "minimal", "eastasian"]],
   ["Classical and film", ["classical", "baroque", "movie", "cinematic", "epic"]],
   ["Jazz, soul and world", ["jazz", "bossa", "blues", "funk", "reggae", "lofi", "triphop"]],
-  ["Band", ["pop", "rock", "postrock", "folk", "metal"]],
+  ["Band", ["cinepop", "pop", "rock", "postrock", "folk", "metal"]],
   ["Electronic", ["electronic", "techno", "dnb", "synthwave", "chiptune"]]
 ];
 // styles kept in the code but not offered yet (not in the menus, not suggested)
 export const HIDDEN_STYLES = new Set(["acappella"]);
-export const PERC_NAME = { acappella: "No drums", lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };
+export const PERC_NAME = { cinepop: "No beat in the intro, then a soft kick and claps, the full kit at the chorus", acappella: "No drums", lofinature: "Soft kick, rim and shaker", neoclassical: "No drums", folk: "Soft kick, rim and shaker", meditation: "No drums", postrock: "Ride, toms and a full kit at the peak", chiptune: "8-bit kick, snare and hats", triphop: "Slow heavy break", reggae: "One-drop: kick and rim on the third beat", baroque: "No drums", eastasian: "Woodblock and taiko", dnb: "Fast two-step break", techno: "Four on the floor, off-beat hats", ambient: "Shaker, rim and soft toms", cinematic: "Toms, snare and crash", minimal: "Hats, rims and kick", jazz: "Ride, brushes and kick", electronic: "Kick, clap and hats", epic: "Taiko, timpani and braams", movie: "Timpani and cymbal swells", lofi: "Boom-bap kit", bossa: "Rim, shaker and soft kick", synthwave: "Gated 80s kit", classical: "No drums", pop: "Kick, clap, snare and hats", rock: "Rock kit with crashes", metal: "Double bass drum, snare and cymbals", blues: "Shuffle on the ride", funk: "Tight kit with ghost notes" };

@@ -19,7 +19,8 @@ export const MOTION = {
   synthwave: { kind: "synth", preset: "x.nylon" }, electronic: { kind: "synth", preset: "x.nylon" }, dnb: { kind: "synth", preset: "x.glass" },
   triphop: { kind: "synth", preset: "s.vibes" }, techno: { kind: "synth", preset: "x.nylon" }, lofi: { kind: "synth", preset: "s.wurli" },
   ambient: { kind: "shimmer", preset: "s.harp" }, meditation: { kind: "shimmer", preset: "s.celesta" }, lofinature: { kind: "shimmer", preset: "s.harp" },
-  minimal: { kind: "shimmer", preset: "s.marimba" }, pop: { kind: "shimmer", preset: "s.piano" }
+  minimal: { kind: "shimmer", preset: "s.marimba" }, pop: { kind: "shimmer", preset: "s.piano" },
+  cinepop: { kind: "strings", preset: "s.strings" }
 };
 // without sampled instruments, a synthesizer of the same character
 const SYNTH_OF = { "s.strings": "x.brass", "s.violin": "x.softlead", "s.harp": "x.nylon", "s.celesta": "x.glass", "s.marimba": "x.glass", "s.piano": "x.keys", "s.vibes": "x.glass", "s.wurli": "x.keys" };
@@ -83,7 +84,7 @@ export function motionNotes(style, { notes, slots, points, body, intro = 0, tim,
  *  shimmer  (ambient, meditation, cinematic, movie) an airy octave above the pad, very soft, slow
  *  spread   the notes of the pad struck together fan out across the stereo, low left, high right
  */
-export const SHIMMER_STYLES = new Set(["ambient", "meditation", "cinematic", "movie"]);
+export const SHIMMER_STYLES = new Set(["ambient", "meditation", "cinematic", "movie", "cinepop"]);
 export function colourPiece(notes, points, slots, style, { sweep = true, echoes = true, shimmer = true, spread = true, body = Infinity } = {}) {
   const pcOf = m => ((m % 12) + 12) % 12, slotAt = t => slots.find(S => t >= S.t0 - 1e-9 && t < S.t1 - 1e-9) || null;
   if (sweep) for (const n of notes) {

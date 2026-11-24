@@ -659,9 +659,9 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     const chordAt = tt => slots.find(S => tt >= S.t0 - 1e-9 && tt < S.t1 - 1e-9) || { pcs: new Set(notes.filter(m => (m.layer === "harm" || m.layer === "pad") && m.t <= tt + 1e-6 && m.t + m.dur > tt + 1e-6).map(m => pcOf(m.midi))) };
     const onB = tt => Math.abs(tt - Math.round(tt)) < 1e-6;
     const acc = notes.filter(m => m.layer !== "lead" && m.layer !== "perc" && Number.isFinite(m.midi) && !m.chromatic);
-    const leadNs = notes.filter(m => m.layer === "lead" && !m.dbl && !m.echo && !m.chromatic).sort((a, b) => a.t - b.t);
+    const leadNs = notes.filter(m => m.layer === "lead" && !m.dbl && !m.echo).sort((a, b) => a.t - b.t);
     leadNs.forEach((nn, k) => {
-      const S = chordAt(nn.t); if (!S.pcs.size || S.pcs.has(pcOf(nn.midi))) return;
+      const S = chordAt(nn.t); if (nn.chromatic || !S.pcs.size || S.pcs.has(pcOf(nn.midi))) return;
       const nx = leadNs[k + 1], nS = nx && chordAt(nx.t);
       if (nx && nS.pcs.size && nx.t <= nn.t + nn.dur + 0.25 && Math.abs(nx.midi - nn.midi) <= 2 && nS.pcs.has(pcOf(nx.midi)) && nn.dur <= 1 + 1e-9) return;
       const hit = acc.some(m => { const ov = Math.min(m.t + m.dur, nn.t + nn.dur) - Math.max(m.t, nn.t), iv = Math.abs(m.midi - nn.midi) % 12; return ov >= 0.125 && (iv === 1 || iv === 11) && ((onB(Math.max(m.t, nn.t)) && ov >= 0.25) || ov >= 0.5 || (onB(nn.t) && nn.dur >= 0.5)); });

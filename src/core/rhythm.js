@@ -108,6 +108,16 @@ export function barPattern(style, D, a, section, b = 0) {
     // 80s: kick on 1 and 3 (four on the floor when driving), big snare on 2 and 4, eighth hats (sixteenths at the peak)
     if (!intro) { at(D > 0.7 ? [0, 4, 8, 12] : [0, 8], DRUM.kick, 0.92); at([4, 12], DRUM.snare, 0.95); }
     at(climax || D > 0.8 ? [...Array(16).keys()] : EIGHTHS, DRUM.chat, intro ? 0.34 : 0.42);
+  } else if (style === "cinepop") {
+    // cinematic pop: the beat grows from nothing. No drums in the intro; a soft kick and claps in
+    // the calm parts; kick, snare and clap with eighth hats as it builds; at the chorus (the climax
+    // and the most tense places) the kick on every beat, sixteenth hats and an open hat
+    if (!intro) {
+      const full = climax || D >= 0.72, build = !full && D >= 0.48;
+      if (full) { at([0, 4, 8, 12], DRUM.kick, 0.9); at([4, 12], DRUM.snare, 0.86); at([4, 12], DRUM.clap, 0.6); at(climax ? [...Array(16).keys()] : EIGHTHS, DRUM.chat, 0.4); at([14], DRUM.ohat, 0.42); }
+      else if (build) { at([0, 8, 10], DRUM.kick, 0.84); at([4, 12], DRUM.snare, 0.72); at([4, 12], DRUM.clap, 0.5); at(EIGHTHS, DRUM.chat, 0.36); }
+      else { at([0, 8], DRUM.kick, 0.66); if (D > 0.3) at([4, 12], DRUM.clap, 0.46); put(E(lerp(3, 8, a.tex), a.rot2), DRUM.shaker, 0.26); }
+    }
   } else if (style === "pop") {
     // pop: kick on 1 and 3 (and the "and" of 3 when driving), snare and clap on 2 and 4, eighth hats
     if (intro) { at([0], DRUM.kick, 0.8); at(EIGHTHS, DRUM.chat, 0.38); }
@@ -214,14 +224,14 @@ const FILL = {
   minimal: [DRUM.rim, DRUM.rim, DRUM.rim, DRUM.rim], jazz: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.snare],
   electronic: [DRUM.clap, DRUM.clap, DRUM.clap, DRUM.clap], epic: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], movie: [DRUM.ltom, DRUM.ltom, DRUM.ltom, DRUM.ltom],
   lofi: [DRUM.snare, DRUM.kick, DRUM.snare, DRUM.snare], bossa: [DRUM.rim, DRUM.rim, DRUM.ltom, DRUM.ltom], synthwave: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], classical: null,
-  pop: [DRUM.snare, DRUM.snare, DRUM.clap, DRUM.snare], blues: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom], funk: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.htom], rock: [DRUM.snare, DRUM.htom, DRUM.mtom, DRUM.ltom], metal: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom]
+  pop: [DRUM.snare, DRUM.snare, DRUM.clap, DRUM.snare], cinepop: [DRUM.htom, DRUM.mtom, DRUM.ltom, DRUM.ltom], blues: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom], funk: [DRUM.snare, DRUM.snare, DRUM.snare, DRUM.htom], rock: [DRUM.snare, DRUM.htom, DRUM.mtom, DRUM.ltom], metal: [DRUM.snare, DRUM.snare, DRUM.ltom, DRUM.ltom]
 };
 // styles without drums (the instruments keep time; no crash at the climax either)
 const NO_DRUMS = new Set(["acappella", "neoclassical", "meditation", "baroque"]);
 // styles whose climax is marked by the music, not by a crash cymbal
 const NO_CRASH = new Set(["acappella", "ambient", "minimal", "classical", "lofinature", "eastasian", "folk", "movie", "neoclassical", "meditation", "baroque"]);
 // Kit level per style (velocity scale), set from offline renders of the demos.
-const LEVEL = { acappella: 80, lofinature: 84, neoclassical: 90, folk: 90, meditation: 80, postrock: 98, chiptune: 92, triphop: 100, reggae: 96, baroque: 90, eastasian: 92, dnb: 96, techno: 96, blues: 96, funk: 98, pop: 96, rock: 100, metal: 104, ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
+const LEVEL = { acappella: 80, lofinature: 84, neoclassical: 90, folk: 90, meditation: 80, postrock: 98, chiptune: 92, triphop: 100, reggae: 96, baroque: 90, eastasian: 92, dnb: 96, techno: 96, blues: 96, funk: 98, pop: 96, cinepop: 94, rock: 100, metal: 104, ambient: 96, cinematic: 92, minimal: 92, jazz: 104, electronic: 92, epic: 100, movie: 96, lofi: 92, bossa: 98, synthwave: 92, classical: 96 };
 
 /*
  * segs: composed points (t0, t1, idx, x, tim, reg, tension, section); arc: { climax };
@@ -264,7 +274,7 @@ export function rhythmPart(style, segs, arc, body, amount, R, tune = 43) {
   // accents the user put on points: a cymbal and a kick on the point's first beat (a low drum in classical)
   for (const F of segs) if (F.accent) { const soft = NO_CRASH.has(style); push(F.t0, soft ? DRUM.ltom : DRUM.crash, soft ? 80 : 100, { dur: 0.5, accent: true }); if (!soft) push(F.t0, DRUM.kick, 100, { accent: true }); }
   // cadence (the film styles end on the orchestra alone: a taiko under a held last chord booms like a gong)
-  const cad = { acappella: [], lofinature: [[DRUM.kick, 50]], neoclassical: [], meditation: [], baroque: [], folk: [[DRUM.kick, 70]], postrock: [[DRUM.kick, 100], [DRUM.crash, 96]], chiptune: [[DRUM.kick, 90], [DRUM.crash, 70]], triphop: [[DRUM.kick, 96], [DRUM.crash, 60]], reggae: [[DRUM.kick, 90], [DRUM.rim, 80]], eastasian: [[DRUM.ltom, 90]], dnb: [[DRUM.kick, 100], [DRUM.crash, 80]], techno: [[DRUM.kick, 100], [DRUM.crash, 70]], ambient: [[DRUM.ltom, 60]], cinematic: [], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [], movie: [], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
+  const cad = { acappella: [], lofinature: [[DRUM.kick, 50]], neoclassical: [], meditation: [], baroque: [], folk: [[DRUM.kick, 70]], postrock: [[DRUM.kick, 100], [DRUM.crash, 96]], chiptune: [[DRUM.kick, 90], [DRUM.crash, 70]], triphop: [[DRUM.kick, 96], [DRUM.crash, 60]], reggae: [[DRUM.kick, 90], [DRUM.rim, 80]], eastasian: [[DRUM.ltom, 90]], dnb: [[DRUM.kick, 100], [DRUM.crash, 80]], techno: [[DRUM.kick, 100], [DRUM.crash, 70]], ambient: [[DRUM.ltom, 60]], cinematic: [], minimal: [[DRUM.kick, 80]], jazz: [[DRUM.ride, 58], [DRUM.kick, 40]], electronic: [[DRUM.kick, 90], [DRUM.crash, 70]], epic: [], movie: [], lofi: [[DRUM.kick, 80]], bossa: [[DRUM.rim, 60], [DRUM.kick, 50]], synthwave: [[DRUM.kick, 92], [DRUM.crash, 76]], classical: [], pop: [[DRUM.kick, 90], [DRUM.crash, 76]], cinepop: [[DRUM.kick, 84], [DRUM.crash, 70]], blues: [[DRUM.kick, 80], [DRUM.ride, 64]], funk: [[DRUM.kick, 92], [DRUM.snare, 84], [DRUM.crash, 70]], rock: [[DRUM.kick, 100], [DRUM.snare, 84], [DRUM.crash, 96]], metal: [[DRUM.kick, 110], [DRUM.ltom, 92], [DRUM.crash, 100]] }[style] || [];
   // The ending never hits harder than the music that led to it: each hit is at most a little
   // louder than the loudest hit of the last two bars, a crash closes only a loud ending, and when
   // the drums were silent there they stay silent (a lone drum on a soft last chord sounds like a gong).

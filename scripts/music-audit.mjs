@@ -103,7 +103,8 @@ export function auditScore(sc) {
       if (!((onBeat(t0) && ov >= 0.25) || ov >= 0.5 || (onBeat(nct.t) && nct.dur >= 0.5))) continue;
       // it resolves: the same layer moves by step into a chord tone right after (appoggiatura,
       // passing or approach note)
-      const nx = pitched.filter(m => m.layer === nct.layer && !m.dbl && m.t > nct.t + 1e-6).sort((p, q) => p.t - q.t)[0];
+      // (an octave double resolves with its own line: the doubles)
+      const nx = pitched.filter(m => m.layer === nct.layer && !!m.dbl === !!nct.dbl && m.t > nct.t + 1e-6).sort((p, q) => p.t - q.t)[0];
       if (nx && nx.t <= nct.t + nct.dur + 0.25 && Math.abs(nx.midi - nct.midi) <= 2 && chordAt(nx.t).pcs.has(pc(nx.midi)) && nct.dur <= 1 + 1e-9) continue;
       hit("clash", `NCT ${where(nct)} dur=${nct.dur.toFixed(2)} vs ${where(nct === a ? b : a)} dur=${(nct === a ? b : a).dur.toFixed(2)} (${iv} st, ov ${ov.toFixed(2)}) chord ${[...ch]}`); cnt["clash_" + nct.layer.replace(/\d+$/, "")] = (cnt["clash_" + nct.layer.replace(/\d+$/, "")] || 0) + 1;
     }

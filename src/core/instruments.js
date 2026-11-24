@@ -108,6 +108,7 @@ export const STYLE_SAMPLED = {
   synthwave: {},
   classical: { lead: "s.piano", harm: "s.piano", bass: "s.cello", pad: "s.strings" },
   pop: { lead: "s.piano", harm: "s.cleangtr", bass: "s.fingerbass", pad: "s.synthstrings" },
+  cinepop: { lead: "s.piano", harm: "s.piano", bass: "s.fingerbass", pad: "s.strings" },
   rock: { lead: "s.overdrive", harm: "s.distortion", bass: "s.pickbass", pad: "s.organ" },
   metal: { lead: "s.overdrive", harm: "s.distortion", bass: "s.pickbass", pad: "s.choir" },
   blues: { lead: "s.jazzgtr", harm: "s.piano", bass: "s.acbass", pad: "s.organ" },
@@ -126,11 +127,11 @@ export const STYLE_SAMPLED = {
   techno: {},
   acappella: { lead: "v.female", harm: "v.mixed", bass: "v.male", pad: "v.oohs" }
 };
-export const STORY_SAMPLED = { acappella: "v.female", lofinature: "s.flute", neoclassical: "s.cello", folk: "s.fiddle", meditation: "s.flute", postrock: "s.cleangtr", triphop: "s.mutedtpt", reggae: "s.trumpet", baroque: "s.violin", eastasian: "s.shakuhachi", pop: "s.flute", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
+export const STORY_SAMPLED = { acappella: "v.female", lofinature: "s.flute", neoclassical: "s.cello", folk: "s.fiddle", meditation: "s.flute", postrock: "s.cleangtr", triphop: "s.mutedtpt", reggae: "s.trumpet", baroque: "s.violin", eastasian: "s.shakuhachi", pop: "s.flute", cinepop: "s.violin", rock: "s.overdrive", metal: "s.overdrive", blues: "s.harmonica", funk: "s.tenorsax", ambient: "s.flute", cinematic: "s.violin", minimal: "s.vibes", jazz: "s.tenorsax", epic: "s.horn", movie: "s.violin", lofi: "s.flute", bossa: "s.flute", classical: "s.violin" };
 
 // With the Story melody the line is long and tied, so a plucked default would cut it into
 // separate attacks: each style uses a sustained lead instead, unless a preset is chosen.
-export const STORY_LEAD = { acappella: "x.softlead", lofinature: "x.softlead", neoclassical: "x.warmlead", folk: "x.softlead", meditation: "x.softlead", postrock: "x.softlead", chiptune: "chiptune.lead", triphop: "x.softlead", reggae: "x.softlead", baroque: "x.softlead", eastasian: "x.softlead", dnb: "x.synthlead", techno: "x.synthlead", blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
+export const STORY_LEAD = { acappella: "x.softlead", lofinature: "x.softlead", neoclassical: "x.warmlead", folk: "x.softlead", meditation: "x.softlead", postrock: "x.softlead", chiptune: "chiptune.lead", triphop: "x.softlead", reggae: "x.softlead", baroque: "x.softlead", eastasian: "x.softlead", dnb: "x.synthlead", techno: "x.synthlead", blues: "x.warmlead", funk: "x.synthlead", pop: "x.softlead", cinepop: "x.softlead", rock: "x.synthlead", metal: "x.synthlead", ambient: "x.softlead", cinematic: "x.softlead", minimal: "x.warmlead", jazz: "x.warmlead", electronic: "x.synthlead", epic: "epic.lead", movie: "x.softlead", lofi: "x.softlead", bossa: "x.softlead", synthwave: "synthwave.lead", classical: "x.softlead" };
 
 // Adds catalog entries (sampled instruments listed at runtime by the UI, see samples.js) to
 // the library without replacing curated presets.

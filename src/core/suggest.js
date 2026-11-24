@@ -28,6 +28,7 @@ const PROFILE = {
   lofi: [0.4, 0.6, 0.35, 0.45, 0.4, ["orange", "purple", "magenta"]],
   triphop: [0.25, 0.45, 0.3, 0.45, 0.55, ["blue", "purple", "grey"]],
   pop: [0.7, 0.55, 0.75, 0.5, 0.5, ["magenta", "cyan", "yellow", "red"]],
+  cinepop: [0.6, 0.55, 0.55, 0.45, 0.6, ["orange", "yellow", "blue"]],
   rock: [0.4, 0.5, 0.5, 0.7, 0.7, ["red", "grey"]],
   postrock: [0.5, 0.4, 0.4, 0.35, 0.55, ["blue", "cyan", "grey"]],
   folk: [0.6, 0.6, 0.45, 0.55, 0.45, ["green", "yellow", "orange"]],

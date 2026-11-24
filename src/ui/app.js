@@ -72,7 +72,7 @@ const P = {
   instruments: {},
   fx: defaultFx(),
   src: structuredClone(DEFAULT_SOURCE),
-  out: { format: "wav16", kbps: 320 },
+  out: { format: "wav16", kbps: 320, kind: "video", vfmt: "mp4" },
   video: defaultVideo()
 };
 let SRC = null, IMG = null, A = null, SAL = null, POINTS = null, CL = null, MOT = null, SCORE = null, SEM = null, COV = null;

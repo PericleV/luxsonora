@@ -148,6 +148,11 @@ body.resizing-col{cursor:col-resize}body.resizing-row{cursor:row-resize}
 .seg button:hover{color:var(--text)}
 .seg button[aria-checked="true"]{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--line)}
 .seg-sm button{padding:3px 9px;font-size:12.5px}
+/* the Export tab: the parts of the video's design, on tabs that wrap */
+.xtabs{flex-wrap:wrap;margin-top:4px}
+.xtabs button[aria-selected="true"]{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px var(--line)}
+.xpanel{padding-top:14px;display:flex;flex-direction:column;gap:14px}
+.xpanel[hidden]{display:none}
 .panel .seg{display:flex}
 .panel .seg button{flex:1}
 

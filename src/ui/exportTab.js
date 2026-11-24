@@ -1,6 +1,8 @@
-// The Export tab: audio files (WAV, MP3, M4A), MIDI, the ZIP, and the video (MP4, WebM, GIF,
-// a PNG poster) with everything about its look. The look lives in P.video; changing it only
-// redraws the stage, which previews the video while this tab is open.
+// The Export tab: a card that exports one thing at a time (the video as MP4 or WebM, a GIF, a
+// PNG poster, the audio as WAV, MP3 or M4A, the MIDI, or everything in a ZIP), with the options of
+// that one only and one button; under it the design of the video, one part at a time on tabs
+// (Look, Picture, Camera, Path, Places, Eye, Labels, Music, Text). The look lives in P.video;
+// changing it only redraws the stage, which previews the video while this tab is open.
 import { makeSlider, makeSeg } from "./controls.js";
 import { AUDIO_FORMATS, aacSupported } from "../export/audio.js";
 import { SHAPES, VIDEO_THEMES, PATH_MODES, POINT_MODES, EFFECTS, EYES, CAPTIONS, TITLE_POS, TITLE_WHEN, SUBTITLES, BOTTOMS, BAR_ORIENT, BAR_DIR, PATCH_MAPS, PATCH_ANIMS, PATCH_MOVES, RIPPLE_TRACKS, RIPPLE_LOOKS, EASES, GIF_RANGES, COVERS, BOTTOM_FILLS, PATH_FILLS, PLACE_STYLES, NUMBER_STYLES, PLACE_NOW, COVER_OUTS, LABEL_INS, LABEL_OUTS, LABEL_POS, LABEL_BEATS, LABEL_FILLS, RIPPLE_FILLS, TEXT_STYLES, TITLE_ANIMS, ALIGNS, videoSupported, defaultVideo } from "../export/video.js";
@@ -30,22 +32,12 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const tog = (id, label) => `<label class="toggle"><input type="checkbox" id="${id}"><span>${label}</span></label>`;
   const box = id => `<div id="${id}" class="sliders"></div>`;
   const col = (id, label) => `<label id="l_${id}"><input type="color" id="${id}"><span>${label}</span></label>`;
-  const group = (id, title, body, open = false) => `<details class="adv xgroup" data-x="${id}"${open ? " open" : ""}><summary>${title}</summary>${body}</details>`;
+  // a part of the video's design: a panel, shown by its tab (DESIGN_TABS)
+  const group = (id, title, body) => `<div class="xpanel" data-x="${id}" role="tabpanel" aria-label="${title.replace(/ \*$/, "")}" hidden>${body}</div>`;
   host.innerHTML = `
-    <section class="card" aria-labelledby="hAudioOut"><h3 id="hAudioOut">Audio</h3>
-      <div class="field"><label class="flabel" for="xFmt">Format</label><span class="select"><select id="xFmt">${Object.entries(AUDIO_FORMATS).map(([k, f]) => `<option value="${k}">${esc(f.name)}</option>`).join("")}</select></span><p class="snote" id="xFmtNote"></p></div>
-      <div id="xRateBox">${seg("xRate", "Bit rate")}</div>
-      <div class="xrow">
-        <button type="button" class="btn btn-primary" id="xAudio">${ICON_DL}Download audio</button>
-        <button type="button" class="btn" id="xMidi" title="For your DAW">MIDI for a DAW</button>
-        <button type="button" class="btn" id="xZip">Everything (ZIP)</button>
-      </div>
-      <p class="snote">If an AI model is still working, the export waits for it to finish. The ZIP has a WAV, the MIDI, the settings and the project file.</p>
-      <p class="snote">The MIDI file opens in any DAW: one track per layer, named after its instrument and set to the nearest General MIDI sound, with the tempo, the key (and the modulation), a marker at every place, the performed velocities and timing, and the expression (CC11), vibrato (CC1) and timbre curves.</p>
-    </section>
-    <section class="card" aria-labelledby="hVideoOut"><h3 id="hVideoOut">Video</h3>
-      <p class="snote">While you're on this tab, the picture shows the video. Press play to see exactly what you'll get.</p>
-      ${seg("xSize", "Size")}
+    <section class="card" aria-labelledby="hOut"><h3 id="hOut">Export</h3>
+      ${seg("xKind", "What to export")}
+      <div class="xkind" data-k="video">${seg("xVFmt", "Format")}      ${seg("xSize", "Size")}
       <p class="snote" id="xSizeNote"></p>
       ${seg("xCover", "Cover")}
       <div id="xCoverBox">${box("xCoverTime")}
@@ -56,20 +48,31 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         ${box("xCoverFade")}</div>
       <p class="snote">Apps like WhatsApp show the first frame as the video's preview. The cover is that frame: without one it would be black, because the video fades in.</p>
       <div class="adv-only">${seg("xShape", "Shape")}<div class="vtoggles" id="xSafeBox">${tog("xSafe", "Show the safe area (preview only)")}</div>${seg("xQuality", "Quality")}${seg("xFps", "Frames per second")}</div>
+</div>
+      <div class="xkind" data-k="gif">${seg("xGifW", "Width")}${seg("xGifFps", "Frames per second")}${seg("xGifRange", "Part")}<p class="snote">GIFs loop and have no sound.</p></div>
+      <div class="xkind" data-k="poster"><p class="snote">The frame at the playhead, as a PNG picture: move the playhead to the moment you want.</p></div>
+      <div class="xkind" data-k="audio">      <div class="field"><label class="flabel" for="xFmt">Format</label><span class="select"><select id="xFmt">${Object.entries(AUDIO_FORMATS).map(([k, f]) => `<option value="${k}">${esc(f.name)}</option>`).join("")}</select></span><p class="snote" id="xFmtNote"></p></div>
+      <div id="xRateBox">${seg("xRate", "Bit rate")}</div>
+</div>
+      <div class="xkind" data-k="midi"><p class="snote">The MIDI file opens in any DAW: one track per layer, named after its instrument and set to the nearest General MIDI sound, with the tempo, the key (and the modulation), a marker at every place, the performed velocities and timing, and the expression (CC11), vibrato (CC1) and timbre curves.</p>
+</div>
+      <div class="xkind" data-k="zip"><p class="snote">A WAV, the MIDI, the settings and the project file, in one ZIP.</p></div>
       <div class="xrow">
-        <button type="button" class="btn btn-primary" id="xVideo">${ICON_FILM}Export video (MP4)</button>
+        <button type="button" class="btn btn-primary" id="xGo"></button>
         <button type="button" class="btn" id="xCancel" hidden>Cancel</button>
-      </div>
-      <div class="xrow xrow-sm">
-        <button type="button" class="btn" id="xWebm" title="VP9 and Opus, for the web">WebM</button>
-        <button type="button" class="btn" id="xGif" title="Silent and looping">GIF</button>
-        <button type="button" class="btn" id="xPoster" title="The frame at the playhead">Poster (PNG)</button>
       </div>
       <div class="loadbar xbar" id="xBar" hidden><span></span></div>
       <p class="snote" id="xStatus" role="status"></p>
-      <p class="snote" id="xPreviewNote" role="status"></p>
-      ${group("gif", "GIF", `${seg("xGifW", "Width")}${seg("xGifFps", "Frames per second")}${seg("xGifRange", "Part")}<p class="snote">GIFs loop and have no sound.</p>`)}
+      <p class="snote">If an AI model is still working, the export waits for it to finish.</p>
+      <div hidden>
+        <button type="button" id="xVideo"></button><button type="button" id="xWebm"></button><button type="button" id="xGif"></button><button type="button" id="xPoster"></button>
+        <button type="button" id="xAudio"></button><button type="button" id="xMidi"></button><button type="button" id="xZip"></button>
+      </div>
     </section>
+    <section class="card" aria-labelledby="hDesign"><h3 id="hDesign">Design the video</h3>
+      <p class="snote">While you're on this tab, the picture shows the video. Press play to see exactly what you'll get.</p>
+      <p class="snote" id="xPreviewNote" role="status"></p>
+      <div class="seg seg-sm xtabs" id="xTabs" role="tablist" aria-label="Parts of the video"></div>
     ${group("look", "Look", `
       ${sel("xLook", "Start from a look", `<option value="">Choose…</option><optgroup label="Built in">${Object.entries(LOOKS).map(([k, l]) => `<option value="b:${k}">${esc(l.name)}</option>`).join("")}</optgroup><optgroup label="My looks" id="xMyLooks"></optgroup>`)}
       <div class="xrow xrow-sm"><input type="text" id="xLookName" class="text-input" maxlength="40" placeholder="Name this look"><button type="button" class="btn" id="xLookSave">Save look</button><button type="button" class="btn" id="xLookDel" hidden>Delete</button></div>
@@ -109,10 +112,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div class="vcolors" id="xPathCols">${col("xPathColA", "First colour")}${col("xPathCol2", "Second colour")}</div>
       <div class="flabel xsub">When it shows</div>
       <div id="xPathTime" class="sliders sliders-2"></div>
-      <div class="flabel xsub">The eye and the notes on the way</div>
-      ${seg("xEye", "The eye")}
-      <div class="vcolors">${col("xEyeCol", "Eye colour")}</div>
-      <div class="vtoggles">${tog("xPassages", "Connection notes")}</div>`)}
+`)}
     ${group("places", "The places", `
       ${seg("xPoints", "Places")}
       <div id="xPlaceOps" class="sliders sliders-2"></div>
@@ -123,7 +123,12 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       ${seg("xNumberStyle", "Numbers")}
       <div class="vtoggles">${tog("xClimaxOwn", "Climax in its own colour")}</div>
       <div class="vcolors" id="xClimaxCols">${col("xClimaxCol", "Climax colour")}</div>
-      <div class="flabel xsub">The place the eye is on</div>
+`)}
+    ${group("eye", "Eye", `
+      <div class="flabel xsub">The eye on the path, and the notes on the way</div>
+      ${seg("xEye", "The eye")}
+      <div class="vcolors">${col("xEyeCol", "Eye colour")}</div>
+      <div class="vtoggles">${tog("xPassages", "Connection notes")}</div>      <div class="flabel xsub">The place the eye is on</div>
       ${seg("xPlaceNow", "How it stands out")}
       <div id="xPlaceNowOps" class="sliders"></div>
       <div class="field"><div class="flabel">When the eye arrives</div><div class="vtoggles" id="xFx">${Object.entries(EFFECTS).map(([k, n]) => tog("xFx_" + k, n)).join("")}</div></div>
@@ -163,14 +168,6 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
         <div id="xBarShape" class="sliders sliders-2"></div>
         <div class="vtoggles">${tog("xBarRound", "Round ends")}</div></div>
       <div id="xBottomCols">${seg("xBottomFill", "Bottom colour")}<div class="vcolors">${col("xBotA", "Colour")}${col("xBotB", "Second colour")}</div></div>`)}
-    ${group("logo", "Logo", `
-      <div class="vtoggles">${tog("xLogo", "Show the Lux Sonora logo")}</div>
-      <div id="xLogoBox">
-        <div class="vtoggles">${tog("xLogoAnim", "Its waves move with the music")}</div>
-        <div class="vcolors">${col("xLogoCol", "Colour")}</div>
-        <div id="xLogoOps" class="sliders sliders-2"></div>
-        <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xLogoReset" hidden>Put it back</button></p>
-      </div>`)}
     ${group("text", "Text and timing", `
       ${seg("xCaption", "Text")}
       <div id="xTextBox">
@@ -192,9 +189,53 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
       <div class="vtoggles">${tog("xEndCard", "End card (the last 3 s)")}</div>
       <div class="field" id="xCreditBox"><label class="flabel" for="xCredit">End card credit</label><input type="text" id="xCredit" class="text-input" maxlength="60"></div>
       <div class="sliders sliders-2" id="xFades"></div>
-      <div class="vtoggles">${tog("xFadeSound", "Fade the sound with the picture")}</div>`)}`;
+      <div class="vtoggles">${tog("xFadeSound", "Fade the sound with the picture")}</div>
+      <div class="flabel xsub">Logo</div>
+      <div class="vtoggles">${tog("xLogo", "Show the Lux Sonora logo")}</div>
+      <div id="xLogoBox">
+        <div class="vtoggles">${tog("xLogoAnim", "Its waves move with the music")}</div>
+        <div class="vcolors">${col("xLogoCol", "Colour")}</div>
+        <div id="xLogoOps" class="sliders sliders-2"></div>
+        <p class="snote">Drag it on the preview to place it anywhere. <button type="button" class="linkbtn" id="xLogoReset" hidden>Put it back</button></p>
+      </div>`)}`;
   const $ = s => host.querySelector(s);
   const look = () => onLook();
+
+  // ---- what to export: one card, the options of the chosen kind only, and one button
+  const KINDS = [["video", "Video"], ["gif", "GIF"], ["poster", "Poster"], ["audio", "Audio"], ["midi", "MIDI"], ["zip", "Everything"]];
+  const target = () => ({ video: P.out.vfmt === "webm" ? "#xWebm" : "#xVideo", gif: "#xGif", poster: "#xPoster", audio: "#xAudio", midi: "#xMidi", zip: "#xZip" })[P.out.kind] || "#xVideo";
+  const GO_LABEL = { video: () => `${ICON_FILM}Export video (${P.out.vfmt === "webm" ? "WebM" : "MP4"})`, gif: () => `${ICON_FILM}Export GIF`, poster: () => `${ICON_DL}Save the poster (PNG)`, audio: () => `${ICON_DL}Download audio`, midi: () => `${ICON_DL}Download MIDI`, zip: () => `${ICON_DL}Download everything (ZIP)` };
+  const showKind = () => {
+    if (!KINDS.some(([k]) => k === P.out.kind)) P.out.kind = "video";
+    if (P.out.vfmt !== "webm") P.out.vfmt = "mp4";
+    host.querySelectorAll(".xkind").forEach(d => { d.hidden = d.dataset.k !== P.out.kind; });
+    $("#xGo").innerHTML = GO_LABEL[P.out.kind](); $("#xGo").disabled = $(target()).disabled;
+  };
+  const kindSeg = makeSeg($("#xKind"), KINDS, P.out.kind || "video", v => { P.out.kind = v; showKind(); });
+  const vfmtSeg = makeSeg($("#xVFmt"), [["mp4", "MP4"], ["webm", "WebM (for the web)"]], P.out.vfmt || "mp4", v => { P.out.vfmt = v; showKind(); });
+  $("#xGo").addEventListener("click", () => $(target()).click());
+
+  // ---- the design of the video, one part at a time (Simple shows the look, the path and the text)
+  const TABS = [["look", "Look"], ["edit", "Picture"], ["camera", "Camera"], ["path", "Path"], ["places", "Places"], ["eye", "Eye"], ["labels", "Labels"], ["fx", "Music"], ["text", "Text"]];
+  const SIMPLE_TABS = new Set(["look", "path", "text"]), TAB_STORE = "lux.exportTab";
+  let tab = "look"; try { tab = localStorage.getItem(TAB_STORE) || "look"; } catch (e) { /* storage blocked */ }
+  $("#xTabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" id="xTab_${k}" data-t="${k}" aria-controls="xPanel_${k}" aria-selected="false" tabindex="-1"${SIMPLE_TABS.has(k) ? "" : ' class="adv-only"'}>${n}</button>`).join("");
+  host.querySelectorAll(".xpanel").forEach(p => { p.id = "xPanel_" + p.dataset.x; p.setAttribute("aria-labelledby", "xTab_" + p.dataset.x); });
+  const showTab = k => {
+    if (!TABS.some(([t]) => t === k) || (document.documentElement.classList.contains("ui-simple") && !SIMPLE_TABS.has(k))) k = "look";
+    tab = k; try { localStorage.setItem(TAB_STORE, k); } catch (e) { /* storage blocked */ }
+    host.querySelectorAll(".xpanel").forEach(p => { p.hidden = p.dataset.x !== k; });
+    host.querySelectorAll("#xTabs [data-t]").forEach(b => { const on = b.dataset.t === k; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
+  };
+  $("#xTabs").addEventListener("click", e => { const b = e.target.closest("[data-t]"); if (b) showTab(b.dataset.t); });
+  $("#xTabs").addEventListener("keydown", e => {
+    const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (!d) return;
+    const vis = [...host.querySelectorAll("#xTabs [data-t]")].filter(b => b.offsetParent !== null), i = vis.findIndex(b => b.dataset.t === tab);
+    const b = vis[(i + d + vis.length) % vis.length]; if (b) { e.preventDefault(); showTab(b.dataset.t); b.focus(); }
+  });
+  // switching to Simple hides the advanced parts: their tab gives way to the look
+  new MutationObserver(() => showTab(tab)).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  showTab(tab);
 
   // ---- audio
   const fmt = $("#xFmt");
@@ -517,7 +558,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     for (const [id, key] of SELS) $("#" + id).value = V[key];
     for (const [, d] of SLD) sl[d.key].set(V[d.key] ?? d.def, false);
     for (const [id, obj, key] of checks) $(id).checked = !!obj()[key];
-    syncColors(); showTheme();
+    syncColors(); showTheme(); kindSeg.set(P.out.kind || "video"); vfmtSeg.set(P.out.vfmt || "mp4"); showKind();
     $("#xTitle").value = V.title || ""; $("#xCredit").value = V.credit || ""; $("#xSubText").value = V.subText || "";
     renderLabels(); syncEdit(); vis();
   }
@@ -529,6 +570,7 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     for (const id of ["#xAudio", "#xMidi", "#xZip", "#xGif", "#xPoster"]) $(id).disabled = busy;
     for (const id of ["#xVideo", "#xWebm"]) $(id).disabled = busy || !videoSupported();
     $("#xCancel").hidden = !(busy && kind === "video");
+    $("#xGo").disabled = $(target()).disabled;
   }
   return {
     sync, status, renderLabels,

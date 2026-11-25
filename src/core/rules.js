@@ -19,7 +19,7 @@ export const RULES_INFO = {
   voiceLeading: { group: "harmony", name: "Smooth chord changes", desc: "Among the chords that hold the melody note, the one sharing the most notes with the previous chord is chosen, so the harmony moves smoothly." },
   contrast: { group: "harmony", name: "Contrast moves the chords", desc: "Similar places keep chords that share notes; a strong contrast in colour or light jumps to a more distant chord." },
   cadentialV: { group: "harmony", name: "Dominant before the end", desc: "In the styles that use it (classical), the chord before the final cadence is the dominant, so the piece ends V-I." },
-  chordTones: { group: "melody", name: "Melody on the chord", desc: "A melody note on a beat moves to the nearest chord tone, and a note that rubs a semitone against the chord becomes a chord tone or a gentle tension." },
+  chordTones: { group: "melody", name: "Melody on the chord", desc: "A melody note on a beat moves to a chord tone nearby, the one that keeps the line (not onto the note next to it, no wider leap); a passing note or an appoggiatura that moves on by step into the chord stays, and a note that rubs a semitone against the chord becomes a chord tone or a gentle tension." },
   suspensions: { group: "melody", name: "Suspensions resolve", desc: "A long melody note held into a chord it rubs against stays until the change, then steps to the nearest tone of the new chord." },
   leapLimit: { group: "melody", name: "Leaps folded into range", desc: "A motif that would jump too far from the last note moves by an octave toward it (Smoothness sets how far is too far)." },
   pickups: { group: "melody", name: "Pickup notes", desc: "In the styles that use them, a passing note on the last eighth of a place leads into the next one." },
@@ -46,7 +46,7 @@ export const RULES_INFO = {
   modulate: { group: "craft", name: "Modulate at the climax", desc: "When the climax has another colour, the music moves one step on the circle of fifths there, and comes home before the end." },
   cadences: { group: "craft", name: "Question and answer", desc: "Every four bars a phrase ends: open on the dominant, then closed on the tonic." },
   picardy: { group: "craft", name: "A bright minor ending", desc: "A minor piece ends on a major chord when its last place is bright (the Picardy third)." },
-  leap: { group: "craft", name: "Leaps turn back", desc: "After a leap wider than a fourth the melody turns back by step, so it stays singable." },
+  leap: { group: "craft", name: "Leaps turn back", desc: "The melody keeps to about an octave and a half without drifting up or down (whole places move by an octave), a leap wider than a fifth folds by an octave, and after a leap of a fourth or more the melody turns back, so it stays singable." },
   parallels: { group: "craft", name: "No parallel fifths", desc: "The melody and the bass never move in parallel fifths or octaves." },
   peak: { group: "craft", name: "The peak at the climax", desc: "The highest note of the melody falls on the climax." }
 };
@@ -187,7 +187,8 @@ export function leapRecovery(notes, ctx) {
   const L = leadLine(notes);
   for (let i = 0; i + 2 < L.length; i++) {
     const a = L[i], b = L[i + 1], c = L[i + 2], leap = b.midi - a.midi;
-    if (Math.abs(leap) <= 5 || b.t - (a.t + a.dur) > 0.3 || c.t - (b.t + b.dur) > 0.3 || c.peak) continue;
+    // (from a fourth up: after a leap of a fourth or more, the line turns back)
+    if (Math.abs(leap) <= 4 || b.t - (a.t + a.dur) > 0.3 || c.t - (b.t + b.dur) > 0.3 || c.peak) continue;
     const mv = c.midi - b.midi;
     if (Math.sign(mv) === -Math.sign(leap) && Math.abs(mv) <= 4) continue;
     const S = ctx.slotAt(c.t), strong = strongAt(c), dir = -Math.sign(leap);

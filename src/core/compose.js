@@ -291,6 +291,40 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
     return nn.dur <= 0.5 + 1e-9 || (pcOf(p - r) !== 1 && pcOf(r - p) !== 1);
   };
   const lastOfPassage = nn => { let last = nn; for (const m of notes) if (m.layer === "lead" && m.passage && nn.passage && m.passage.from === nn.passage.from && m.t > last.t) last = m; return last; };
+  // a passing note: a step from the note before and a step on, the same way, into a tone of the chord
+  const passing = nn => {
+    const { prev, next } = leadNeighbours(nn);
+    if (!prev || !next || next.t > nn.t + nn.dur + 0.25) return false;
+    const a = nn.midi - prev.midi, b = next.midi - nn.midi;
+    return a !== 0 && b !== 0 && Math.abs(a) <= 2 && Math.abs(b) <= 2 && Math.sign(a) === Math.sign(b) && slotAt(next.t).pcs.has(pcOf(next.midi));
+  };
+  // the melody notes either side of a note (its own line: not the doubles or the echoes)
+  const leadNeighbours = nn => {
+    let prev = null, next = null;
+    for (const m of notes) {
+      if (m === nn || m.layer !== "lead" || m.dbl || m.echo) continue;
+      if (m.t < nn.t - 1e-6 && (!prev || m.t > prev.t)) prev = m;
+      if (m.t > nn.t + 1e-6 && (!next || m.t < next.t)) next = m;
+    }
+    return { prev, next };
+  };
+  // among the moves d that ok() allows, the one that keeps the melodic line best
+  const bestTone = (nn, moves, ok, prev, next) => {
+    let best = null, bs = Infinity;
+    for (const d of moves) {
+      const m = nn.midi + d; if (!ok(m)) continue;
+      let sc = Math.abs(d);
+      for (const q of [prev, next]) {
+        if (!q) continue;
+        const a0 = nn.midi - q.midi, a1 = m - q.midi;
+        if (a1 === 0 && a0 !== 0) sc += 2.5;
+        if (Math.abs(a1) > 4 && Math.abs(a1) > Math.abs(a0)) sc += 2;
+        if (a0 !== 0 && a1 !== 0 && Math.sign(a1) !== Math.sign(a0)) sc += 1;
+      }
+      if (sc < bs - 1e-9) { bs = sc; best = m; }
+    }
+    return best;
+  };
   const snapLead = list => {
     if (!ruleOn(P, "chordTones")) return;
     for (const nn of list) {
@@ -299,12 +333,19 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
       if (S.pcs.has(p)) continue;
       const strong = Math.abs(nn.t - Math.round(nn.t)) < 1e-6 || nn.dur >= 0.9, avoid = nn.dur >= 0.5 - 1e-9 && rubs(p, S);
       if (!strong && !avoid) continue;
-      if (!strong && resolves(nn)) continue;
-      let to = null;
-      for (const d of [-1, 1, -2, 2, -3, 3]) { const m = nn.midi + d; if (inScale(m, nn.t) && S.pcs.has(pcOf(m))) { to = m; break; } }
+      // a note that moves on by step into a tone of the chord (a passing note, an appoggiatura)
+      // stays, on the beat too when it is no longer than a beat: a melody walks, it does not
+      // only jump from chord tone to chord tone
+      // (not one a semitone from a tone of the chord held past half a beat on the beat: that rubs)
+      if ((!strong || nn.dur <= 1 + 1e-9) && (resolves(nn) || passing(nn)) && !(strong && nn.dur > 0.5 + 1e-9 && rubs(p, S))) continue;
+      // the chord tone nearby that keeps the line: not the pitch of the note before or after (a
+      // step would become a repeated note), no wider move from them than the note made, the same
+      // direction; the nearest wins a tie
+      const { prev, next } = leadNeighbours(nn);
+      let to = bestTone(nn, [-1, 1, -2, 2, -3, 3], m => inScale(m, nn.t) && S.pcs.has(pcOf(m)), prev, next);
       // no chord tone in the scale nearby (a pentatonic tune over a chord with a note it lacks):
       // a note that rubs becomes a tension instead, even on the beat
-      if (to === null && (!strong || avoid)) for (const d of [-1, 1, -2, 2]) { const m = nn.midi + d; if (inScale(m, nn.t) && !rubs(pcOf(m), S)) { to = m; break; } }
+      if (to === null && (!strong || avoid)) to = bestTone(nn, [-1, 1, -2, 2], m => inScale(m, nn.t) && !rubs(pcOf(m), S), prev, next);
       if (to !== null) { nn.midi = to; nn.snapped = true; }
     }
   };
@@ -529,7 +570,7 @@ function composeMusic({ A, sal, points, cl, motifs, P, sem, cov = null, lum = nu
   }
   // melody rules: leaps turn back, no parallel fifths or octaves with the bass, the peak at the climax
   const ruleCtx = { slotAt, inScale, climax: arc.climax };
-  if (ruleOn(P, "leap")) leapRecovery(notes, ruleCtx);
+  if (ruleOn(P, "leap")) { singableRange(notes, range, nn => { const S = slotAt(nn.t); return !S || S.pcs.has(pcOf(nn.midi)); }, baseLead); leapRecovery(notes, ruleCtx); }
   if (ruleOn(P, "parallels")) noParallels(notes, ruleCtx);
   if (ruleOn(P, "peak") && arcOn && arc.climax >= 0) melodyPeak(notes, ruleCtx);
   // Picardy third: a minor piece whose last place is bright ends on the major tonic
@@ -803,6 +844,67 @@ export function applyContours(score) {
 // (With a low melody, around middle C, there is little room under it: this is what keeps the
 // fuller orchestrations from turning thick there.)
 const YIELD = ["sustain", "ostinato", "runs", "ornament", "double", "counter", "drone", "harm"];
+/*
+ * A singable line, by whole octaves only (the same notes, the same harmony):
+ *  - a melody that slid out of its own register as a whole moves whole, by octaves, back into it;
+ *  - a place whose melody sits more than `half - 2` semitones from the middle of the whole melody
+ *    (its median) moves an octave toward it, the place as a whole, so its motif keeps its shape and
+ *    the tune does not drift up or down over the piece (half: 9 at the default melodic range of
+ *    two octaves, 6 · range − 3 for a wider one, so a wider range chosen by hand stays wide);
+ *  - inside a place, a leap wider than a fifth folds by an octave when the line gets smoother for it
+ *    (the moves to the notes before and after shorter together).
+ * A move that would leave a leap of more than an octave to the notes around it is not made. A
+ * note's octave double moves with it.
+ */
+export function singableRange(notes, range = 2, isChordTone = () => true, home = null) {
+  const L = notes.filter(n => n.layer === "lead" && !n.dbl && !n.echo && Number.isFinite(n.midi)).sort((a, b) => a.t - b.t);
+  if (L.length < 5) return 0;
+  const pcx = m => ((m % 12) + 12) % 12;
+  const shift = (n, k) => { if (!k) return; for (const d of notes) if (d.dbl && d.layer === "lead" && Math.abs(d.t - n.t) < 1e-6 && pcx(d.midi) === pcx(n.midi)) d.midi += k; n.midi += k; n.refolded = true; };
+  // a melody that slid out of its own register as a whole (its median more than a fifth under or a
+  // tenth over home, where the melody is written from) moves whole, by octaves, back into it
+  const sorted = L.map(n => n.midi).sort((a, b) => a - b), half = Math.max(9, 6 * range - 3);
+  let mid = sorted[Math.floor(sorted.length / 2)], k0 = 0;
+  if (home !== null) { while (mid + k0 < home + 7 - 6) k0 += 12; while (mid + k0 > home + 16 + 6) k0 -= 12; }
+  if (k0) { for (const n of L) shift(n, k0); mid += k0; }
+  const tooFar = (i, m) => [L[i - 1], L[i + 1]].some(q => q && Math.abs(q.midi - m) > 12);
+  // the places, as runs of consecutive notes of one place (a note outside the places on its own)
+  const groups = [];
+  L.forEach((n, i) => { const g = groups[groups.length - 1]; if (g && n.point >= 0 && L[g[0]].point === n.point) g.push(i); else groups.push([i]); });
+  // how far each place would move (whole octaves toward the middle; none when a note of it would
+  // stick out the other side)
+  const ks = groups.map(g => {
+    const mean = g.reduce((a, i) => a + L[i].midi, 0) / g.length;
+    let k = 0;
+    while (mean + k > mid + half - 2) k -= 12;
+    while (mean + k < mid - half + 2) k += 12;
+    return k && g.some(i => Math.abs(L[i].midi + k - mid) > half + 2) ? 0 : k;
+  });
+  // places next to each other moved the same way keep their join; where a moved place meets one
+  // that stays, the join must stay within an octave, and a note outside the chord stepping across
+  // it (a passing note or an appoggiatura resolving there) keeps its resolution: else it stays
+  const gOf = new Map(); groups.forEach((g, gi) => g.forEach(i => gOf.set(i, gi)));
+  const resolvesInto = (a, b) => Math.abs(L[a].midi - L[b].midi) <= 2 && !isChordTone(L[a]);
+  const joinOk = (a, b) => { const ka = ks[gOf.get(a)], kb = ks[gOf.get(b)]; if (ka === kb) return true; return Math.abs(L[a].midi + ka - (L[b].midi + kb)) <= 12 && !resolvesInto(a, b); };
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    groups.forEach((g, gi) => {
+      if (!ks[gi]) return;
+      const first = g[0], last = g[g.length - 1];
+      if ((first > 0 && !joinOk(first - 1, first)) || (last + 1 < L.length && !joinOk(last, last + 1))) { ks[gi] = 0; changed = true; }
+    });
+    if (!changed) break;
+  }
+  let moved = 0;
+  groups.forEach((g, gi) => { if (ks[gi]) { for (const i of g) shift(L[i], ks[gi]); moved += g.length; } });
+  L.forEach((n, i) => {
+    const prev = L[i - 1], next = L[i + 1];
+    if (!prev || n.point < 0 || prev.point !== n.point || Math.abs(n.midi - prev.midi) <= 7) return;
+    const alt = n.midi - 12 * Math.sign(n.midi - prev.midi), cost = x => Math.abs(x - prev.midi) + (next ? Math.abs(next.midi - x) : 0);
+    if (Math.abs(alt - mid) <= half + 3 && cost(alt) < cost(n.midi) && !tooFar(i, alt)) { shift(n, alt - n.midi); moved++; }
+  });
+  return moved;
+}
 export function clearLowRegister(notes, extra = [], slotAt = null) {
   const roleOf = Object.fromEntries(extra.map(L => [L.id, L.role])), kind = l => (l === "harm" ? "harm" : roleOf[l]);
   const movable = l => YIELD.includes(kind(l)), chordy = l => kind(l) === "harm" || kind(l) === "sustain";

@@ -93,7 +93,8 @@ describe("key control", () => {
     expect(lb).toEqual(la.map(m => m + 12));
   });
   it("the melodic range widens the span of the melody", () => {
-    const span = sc => { const m = sc.notes.filter(n => n.layer === "lead").map(n => n.midi); return Math.max(...m) - Math.min(...m); };
+    // (the melody's own line: an octave double adds an octave whatever the range)
+    const span = sc => { const m = sc.notes.filter(n => n.layer === "lead" && !n.dbl).map(n => n.midi); return Math.max(...m) - Math.min(...m); };
     expect(span(run(1, { ...P0, range: 3 }))).toBeGreaterThanOrEqual(span(run(1, { ...P0, range: 1 })));
     expect(degMidi(0, MODES.ionian.iv, 60)).toBe(60);
   });

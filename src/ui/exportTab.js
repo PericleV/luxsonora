@@ -215,14 +215,14 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
   const vfmtSeg = makeSeg($("#xVFmt"), [["mp4", "MP4"], ["webm", "WebM (for the web)"]], P.out.vfmt || "mp4", v => { P.out.vfmt = v; showKind(); });
   $("#xGo").addEventListener("click", () => $(target()).click());
 
-  // ---- the design of the video, one part at a time (Simple shows the look, the path and the text)
+  // ---- the design of the video, one part at a time (every part in Simple and in Advanced, as before)
   const TABS = [["look", "Look"], ["edit", "Picture"], ["camera", "Camera"], ["path", "Path"], ["places", "Places"], ["eye", "Eye"], ["labels", "Labels"], ["fx", "Music"], ["text", "Text"]];
-  const SIMPLE_TABS = new Set(["look", "path", "text"]), TAB_STORE = "lux.exportTab";
+  const TAB_STORE = "lux.exportTab";
   let tab = "look"; try { tab = localStorage.getItem(TAB_STORE) || "look"; } catch (e) { /* storage blocked */ }
-  $("#xTabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" id="xTab_${k}" data-t="${k}" aria-controls="xPanel_${k}" aria-selected="false" tabindex="-1"${SIMPLE_TABS.has(k) ? "" : ' class="adv-only"'}>${n}</button>`).join("");
+  $("#xTabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" id="xTab_${k}" data-t="${k}" aria-controls="xPanel_${k}" aria-selected="false" tabindex="-1">${n}</button>`).join("");
   host.querySelectorAll(".xpanel").forEach(p => { p.id = "xPanel_" + p.dataset.x; p.setAttribute("aria-labelledby", "xTab_" + p.dataset.x); });
   const showTab = k => {
-    if (!TABS.some(([t]) => t === k) || (document.documentElement.classList.contains("ui-simple") && !SIMPLE_TABS.has(k))) k = "look";
+    if (!TABS.some(([t]) => t === k)) k = "look";
     tab = k; try { localStorage.setItem(TAB_STORE, k); } catch (e) { /* storage blocked */ }
     host.querySelectorAll(".xpanel").forEach(p => { p.hidden = p.dataset.x !== k; });
     host.querySelectorAll("#xTabs [data-t]").forEach(b => { const on = b.dataset.t === k; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
@@ -233,8 +233,6 @@ export function initExport({ P, onLook, onAudio, onMidi, onZip, onVideo, onWebm,
     const vis = [...host.querySelectorAll("#xTabs [data-t]")].filter(b => b.offsetParent !== null), i = vis.findIndex(b => b.dataset.t === tab);
     const b = vis[(i + d + vis.length) % vis.length]; if (b) { e.preventDefault(); showTab(b.dataset.t); b.focus(); }
   });
-  // switching to Simple hides the advanced parts: their tab gives way to the look
-  new MutationObserver(() => showTab(tab)).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
   showTab(tab);
 
   // ---- audio

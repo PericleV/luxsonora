@@ -80,7 +80,7 @@ export function motionNotes(style, { notes, slots, points, body, intro = 0, tim,
  *           does (up to about ×1.4 at the climax, ×0.75 when calm)
  *  echoes   the last note of the melody at each place comes back twice, a dotted eighth and then
  *           three eighths later, softer (40%, then 22%), left then right, where it is a tone of the
- *           chord sounding then
+ *           chord sounding then and the melody rests
  *  shimmer  (ambient, meditation, cinematic, movie) an airy octave above the pad, very soft, slow
  *  spread   the notes of the pad struck together fan out across the stereo, low left, high right
  */
@@ -101,9 +101,11 @@ export function colourPiece(notes, points, slots, style, { sweep = true, echoes 
     [[0.75, 0.4, -0.6], [1.5, 0.22, 0.6]].forEach(([dt, k, pan]) => {
       const t = last.t + dt, S = slotAt(t);
       if (t >= body - 1e-9 || !S || !S.chord.some(m => pcOf(m) === pcOf(last.midi))) return;
-      // only once the note has ended, and never over the same pitch still sounding in the melody
-      if (last.t + last.dur > t + 1e-6 || notes.some(n => n.layer === "lead" && n.midi === last.midi && n.t < t + 0.5 && n.t + n.dur > t + 1e-6)) return;
-      notes.push({ ...last, t, dur: Math.min(0.5, S.t1 - t - 0.02), vel: Math.max(1, Math.round(last.vel * k)), pan, glide: null, echo: true, passage: undefined, pickup: undefined, dev: undefined });
+      // only once the note has ended, and only in a rest of the melody: never over a melody note
+      // still sounding (the melody is one line), nor over the same pitch coming in
+      const dur = Math.min(0.5, S.t1 - t - 0.02);
+      if (last.t + last.dur > t + 1e-6 || notes.some(n => n.layer === "lead" && !n.dbl && !n.echo && n.t < t + dur - 1e-6 && n.t + n.dur > t + 1e-6) || notes.some(n => n.layer === "lead" && n.midi === last.midi && n.t < t + 0.5 && n.t + n.dur > t + 1e-6)) return;
+      notes.push({ ...last, t, dur, vel: Math.max(1, Math.round(last.vel * k)), pan, glide: null, echo: true, passage: undefined, pickup: undefined, dev: undefined });
     });
   }
   if (shimmer && SHIMMER_STYLES.has(style)) {
